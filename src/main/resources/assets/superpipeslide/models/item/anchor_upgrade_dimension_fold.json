@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "superpipeslide:item/anchor_upgrade_dimension_fold"
+  }
+}

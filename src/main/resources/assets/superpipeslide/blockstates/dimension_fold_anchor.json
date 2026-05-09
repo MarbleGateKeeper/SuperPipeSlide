@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "superpipeslide:block/dimension_fold_anchor"
+    }
+  }
+}

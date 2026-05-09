@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "superpipeslide:item/highway_pipe_coating"
+  }
+}

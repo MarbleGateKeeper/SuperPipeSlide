@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "superpipeslide:block/station_block"
+    },
+    "facing=east": {
+      "model": "superpipeslide:block/station_block",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "superpipeslide:block/station_block",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "superpipeslide:block/station_block",
+      "y": 270
+    }
+  }
+}

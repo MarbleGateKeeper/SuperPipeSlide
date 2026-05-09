@@ -1,0 +1,13 @@
+package dev.marblegate.superpipeslide.client.fullmap.diagnostic;
+
+public enum DiagnosticType {
+    MISSING_ROUTE_LINE,
+    MISSING_PLATFORM_STOP,
+    MISSING_STATION_GROUP,
+    MISSING_ROUTE_SECTION,
+    MISSING_ROUTE_SECTION_PATH,
+    MISSING_PIPE_CONNECTION,
+    MISSING_FOLD_COUNTERPART,
+    CROSS_DIMENSION_WITHOUT_FOLD,
+    EMPTY_DIMENSION
+}

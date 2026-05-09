@@ -1,0 +1,18 @@
+{
+  "required": true,
+  "package": "dev.marblegate.superpipeslide.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [],
+  "client": [
+    "client.LevelRendererMixin",
+    "client.PlayerModelMixin",
+    "client.RenderSetupAccessor",
+    "client.RenderTypeAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

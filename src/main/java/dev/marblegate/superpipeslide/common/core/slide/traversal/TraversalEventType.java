@@ -1,0 +1,12 @@
+package dev.marblegate.superpipeslide.common.core.slide.traversal;
+
+public enum TraversalEventType {
+    CONNECTION_HANDOFF,
+    STATION_ENTRY_CHECKPOINT,
+    STATION_CENTER_CHECKPOINT,
+    BRANCH_CHOICE_REQUIRED,
+    FOLD_TRANSITION_REQUIRED,
+    NO_CONTINUATION,
+    INVALID_TOPOLOGY,
+    STEP_LIMIT_REACHED
+}

@@ -1,0 +1,12 @@
+{
+  "replace": false,
+  "values": [
+    "superpipeslide:pipe_anchor",
+    "superpipeslide:branch_anchor",
+    "superpipeslide:space_fold_anchor",
+    "superpipeslide:dimension_fold_anchor",
+    "superpipeslide:station_block",
+    "superpipeslide:station_name_projector",
+    "superpipeslide:platform_projector"
+  ]
+}
