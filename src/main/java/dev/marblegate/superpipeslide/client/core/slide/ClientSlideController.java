@@ -1256,9 +1256,10 @@ public final class ClientSlideController {
             if (targetAnchor.get().levelKey().equals(player.level().dimension())) {
                 player.setPos(targetPosition.x, targetPosition.y, targetPosition.z);
                 ClientFoldTraversalEffectController.completeTraversal(targetAnchor.get().levelKey(), targetPosition, connection.tangentAt(direction > 0 ? connection.length() : 0.0D).scale(direction), state.speed());
+                sendFoldPositionSync(state.withSpeed(0.0D), targetAnchor.get().levelKey(), targetPosition, Optional.empty(), 1, 0.0D, 0.0D);
                 detach(player, state, 30);
             } else {
-                requestCrossDimensionFold(player, state.withSpeed(0.0D), targetAnchor.get().levelKey(), targetPosition, Optional.empty(), 1, 0.0D, 0.0D);
+                requestFoldTeleport(player, state.withSpeed(0.0D), targetAnchor.get().levelKey(), targetPosition, Optional.empty(), 1, 0.0D, 0.0D);
             }
             return;
         }
@@ -1282,22 +1283,30 @@ public final class ClientSlideController {
         if (targetConnection.levelKey().equals(player.level().dimension())) {
             active = state.advance(targetConnection.id(), targetDirection, targetDistance, targetSpeed);
             updateActiveRouteProgress(targetConnection.id(), true);
-            player.setPos(targetPosition.x, targetPosition.y, targetPosition.z);
             ClientSlideMotion.apply(player, targetConnection, targetDistance, targetDirection, targetSpeed);
             ClientFoldTraversalEffectController.completeTraversal(targetConnection.levelKey(), targetPosition, targetConnection.tangentAt(targetDistance).scale(targetDirection), targetSpeed);
             clearOpenChoicesAfterHandoff();
+            sendFoldPositionSync(active, targetConnection.levelKey(), targetPosition, Optional.of(targetConnection.id()), targetDirection, targetDistance, targetSpeed);
             return;
         }
-        requestCrossDimensionFold(player, state.withSpeed(0.0D), targetConnection.levelKey(), targetPosition, Optional.of(targetConnection.id()), targetDirection, targetDistance, targetSpeed);
+        requestFoldTeleport(player, state.withSpeed(0.0D), targetConnection.levelKey(), targetPosition, Optional.of(targetConnection.id()), targetDirection, targetDistance, targetSpeed);
     }
 
-    private static void requestCrossDimensionFold(LocalPlayer player, ClientSlideState state, ResourceKey<Level> targetLevel, Vec3 targetPosition, Optional<UUID> targetConnectionId, int direction, double distanceOnConnection, double speed) {
+    private static void requestFoldTeleport(LocalPlayer player, ClientSlideState state, ResourceKey<Level> targetLevel, Vec3 targetPosition, Optional<UUID> targetConnectionId, int direction, double distanceOnConnection, double speed) {
         active = state;
         waitingTeleportSessionId = state.sessionId();
         ClientSlideMotion.freeze(player);
         ClientGazeChoiceController.clear();
+        sendFoldTeleportRequest(state.sessionId(), targetLevel, targetPosition, targetConnectionId, direction, distanceOnConnection, speed);
+    }
+
+    private static void sendFoldPositionSync(ClientSlideState state, ResourceKey<Level> targetLevel, Vec3 targetPosition, Optional<UUID> targetConnectionId, int direction, double distanceOnConnection, double speed) {
+        sendFoldTeleportRequest(state.sessionId(), targetLevel, targetPosition, targetConnectionId, direction, distanceOnConnection, speed);
+    }
+
+    private static void sendFoldTeleportRequest(UUID sessionId, ResourceKey<Level> targetLevel, Vec3 targetPosition, Optional<UUID> targetConnectionId, int direction, double distanceOnConnection, double speed) {
         ClientPacketDistributor.sendToServer(new ServerboundSlideTeleportRequestPayload(
-                state.sessionId(),
+                sessionId,
                 targetLevel,
                 targetPosition.x,
                 targetPosition.y,
@@ -1313,11 +1322,15 @@ public final class ClientSlideController {
         if (pendingTeleportCommit == null) {
             return;
         }
-        if (!player.level().dimension().equals(pendingTeleportCommit.targetLevel())) {
+        ClientboundSlideTeleportCommitPayload payload = pendingTeleportCommit;
+        if (waitingTeleportSessionId == null) {
+            pendingTeleportCommit = null;
+            return;
+        }
+        if (!player.level().dimension().equals(payload.targetLevel())) {
             ClientSlideMotion.freeze(player);
             return;
         }
-        ClientboundSlideTeleportCommitPayload payload = pendingTeleportCommit;
         Vec3 targetPosition = new Vec3(payload.x(), payload.y(), payload.z());
         if (payload.targetConnectionId().isEmpty()) {
             player.setPos(targetPosition.x, targetPosition.y, targetPosition.z);

@@ -66,7 +66,12 @@ public final class ServerSlideController {
         }
 
         targetLevel.getChunk(BlockPos.containing(payload.x(), payload.y(), payload.z()));
-        player.teleportTo(targetLevel, payload.x(), payload.y(), payload.z(), Set.of(), player.getYRot(), player.getXRot(), true);
+        if (targetLevel == currentLevel) {
+            player.snapTo(payload.x(), payload.y(), payload.z());
+            targetLevel.getChunkSource().move(player);
+        } else {
+            player.teleportTo(targetLevel, payload.x(), payload.y(), payload.z(), Set.of(), player.getYRot(), player.getXRot(), true);
+        }
         player.noPhysics = true;
         player.resetFallDistance();
         PacketDistributor.sendToPlayer(player, new ClientboundSlideTeleportCommitPayload(
@@ -80,6 +85,9 @@ public final class ServerSlideController {
                 payload.distanceOnConnection(),
                 payload.speed()
         ));
+        if (payload.targetConnectionId().isEmpty()) {
+            clear(player, payload.sessionId());
+        }
     }
 
     public static void stop(ServerPlayer player) {
