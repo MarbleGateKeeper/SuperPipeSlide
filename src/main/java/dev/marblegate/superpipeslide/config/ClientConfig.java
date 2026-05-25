@@ -5,10 +5,6 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 public final class ClientConfig {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
-    public static final ModConfigSpec.BooleanValue ENABLE_SLIDE_SPEED_LINES = BUILDER
-            .comment("Whether to render first-person slide speed lines. Disable this to fully remove the screen-space speed-line effect while keeping other slide feedback.")
-            .define("enableSlideSpeedLines", true);
-
     public static final ModConfigSpec.BooleanValue ENABLE_SLIDE_CAMERA_FEEDBACK = BUILDER
             .comment("Whether sliding may adjust camera pitch and roll for slope, turning, and upcoming sharp-turn anticipation. Disable this to keep sliding mechanics and visual effects while removing camera tilt feedback.")
             .define("enableSlideCameraFeedback", true);

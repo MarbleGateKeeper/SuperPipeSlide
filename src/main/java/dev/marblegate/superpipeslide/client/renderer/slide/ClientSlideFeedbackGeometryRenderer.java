@@ -47,12 +47,7 @@ public final class ClientSlideFeedbackGeometryRenderer {
 
     public static void extract(ExtractLevelRenderStateEvent event) {
         List<ClientSlideFeedbackController.TrailParticleSnapshot> particles = ClientSlideFeedbackController.trailParticles();
-        Optional<SpeedLineField> speedLines = ClientConfig.ENABLE_SLIDE_SPEED_LINES.get()
-                ? ClientSlideFeedbackController.currentFrame()
-                .filter(frame -> frame.alpha() > 0.04D && frame.speed01() > 0.06D)
-                .map(frame -> speedLineField(event, frame))
-                : Optional.empty();
-        event.getRenderState().setRenderData(RENDER_DATA, new RenderData(particles, speedLines));
+        event.getRenderState().setRenderData(RENDER_DATA, new RenderData(particles));
     }
 
     public static void submit(SubmitCustomGeometryEvent event) {
@@ -65,8 +60,6 @@ public final class ClientSlideFeedbackGeometryRenderer {
         PoseStack poseStack = event.getPoseStack();
         poseStack.pushPose();
         poseStack.translate(-camera.x, -camera.y, -camera.z);
-        renderData.speedLines().ifPresent(field ->
-                event.getSubmitNodeCollector().submitCustomGeometry(poseStack, RenderTypes.linesTranslucent(), (pose, buffer) -> renderSpeedLines(pose, buffer, field)));
         if (!renderData.particles().isEmpty()) {
             event.getSubmitNodeCollector().submitCustomGeometry(poseStack, RenderTypes.lightning(), (pose, buffer) -> {
                 for (ClientSlideFeedbackController.TrailParticleSnapshot particle : renderData.particles()) {
@@ -75,69 +68,6 @@ public final class ClientSlideFeedbackGeometryRenderer {
             });
         }
         poseStack.popPose();
-    }
-
-    private static SpeedLineField speedLineField(ExtractLevelRenderStateEvent event, ClientSlideFeedbackController.Frame frame) {
-        Vec3 center = event.getCamera().isDetached()
-                ? frame.position().add(0.0D, 0.82D * (1.0D - frame.verticalBlend()), 0.0D)
-                : event.getCamera().position();
-        double foldMultiplier = ClientFoldTraversalEffectController.speedLineMultiplier();
-        return new SpeedLineField(
-                center,
-                safeNormalize(frame.tangent(), new Vec3(0.0D, 0.0D, 1.0D)),
-                Mth.clamp(frame.edgeIntensity() * foldMultiplier, 0.0D, 1.0D),
-                Mth.clamp(frame.perceptualSpeed() * (0.58D + foldMultiplier * 0.42D), 0.0D, 1.0D),
-                Mth.clamp(frame.accelerationPulse(), 0.0D, 1.0D),
-                Mth.clamp(frame.highwayBlend(), 0.0D, 1.0D),
-                Mth.clamp(frame.turnBlend(), 0.0D, 1.0D),
-                frame.motionPhase(),
-                speedLineColor(frame)
-        );
-    }
-
-    private static void renderSpeedLines(PoseStack.Pose pose, VertexConsumer buffer, SpeedLineField field) {
-        Vec3 tangent = safeNormalize(field.tangent(), new Vec3(0.0D, 0.0D, 1.0D));
-        Vec3 right = safeNormalize(tangent.cross(Math.abs(tangent.y) > 0.88D ? new Vec3(0.0D, 0.0D, 1.0D) : WORLD_UP), new Vec3(1.0D, 0.0D, 0.0D));
-        Vec3 up = safeNormalize(right.cross(tangent), WORLD_UP);
-        double time = System.nanoTime() / 1_000_000_000.0D;
-        double speed = field.perceptualSpeed();
-        double flowSpeed = 0.90D + speed * 4.70D + field.accelerationPulse() * 2.25D + field.highwayBlend() * 0.95D;
-        int lineCount = Mth.clamp((int) Math.round(10.0D + speed * 54.0D + field.accelerationPulse() * 10.0D + field.highwayBlend() * 8.0D), 8, SPEED_LINE_COUNT);
-        int color = field.color();
-        int r = color >>> 16 & 0xFF;
-        int g = color >>> 8 & 0xFF;
-        int b = color & 0xFF;
-        Matrix4f matrix = pose.pose();
-        for (int i = 0; i < lineCount; i++) {
-            float t = (float) ((field.motionPhase() + time * flowSpeed * 0.18D + LINE_OFFSETS[i]) % 1.0D);
-            float alpha = Mth.clamp((float) Math.pow(1.0F - t, 1.18D) * (0.28F + (float) speed * 0.72F + (float) field.accelerationPulse() * 0.26F), 0.0F, 0.92F);
-            if (alpha < 0.012F) {
-                continue;
-            }
-
-            double radiusScale = 1.06D - speed * 0.18D + field.turnBlend() * 0.08D;
-            double radius = LINE_RADII[i] * radiusScale;
-            double angle = LINE_ANGLES[i];
-            Vec3 radial = right.scale(Math.cos(angle) * radius).add(up.scale(Math.sin(angle) * radius));
-            double along = Mth.lerp(t, 7.4F + speed * 4.2F + field.accelerationPulse() * 1.6F, -3.8F - speed * 2.0F);
-            double halfLength = LINE_LENGTHS[i] * (0.38D + speed * 0.54D + field.accelerationPulse() * 0.20D);
-            Vec3 center = field.center().add(radial).add(tangent.scale(along));
-            Vec3 a = center.subtract(tangent.scale(halfLength));
-            Vec3 c = center.add(tangent.scale(halfLength));
-            int a0 = (int) (alpha * field.intensity() * 220.0F);
-            if (a0 <= 2) {
-                continue;
-            }
-            float lineWidth = (float) (1.15D + speed * 1.85D + field.accelerationPulse() * 0.70D + field.highwayBlend() * 0.45D);
-            buffer.addVertex(matrix, (float) a.x, (float) a.y, (float) a.z)
-                    .setColor(r, g, b, a0)
-                    .setNormal(pose, (float) tangent.x, (float) tangent.y, (float) tangent.z)
-                    .setLineWidth(lineWidth);
-            buffer.addVertex(matrix, (float) c.x, (float) c.y, (float) c.z)
-                    .setColor(r, g, b, 0)
-                    .setNormal(pose, (float) tangent.x, (float) tangent.y, (float) tangent.z)
-                    .setLineWidth(lineWidth);
-        }
     }
 
     private static void renderParticle(PoseStack.Pose pose, VertexConsumer buffer, ClientSlideFeedbackController.TrailParticleSnapshot particle, Vec3 camera) {
@@ -179,28 +109,9 @@ public final class ClientSlideFeedbackGeometryRenderer {
         return value.lengthSqr() < 1.0E-8D ? fallback : value.normalize();
     }
 
-    private static int speedLineColor(ClientSlideFeedbackController.Frame frame) {
-        if (frame.platformBlend() > 0.36D) {
-            return 0xFFE7B85F;
-        }
-        if (frame.accelerationBlend() > 0.46D) {
-            return 0xFFFFB14A;
-        }
-        if (frame.highwayBlend() > 0.42D) {
-            return 0xFF82EFFF;
-        }
-        if (frame.verticalBlend() > 0.56D) {
-            return frame.upBlend() >= frame.downBlend() ? 0xFFA5F8FF : 0xFFB8D6FF;
-        }
-        return 0xFFDCEFFF;
-    }
-
-    private record RenderData(List<ClientSlideFeedbackController.TrailParticleSnapshot> particles, Optional<SpeedLineField> speedLines) {
+    private record RenderData(List<ClientSlideFeedbackController.TrailParticleSnapshot> particles) {
         private boolean isEmpty() {
-            return this.particles.isEmpty() && this.speedLines.isEmpty();
+            return this.particles.isEmpty();
         }
-    }
-
-    private record SpeedLineField(Vec3 center, Vec3 tangent, double intensity, double perceptualSpeed, double accelerationPulse, double highwayBlend, double turnBlend, double motionPhase, int color) {
     }
 }

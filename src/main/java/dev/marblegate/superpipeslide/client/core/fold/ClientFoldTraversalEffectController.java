@@ -237,26 +237,6 @@ public final class ClientFoldTraversalEffectController {
         };
     }
 
-    public static double speedLineMultiplier() {
-        Optional<Snapshot> snapshot = snapshot();
-        if (snapshot.isEmpty()) {
-            return 1.0D;
-        }
-        Snapshot effect = snapshot.get();
-        return switch (effect.phase) {
-            case APPROACH -> 1.0D - 0.22D * effect.approachProgress() * effect.life();
-            case CONTACT -> 0.62D - 0.24D * easeOut(effect.phaseProgress());
-            case TUNNEL, WAITING -> 0.08D;
-            case EXIT -> 0.58D + 0.42D * easeOut(effect.phaseProgress());
-            case DECAY -> 0.86D + 0.14D * effect.phaseProgress();
-            case CANCEL -> 0.72D;
-        };
-    }
-
-    public static boolean overlayActive() {
-        return snapshot().isPresent();
-    }
-
     private static boolean updateExitUnfold(PipeConnection connection, int direction, double distanceOnConnection, double speed, long now) {
         if (active == null || !active.exitCommitted || !connection.levelKey().equals(active.exitLevel) || !connection.touches(active.exitAnchor)) {
             return false;
