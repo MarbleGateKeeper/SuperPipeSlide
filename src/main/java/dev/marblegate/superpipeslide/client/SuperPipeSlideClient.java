@@ -108,6 +108,7 @@ public class SuperPipeSlideClient {
 
     private static void registerRenderPipelines(RegisterRenderPipelinesEvent event) {
         ClientFoldTraversalPostEffectRenderer.registerPipelines(event);
+        ClientPipeRenderer.registerPipelines(event);
         StationNameProjectorRenderer.registerPipelines(event);
         PlatformProjectorRenderer.registerPipelines(event);
     }
