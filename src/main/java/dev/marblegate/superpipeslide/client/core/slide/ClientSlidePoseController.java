@@ -25,6 +25,7 @@ public final class ClientSlidePoseController {
     private static final double MOUNT_TICKS = 9.0D;
     private static final Map<String, RidePoseDescriptor> DESCRIPTOR_CACHE = new LinkedHashMap<>();
     private static final Map<Integer, PoseSmoothingState> SMOOTHED_POSES = new LinkedHashMap<>();
+    private static final Vec3 WORLD_UP = new Vec3(0.0D, 1.0D, 0.0D);
 
     @Nullable
     private static LocalDismount localDismount;
@@ -146,7 +147,10 @@ public final class ClientSlidePoseController {
                     0.30D,
                     0.48D,
                     1.12D,
-                    1.05D
+                    1.05D,
+                    0.18D,
+                    0.78D,
+                    1.00D
             );
             case FACETED -> new RidePoseDescriptor(
                     RidePoseFamily.INLINE,
@@ -157,7 +161,10 @@ public final class ClientSlidePoseController {
                     0.28D,
                     0.44D,
                     1.08D,
-                    1.00D
+                    1.00D,
+                    0.17D,
+                    0.74D,
+                    0.96D
             );
             case BOX, TRIANGLE -> new RidePoseDescriptor(
                     RidePoseFamily.INLINE,
@@ -168,7 +175,10 @@ public final class ClientSlidePoseController {
                     0.22D,
                     0.38D,
                     0.96D,
-                    0.88D
+                    0.88D,
+                    0.12D,
+                    0.58D,
+                    0.82D
             );
             case RAIL -> new RidePoseDescriptor(
                     RidePoseFamily.SPLIT_RAIL,
@@ -179,7 +189,10 @@ public final class ClientSlidePoseController {
                     0.24D,
                     0.58D,
                     0.92D,
-                    0.86D
+                    0.86D,
+                    clamp((geometry.gauge() - 0.26D) / 0.58D, 0.18D, 1.00D),
+                    0.54D,
+                    0.72D
             );
             case SLIDE -> new RidePoseDescriptor(
                     RidePoseFamily.CRADLE,
@@ -190,7 +203,10 @@ public final class ClientSlidePoseController {
                     0.20D,
                     0.34D,
                     0.78D,
-                    0.70D
+                    0.70D,
+                    0.24D,
+                    0.42D,
+                    0.56D
             );
             case MONORAIL -> new RidePoseDescriptor(
                     RidePoseFamily.MONORAIL,
@@ -201,7 +217,10 @@ public final class ClientSlidePoseController {
                     0.34D,
                     0.56D,
                     1.20D,
-                    1.12D
+                    1.12D,
+                    0.12D,
+                    0.88D,
+                    1.06D
             );
             case COVERED -> new RidePoseDescriptor(
                     RidePoseFamily.CRADLE,
@@ -212,9 +231,92 @@ public final class ClientSlidePoseController {
                     0.18D,
                     0.30D,
                     0.70D,
-                    0.64D
+                    0.64D,
+                    0.28D,
+                    0.34D,
+                    0.48D
             );
         };
+    }
+
+    private static SlidePoseFrame buildPoseFrame(ClientSlideFeedbackController.Frame frame) {
+        Optional<PipeConnection> connection = ClientPipeNetworkCache.globalConnection(frame.connectionId());
+        double length = frame.connectionLength();
+        double distance = frame.distanceOnConnection();
+        Vec3 center = frame.position();
+        Vec3 forward = safeNormalize(frame.tangent(), new Vec3(0.0D, 0.0D, 1.0D));
+        if (connection.isPresent()) {
+            PipeConnection pipe = connection.get();
+            length = pipe.length();
+            distance = Mth.clamp(distance, 0.0D, length);
+            center = pipe.positionAt(distance);
+            Vec3 pipeTangent = pipe.tangentAt(distance);
+            forward = safeNormalize(pipeTangent.scale(Math.signum(frame.tangent().dot(pipeTangent)) < 0.0D ? -1.0D : 1.0D), forward);
+        }
+        Vec3 right;
+        Vec3 preferredRight = transportedRight(forward, frame.visualFacing().cross(WORLD_UP));
+        if (connection.isPresent()) {
+            right = transportedRightAt(connection.get(), distance, forward, preferredRight);
+        } else {
+            right = transportedRight(forward, preferredRight);
+        }
+        Vec3 up = safeNormalize(right.cross(forward), WORLD_UP);
+        double slope = Math.abs(forward.y);
+        double track = smoothstep(0.10D, 0.52D, slope);
+        double vertical = smoothstep(0.54D, 0.90D, slope);
+        double ascend = vertical * smoothstep(0.08D, 0.94D, Math.max(0.0D, forward.y));
+        double descend = vertical * smoothstep(0.08D, 0.94D, Math.max(0.0D, -forward.y));
+        return new SlidePoseFrame(center, forward, right, up, distance, length, track, vertical, ascend, descend);
+    }
+
+    private static Vec3 transportedRightAt(PipeConnection connection, double distance, Vec3 directedForward, Vec3 preferredRight) {
+        double length = Math.max(connection.length(), 1.0E-6D);
+        int samples = Math.max(4, Math.min(28, Mth.ceil(length * 2.0D)));
+        double target = Mth.clamp(distance, 0.0D, length);
+        int direction = directedForward.dot(connection.tangentAt(target)) >= 0.0D ? 1 : -1;
+        Vec3 right = null;
+        Vec3 previousForward = null;
+        for (int i = 0; i <= samples; i++) {
+            double sampleDistance = direction >= 0
+                    ? Math.min(target, length * i / samples)
+                    : Math.max(target, length - length * i / samples);
+            Vec3 tangent = connection.tangentAt(sampleDistance).scale(direction);
+            Vec3 forward = safeNormalize(tangent, directedForward);
+            if (right == null) {
+                right = transportedRight(forward, preferredRight);
+            } else if (previousForward == null || previousForward.distanceToSqr(forward) > 1.0E-8D) {
+                right = transportRight(right, forward);
+            }
+            previousForward = forward;
+            if ((direction >= 0 && sampleDistance >= target - 1.0E-5D)
+                    || (direction < 0 && sampleDistance <= target + 1.0E-5D)) {
+                break;
+            }
+        }
+        return right == null ? transportedRight(directedForward, preferredRight) : transportRight(right, directedForward);
+    }
+
+    private static Vec3 transportRight(Vec3 previousRight, Vec3 forward) {
+        Vec3 projected = previousRight.subtract(forward.scale(previousRight.dot(forward)));
+        if (projected.lengthSqr() > 1.0E-6D) {
+            return projected.normalize();
+        }
+        return transportedRight(forward, previousRight);
+    }
+
+    private static Vec3 transportedRight(Vec3 forward, Vec3 preferred) {
+        Vec3 side = forward.cross(WORLD_UP);
+        if (side.lengthSqr() < 1.0E-6D) {
+            side = preferred.subtract(forward.scale(preferred.dot(forward)));
+        }
+        if (side.lengthSqr() < 1.0E-6D) {
+            side = new Vec3(1.0D, 0.0D, 0.0D);
+        }
+        return side.normalize();
+    }
+
+    private static Vec3 safeNormalize(Vec3 value, Vec3 fallback) {
+        return value.lengthSqr() < 1.0E-8D ? fallback : value.normalize();
     }
 
     private static double smoothstep(double edge0, double edge1, double value) {
@@ -241,6 +343,8 @@ public final class ClientSlidePoseController {
                 lerp(previousFrame.alpha(), currentFrame.alpha(), t),
                 currentFrame.sessionId(),
                 currentFrame.connectionId(),
+                lerp(previousFrame.distanceOnConnection(), currentFrame.distanceOnConnection(), t),
+                lerp(previousFrame.connectionLength(), currentFrame.connectionLength(), t),
                 lerp(previousFrame.position(), currentFrame.position(), t),
                 lerpDirection(previousFrame.tangent(), currentFrame.tangent(), t),
                 lerpDirection(previousFrame.visualFacing(), currentFrame.visualFacing(), t),
@@ -277,6 +381,7 @@ public final class ClientSlidePoseController {
 
     private static boolean shouldSnap(PoseSnapshot previous, PoseSnapshot current) {
         return !previous.frame().sessionId().equals(current.frame().sessionId())
+                || !previous.frame().connectionId().equals(current.frame().connectionId())
                 || previous.frame().position().distanceToSqr(current.frame().position()) > 16.0D
                 || previous.ride().family() != current.ride().family()
                 || previous.ride().shape() != current.ride().shape();
@@ -374,7 +479,10 @@ public final class ClientSlidePoseController {
             double kneeBend,
             double armBaseSpread,
             double turnLeanScale,
-            double balanceScale
+            double balanceScale,
+            double railSpread,
+            double verticalRideScale,
+            double wallRideScale
     ) {
     }
 
@@ -455,5 +563,31 @@ public final class ClientSlidePoseController {
         public double motionPhase() {
             return this.frame.motionPhase();
         }
+
+        public double distanceOnConnection() {
+            return this.frame.distanceOnConnection();
+        }
+
+        public double connectionLength() {
+            return this.frame.connectionLength();
+        }
+
+        public SlidePoseFrame poseFrame() {
+            return buildPoseFrame(this.frame);
+        }
+    }
+
+    public record SlidePoseFrame(
+            Vec3 center,
+            Vec3 forward,
+            Vec3 right,
+            Vec3 up,
+            double distanceOnConnection,
+            double connectionLength,
+            double trackAmount,
+            double verticalAmount,
+            double ascendAmount,
+            double descendAmount
+    ) {
     }
 }

@@ -13,12 +13,47 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.RenderPlayerEvent;
 import net.neoforged.neoforge.client.event.ViewportEvent;
+import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 public final class ClientSlideFeedbackPlayerRenderer {
     private static final Vec3 WORLD_UP = new Vec3(0.0D, 1.0D, 0.0D);
+    private static final Map<Integer, ModelPoseBlendState> MODEL_POSE_BLEND_STATES = new LinkedHashMap<>();
+    private static final Map<Integer, FloatBlendState> RENDER_YAW_BLEND_STATES = new LinkedHashMap<>();
+    private static final Map<Integer, FloatBlendState> RIDE_ROTATION_BLEND_STATES = new LinkedHashMap<>();
+    private static final int BODY_X_ROT = 0;
+    private static final int BODY_Y_ROT = 1;
+    private static final int BODY_Z_ROT = 2;
+    private static final int HEAD_X_ROT = 3;
+    private static final int HEAD_Y_ROT = 4;
+    private static final int HEAD_Z_ROT = 5;
+    private static final int HAT_X_ROT = 6;
+    private static final int HAT_Y_ROT = 7;
+    private static final int HAT_Z_ROT = 8;
+    private static final int RIGHT_ARM_X_ROT = 9;
+    private static final int RIGHT_ARM_Y_ROT = 10;
+    private static final int RIGHT_ARM_Z_ROT = 11;
+    private static final int LEFT_ARM_X_ROT = 12;
+    private static final int LEFT_ARM_Y_ROT = 13;
+    private static final int LEFT_ARM_Z_ROT = 14;
+    private static final int RIGHT_LEG_X_ROT = 15;
+    private static final int RIGHT_LEG_Y_ROT = 16;
+    private static final int RIGHT_LEG_Z_ROT = 17;
+    private static final int LEFT_LEG_X_ROT = 18;
+    private static final int LEFT_LEG_Y_ROT = 19;
+    private static final int LEFT_LEG_Z_ROT = 20;
+    private static final int RIGHT_LEG_X = 21;
+    private static final int RIGHT_LEG_Y = 22;
+    private static final int RIGHT_LEG_Z = 23;
+    private static final int LEFT_LEG_X = 24;
+    private static final int LEFT_LEG_Y = 25;
+    private static final int LEFT_LEG_Z = 26;
+    private static final int MODEL_POSE_CHANNELS = 27;
     private static boolean pushedSlidePose;
     private static int pushedSlidePosePlayerId = Integer.MIN_VALUE;
     private static boolean slideLegOffsetsDirty;
@@ -68,38 +103,36 @@ public final class ClientSlideFeedbackPlayerRenderer {
         AvatarRenderState state = event.getRenderState();
         state.isSpectator = false;
         state.isPassenger = false;
-        double balanceSway = Math.sin(feedback.motionPhase() * Mth.TWO_PI) * (0.10D + feedback.perceptualSpeed() * 0.10D);
-        state.walkAnimationPos = (float) ((balanceSway + Mth.TWO_PI * 4.0D) / 0.6662D);
-        state.walkAnimationSpeed = (float) Mth.clamp(0.18D + feedback.perceptualSpeed() * 0.20D + feedback.accelerationPulse() * 0.08D, 0.18D, 0.50D);
+        state.walkAnimationPos = 0.0F;
+        state.walkAnimationSpeed = 0.0F;
         // HumanoidModel divides by speedValue while posing limbs; keep it non-zero when freezing walk motion.
         state.speedValue = 1.0F;
         state.swimAmount = 0.0F;
         state.attackTime = 0.0F;
-        alignBodyToFacing(state, feedback.visualFacing());
+        ClientSlidePoseController.SlidePoseFrame poseFrame = feedback.poseFrame();
+        Vec3 renderFacing = renderFacing(feedback, poseFrame);
+        float sideStance = fixedStanceSide(feedback);
+        float sideSlipYaw = sideSlipYaw(feedback, poseFrame, sideStance);
+        float smoothedSideSlipYaw = renderYawState(state.id, feedback.frame().sessionId()).sample(sideSlipYaw);
+        renderFacing = rotateHorizontal(renderFacing, smoothedSideSlipYaw);
+        alignBodyToFacing(state, renderFacing);
 
         PoseStack poseStack = event.getPoseStack();
         poseStack.pushPose();
         pushedSlidePose = true;
         pushedSlidePosePlayerId = state.id;
 
-        Vec3 offset = visualOffset(feedback, minecraft);
+        Vec3 offset = visualOffset(feedback, poseFrame, minecraft);
         poseStack.translate(offset.x, offset.y, offset.z);
 
-        Vec3 facing = feedback.visualFacing();
-        double poseAlpha = feedback.poseAlpha();
-        double verticalPitch = (feedback.downBlend() - feedback.upBlend()) * (58.0D + feedback.perceptualSpeed() * 12.0D);
-        double slopeBalancePitch = slopeBalancePitch(feedback);
-        double forwardLean = -(8.0D + feedback.perceptualSpeed() * 7.0D + feedback.accelerationPulse() * 4.0D)
-                * (1.0D - feedback.platformBlend() * 0.45D)
-                * (1.0D - feedback.verticalBlend() * 0.72D)
-                * poseAlpha;
-        double bank = (turnSignal(feedback.signedTurn(), feedback.signedTurnPreview(), 0.52D) * 16.0D * feedback.ride().turnLeanScale() + renderBank(feedback, minecraft) * 3.8D)
-                * (0.35D + feedback.perceptualSpeed() * 0.65D)
-                * (1.0D - feedback.verticalBlend() * 0.65D)
-                * poseAlpha;
-        rotateAround(poseStack, WORLD_UP.cross(facing), verticalPitch + slopeBalancePitch + forwardLean);
-        rotateAround(poseStack, facing, bank);
-        applyDismountWorldPose(poseStack, feedback, facing);
+        Vec3 baseFacing = renderFacing;
+        Vec3 baseRight = safeNormalize(baseFacing.cross(WORLD_UP), new Vec3(1.0D, 0.0D, 0.0D));
+        double rideAmount = rideRotationState(state.id, feedback.frame().sessionId()).sample((float) rideFrameAmount(feedback, poseFrame));
+        applyFrameRideRotation(poseStack, poseFrame, renderFacing, rideAmount);
+        ClientSlideBalancePoseSolver.WorldPose worldPose = ClientSlideBalancePoseSolver.solveWorld(feedback, poseFrame, (float) renderBank(feedback, minecraft), (float) rideAmount);
+        rotateAround(poseStack, baseRight, worldPose.pitchDegrees());
+        rotateAround(poseStack, baseFacing, worldPose.rollDegrees());
+        applyDismountWorldPose(poseStack, feedback, baseFacing);
     }
 
     public static void onRenderPlayerPost(RenderPlayerEvent.Post<?> event) {
@@ -129,8 +162,15 @@ public final class ClientSlideFeedbackPlayerRenderer {
             return;
         }
         resetSlideLegOffsets(model);
-        applyNaturalSlidingModelPose(pose.get(), model);
-        applyHeadLook(pose.get(), model, entity);
+        ClientSlidePoseController.PoseSnapshot snapshot = pose.get();
+        ClientSlidePoseController.SlidePoseFrame poseFrame = snapshot.poseFrame();
+        ModelPose basePose = ModelPose.capture(model);
+        ClientSlideBalancePoseSolver.solveModel(snapshot, poseFrame, fixedStanceSide(snapshot)).apply(model);
+        applyDismountModelPose(snapshot, model, (float) Mth.clamp(snapshot.poseAlpha(), 0.0D, 1.0D));
+        applyHeadLook(snapshot, poseFrame, model, entity);
+        ModelPose targetPose = ModelPose.capture(model);
+        basePose.applyTo(model);
+        modelPoseBlendState(state.id, snapshot.frame().sessionId()).sample(basePose, targetPose).applyTo(model);
         slideLegOffsetsDirty = true;
     }
 
@@ -138,22 +178,49 @@ public final class ClientSlideFeedbackPlayerRenderer {
         pushedSlidePose = false;
         pushedSlidePosePlayerId = Integer.MIN_VALUE;
         slideLegOffsetsDirty = false;
+        MODEL_POSE_BLEND_STATES.clear();
+        RENDER_YAW_BLEND_STATES.clear();
+        RIDE_ROTATION_BLEND_STATES.clear();
     }
 
     private static Optional<ClientSlidePoseController.PoseSnapshot> renderPose(Minecraft minecraft, AvatarRenderState state) {
         if (minecraft.level == null) {
             return Optional.empty();
         }
+        if (MODEL_POSE_BLEND_STATES.size() > 48) {
+            MODEL_POSE_BLEND_STATES.clear();
+        }
+        if (RENDER_YAW_BLEND_STATES.size() > 48) {
+            RENDER_YAW_BLEND_STATES.clear();
+        }
+        if (RIDE_ROTATION_BLEND_STATES.size() > 48) {
+            RIDE_ROTATION_BLEND_STATES.clear();
+        }
         Entity entity = minecraft.level.getEntity(state.id);
         if (entity == null || !entity.isAlive() || entity.isPassenger() || entity.isSpectator()) {
+            MODEL_POSE_BLEND_STATES.remove(state.id);
+            RENDER_YAW_BLEND_STATES.remove(state.id);
+            RIDE_ROTATION_BLEND_STATES.remove(state.id);
             return Optional.empty();
         }
-        return ClientSlidePoseController.poseForPlayer(state.id);
+        Optional<ClientSlidePoseController.PoseSnapshot> pose = ClientSlidePoseController.poseForPlayer(state.id);
+        if (pose.isEmpty()) {
+            MODEL_POSE_BLEND_STATES.remove(state.id);
+            RENDER_YAW_BLEND_STATES.remove(state.id);
+            RIDE_ROTATION_BLEND_STATES.remove(state.id);
+        }
+        return pose;
     }
 
-    private static Vec3 visualOffset(ClientSlidePoseController.PoseSnapshot frame, Minecraft minecraft) {
-        double lift = frame.ride().bodyLift() + 0.018D * (1.0D - frame.mountProgress()) + dismountLift(frame);
-        Vec3 offset = new Vec3(0.0D, lift, 0.0D);
+    private static Vec3 visualOffset(ClientSlidePoseController.PoseSnapshot frame, ClientSlidePoseController.SlidePoseFrame poseFrame, Minecraft minecraft) {
+        double vertical = poseFrame.verticalAmount();
+        double railLower = frame.ride().railSpread() * 0.075D * (frame.ride().family() == ClientSlidePoseController.RidePoseFamily.SPLIT_RAIL ? 1.0D : 0.35D);
+        double wallSettle = vertical * (0.16D + frame.perceptualSpeed() * 0.08D) * frame.ride().wallRideScale();
+        double lift = frame.ride().bodyLift() + 0.018D * (1.0D - frame.mountProgress()) + dismountLift(frame) - railLower - wallSettle;
+        Vec3 offset = poseFrame.up().scale(lift);
+        double turn = turnSignal(frame.signedTurn(), frame.signedTurnPreview(), 0.62D);
+        offset = offset.add(poseFrame.right().scale(-turn * (0.030D + frame.perceptualSpeed() * 0.050D) * frame.ride().balanceScale() * frame.poseAlpha()));
+        offset = offset.add(poseFrame.forward().scale((frame.downBlend() - frame.upBlend()) * vertical * 0.060D * frame.poseAlpha()));
         Vec3 camera = minecraft.gameRenderer.getMainCamera().position();
         Vec3 cameraAway = frame.position().subtract(camera);
         Vec3 projected = cameraAway.subtract(frame.tangent().scale(cameraAway.dot(frame.tangent())));
@@ -161,6 +228,26 @@ public final class ClientSlideFeedbackPlayerRenderer {
             offset = offset.add(projected.normalize().scale(0.07D * frame.verticalBlend() * frame.poseAlpha()));
         }
         return offset.scale(Mth.clamp(frame.poseAlpha(), 0.0D, 1.0D));
+    }
+
+    private static void applyFrameRideRotation(PoseStack poseStack, ClientSlidePoseController.SlidePoseFrame frame, Vec3 renderFacing, double amount) {
+        if (amount <= 1.0E-4D) {
+            return;
+        }
+        Vec3 baseForward = safeNormalize(new Vec3(renderFacing.x, 0.0D, renderFacing.z), new Vec3(0.0D, 0.0D, 1.0D));
+        Vec3 targetForward = lerpDirection(baseForward, frame.forward(), amount);
+        rotateBetween(poseStack, baseForward, targetForward);
+
+        Vec3 rotatedUp = rotateVector(WORLD_UP, baseForward, targetForward);
+        Vec3 targetUp = lerpDirection(rotatedUp, frame.up(), amount);
+        double roll = signedAngleOnPlane(rotatedUp, targetUp, targetForward);
+        rotateAround(poseStack, baseForward, Math.toDegrees(roll));
+    }
+
+    private static double rideFrameAmount(ClientSlidePoseController.PoseSnapshot pose, ClientSlidePoseController.SlidePoseFrame frame) {
+        double styleScale = Mth.clamp(pose.ride().verticalRideScale(), 0.0D, 1.2D);
+        double amount = frame.trackAmount() * (0.46D + styleScale * 0.54D) * pose.poseAlpha();
+        return Mth.clamp(amount, 0.0D, 1.0D);
     }
 
     private static double renderBank(ClientSlidePoseController.PoseSnapshot frame, Minecraft minecraft) {
@@ -211,149 +298,34 @@ public final class ClientSlideFeedbackPlayerRenderer {
         return 0.0D;
     }
 
-    private static void applyNaturalSlidingModelPose(ClientSlidePoseController.PoseSnapshot pose, PlayerModel model) {
-        ClientSlidePoseController.RidePoseDescriptor ride = pose.ride();
-        float alpha = (float) Mth.clamp(pose.poseAlpha(), 0.0D, 1.0D);
-        float speed = (float) Mth.clamp(pose.perceptualSpeed(), 0.0D, 1.0D);
-        float pulse = (float) Mth.clamp(pose.accelerationPulse(), 0.0D, 1.0D);
-        float turn = (float) Mth.clamp(turnSignal(pose.signedTurn(), pose.signedTurnPreview(), 0.58D), -1.0D, 1.0D);
-        float station = (float) Mth.clamp(pose.platformBlend(), 0.0D, 1.0D);
-        float vertical = (float) Mth.clamp(pose.verticalBlend(), 0.0D, 1.0D);
-        float slope = (float) Mth.clamp(pose.tangent().y, -0.92D, 0.92D);
-        float mount = (float) Mth.clamp(pose.mountProgress(), 0.0D, 1.0D);
-        float phase = (float) (pose.motionPhase() * Mth.TWO_PI);
-        float sway = (float) Math.sin(phase);
-        float counterSway = (float) Math.cos(phase);
-        float speedLean = (0.020F + speed * 0.024F + pulse * 0.014F) * (1.0F - station * 0.55F) * (1.0F - vertical * 0.78F);
-        float turnLean = turn * 0.16F * (float) ride.turnLeanScale() * (1.0F - vertical * 0.68F);
-        float balance = (0.014F + speed * 0.014F) * sway * (float) ride.balanceScale() * (1.0F - station * 0.45F);
-        float slopeLean = slope * (0.014F + speed * 0.006F) * (1.0F - vertical * 0.72F) * (1.0F - station * 0.34F);
-        float slopeArm = slope * (0.052F + speed * 0.018F) * (1.0F - vertical * 0.56F);
-        float knee = ((float) ride.kneeBend() * 0.70F + speed * 0.075F + pulse * 0.040F - station * 0.060F) * alpha;
-        float armSpread = ((float) ride.armBaseSpread() + speed * 0.26F + pulse * 0.12F - station * 0.20F) * alpha;
-
-        model.body.xRot += (speedLean + slopeLean + 0.030F * mount) * alpha;
-        model.body.zRot += (turnLean + balance * 0.45F) * alpha;
-        model.head.zRot += (turnLean * 0.32F - balance * 0.20F) * alpha;
-        model.head.xRot -= (0.035F * speed * (1.0F - station) + slopeLean * 0.28F) * alpha;
-
-        applyStance(pose, model, alpha, speed, pulse, station, vertical, slope, knee, turn, balance);
-        applyArms(pose, model, alpha, speed, pulse, station, vertical, armSpread, turn, balance, counterSway, slopeArm);
-        applyDismountModelPose(pose, model, alpha);
-    }
-
-    private static void applyHeadLook(ClientSlidePoseController.PoseSnapshot pose, PlayerModel model, Entity entity) {
-        Vec3 horizontalFacing = new Vec3(pose.visualFacing().x, 0.0D, pose.visualFacing().z);
-        if (horizontalFacing.lengthSqr() < 1.0E-6D) {
+    private static void applyHeadLook(ClientSlidePoseController.PoseSnapshot pose, ClientSlidePoseController.SlidePoseFrame poseFrame, PlayerModel model, Entity entity) {
+        Vec3 horizontalFacing = renderFacing(pose, poseFrame);
+        float vertical = (float) Mth.clamp(poseFrame.verticalAmount(), 0.0D, 1.0D);
+        if (horizontalFacing.lengthSqr() < 1.0E-6D || vertical > 0.92F) {
+            model.head.xRot += entity.getXRot() * ((float) Math.PI / 180.0F) * (1.0F - vertical) * 0.35F;
+            syncHat(model);
             return;
         }
         float alpha = (float) Mth.clamp(pose.poseAlpha(), 0.0D, 1.0D);
         float bodyYaw = yawFromFacing(horizontalFacing);
         float yawDelta = Mth.wrapDegrees(entity.getYRot() - bodyYaw);
-        float vertical = (float) Mth.clamp(pose.verticalBlend(), 0.0D, 1.0D);
         float maxYaw = lerp(70.0F, 42.0F, vertical);
         float maxPitch = lerp(46.0F, 30.0F, vertical);
         float headYaw = Mth.clamp(yawDelta, -maxYaw, maxYaw) * alpha;
         float headPitch = Mth.clamp(entity.getXRot(), -maxPitch, maxPitch) * alpha * 0.82F;
         model.head.yRot += headYaw * ((float) Math.PI / 180.0F);
         model.head.xRot += headPitch * ((float) Math.PI / 180.0F);
+        syncHat(model);
+    }
+
+    private static void syncHat(PlayerModel model) {
         model.hat.xRot = model.head.xRot;
         model.hat.yRot = model.head.yRot;
         model.hat.zRot = model.head.zRot;
     }
 
     private static void resetSlideLegOffsets(PlayerModel model) {
-        model.rightLeg.x = -1.9F;
-        model.leftLeg.x = 1.9F;
-        model.rightLeg.z = 0.0F;
-        model.leftLeg.z = 0.0F;
-    }
-
-    private static void applyStance(ClientSlidePoseController.PoseSnapshot pose, PlayerModel model, float alpha, float speed, float pulse, float station, float vertical, float slope, float knee, float turn, float balance) {
-        ClientSlidePoseController.RidePoseDescriptor ride = pose.ride();
-        float stanceWidthPx = (float) Mth.clamp(ride.stanceWidth() * 16.0D, 1.2D, 8.6D);
-        float stanceLengthPx = (float) Mth.clamp(ride.stanceLength() * 16.0D, 1.0D, 6.4D);
-        float width01 = (float) Mth.clamp((stanceWidthPx - 2.8F) / 5.8F, 0.0F, 1.0F);
-        float length01 = (float) Mth.clamp((stanceLengthPx - 1.0F) / 5.4F, 0.0F, 1.0F);
-        float hipOpen = width01 * 0.105F;
-        float footYaw = 0.030F + speed * 0.025F;
-        float footRoll = 0.035F + speed * 0.035F;
-        switch (ride.family()) {
-            case SPLIT_RAIL -> {
-                model.rightLeg.x = -1.9F - hipOpen;
-                model.leftLeg.x = 1.9F + hipOpen;
-                model.rightLeg.z = 0.0F;
-                model.leftLeg.z = 0.0F;
-                float railOut = 0.14F + width01 * 0.18F;
-                float railStagger = 0.04F + length01 * 0.08F;
-                model.rightLeg.xRot = (0.034F + knee * 0.15F + pulse * 0.018F + railStagger * 0.42F) * alpha;
-                model.leftLeg.xRot = (0.024F + knee * 0.11F - pulse * 0.008F - railStagger * 0.18F) * alpha;
-                model.rightLeg.yRot = (-railOut - footYaw * 0.50F + turn * 0.050F) * alpha;
-                model.leftLeg.yRot = (railOut + footYaw * 0.50F + turn * 0.050F) * alpha;
-                model.rightLeg.zRot = (0.075F + width01 * 0.055F + balance * 0.16F) * alpha;
-                model.leftLeg.zRot = (-0.075F - width01 * 0.055F + balance * 0.16F) * alpha;
-            }
-            case CRADLE -> {
-                model.rightLeg.x = -1.9F - hipOpen * 0.45F;
-                model.leftLeg.x = 1.9F + hipOpen * 0.45F;
-                model.rightLeg.z = 0.0F;
-                model.leftLeg.z = 0.0F;
-                model.rightLeg.xRot = (0.052F + knee * 0.18F + pulse * 0.018F) * alpha;
-                model.leftLeg.xRot = (-0.020F + knee * 0.070F - station * 0.020F) * alpha;
-                model.rightLeg.yRot = (-0.035F - footYaw * 0.45F + turn * 0.040F) * alpha;
-                model.leftLeg.yRot = (0.035F + footYaw * 0.45F + turn * 0.040F) * alpha;
-                model.rightLeg.zRot = (0.030F + balance * 0.16F) * alpha;
-                model.leftLeg.zRot = (-0.030F + balance * 0.16F) * alpha;
-            }
-            case MONORAIL -> {
-                model.rightLeg.x = -1.9F - hipOpen * 0.25F;
-                model.leftLeg.x = 1.9F + hipOpen * 0.25F;
-                model.rightLeg.z = 0.0F;
-                model.leftLeg.z = 0.0F;
-                model.rightLeg.xRot = (0.062F + knee * 0.19F + pulse * 0.020F + length01 * 0.018F) * alpha;
-                model.leftLeg.xRot = (-0.040F + knee * 0.070F - length01 * 0.014F) * alpha;
-                model.rightLeg.yRot = (-0.020F - footYaw * 0.55F + turn * 0.050F) * alpha;
-                model.leftLeg.yRot = (0.020F + footYaw * 0.55F + turn * 0.050F) * alpha;
-                model.rightLeg.zRot = (footRoll * 0.60F + balance * 0.20F) * alpha;
-                model.leftLeg.zRot = (-footRoll * 0.60F + balance * 0.20F) * alpha;
-            }
-            default -> {
-                model.rightLeg.x = -1.9F - hipOpen * 0.35F;
-                model.leftLeg.x = 1.9F + hipOpen * 0.35F;
-                model.rightLeg.z = 0.0F;
-                model.leftLeg.z = 0.0F;
-                model.rightLeg.xRot = (0.056F + knee * 0.19F + pulse * 0.022F + length01 * 0.020F) * alpha;
-                model.leftLeg.xRot = (-0.038F + knee * 0.055F - station * 0.014F - length01 * 0.018F) * alpha;
-                model.rightLeg.yRot = (-0.030F - footYaw + turn * 0.050F) * alpha;
-                model.leftLeg.yRot = (0.030F + footYaw + turn * 0.050F) * alpha;
-                model.rightLeg.zRot = (footRoll + balance * 0.18F) * alpha;
-                model.leftLeg.zRot = (-footRoll + balance * 0.18F) * alpha;
-            }
-        }
-        float verticalTuck = vertical * (0.11F + speed * 0.045F) * alpha;
-        if (pose.upBlend() >= pose.downBlend()) {
-            model.rightLeg.xRot += verticalTuck * 0.16F;
-            model.leftLeg.xRot -= verticalTuck * 0.035F;
-        } else {
-            model.rightLeg.xRot -= verticalTuck * 0.12F;
-            model.leftLeg.xRot += verticalTuck * 0.28F;
-        }
-        float uphillStability = Math.max((float) smoothstep(0.04D, 0.50D, Math.max(0.0F, slope)), (float) pose.upBlend() * 0.86F);
-        float forwardStability = 0.12F + uphillStability * 0.46F;
-        model.rightLeg.xRot *= 1.0F - forwardStability;
-        model.leftLeg.xRot *= 1.0F - forwardStability * 0.72F;
-    }
-
-    private static void applyArms(ClientSlidePoseController.PoseSnapshot pose, PlayerModel model, float alpha, float speed, float pulse, float station, float vertical, float armSpread, float turn, float balance, float counterSway, float slopeArm) {
-        float armFloat = counterSway * (0.006F + speed * 0.007F) * (1.0F - station * 0.50F);
-        float verticalOpen = vertical * 0.24F;
-        float accelerationPull = pulse * 0.11F;
-        model.rightArm.xRot = (-0.20F - speed * 0.12F - accelerationPull - slopeArm + armFloat + verticalOpen * 0.35F) * alpha;
-        model.leftArm.xRot = (-0.20F - speed * 0.12F - accelerationPull - slopeArm - armFloat + verticalOpen * 0.35F) * alpha;
-        model.rightArm.yRot = (-0.075F - speed * 0.040F + turn * 0.060F) * alpha;
-        model.leftArm.yRot = (0.075F + speed * 0.040F + turn * 0.060F) * alpha;
-        model.rightArm.zRot = (armSpread + verticalOpen - turn * 0.15F + balance * 0.12F) * alpha;
-        model.leftArm.zRot = (-armSpread - verticalOpen - turn * 0.15F + balance * 0.12F) * alpha;
+        ClientSlideBalancePoseSolver.resetLegRoots(model);
     }
 
     private static void applyDismountModelPose(ClientSlidePoseController.PoseSnapshot pose, PlayerModel model, float alpha) {
@@ -388,22 +360,62 @@ public final class ClientSlideFeedbackPlayerRenderer {
         }
     }
 
-    private static double slopeBalancePitch(ClientSlidePoseController.PoseSnapshot pose) {
-        double slope = Mth.clamp(pose.tangent().y, -0.92D, 0.92D);
-        double slopeResponse = smoothstep(0.035D, 0.48D, Math.abs(slope));
-        double degrees = -Math.signum(slope) * slopeResponse * (5.5D + pose.perceptualSpeed() * 5.0D + pose.accelerationPulse() * 1.6D);
-        return degrees
-                * (1.0D - pose.verticalBlend() * 0.46D)
-                * (1.0D - pose.platformBlend() * 0.34D)
-                * pose.poseAlpha();
-    }
-
     private static void rotateAround(PoseStack poseStack, Vec3 axis, double degrees) {
         if (Math.abs(degrees) < 1.0E-4D || axis.lengthSqr() < 1.0E-8D) {
             return;
         }
         Vec3 normalized = axis.normalize();
         poseStack.mulPose(Axis.of(new Vector3f((float) normalized.x, (float) normalized.y, (float) normalized.z)).rotationDegrees((float) degrees));
+    }
+
+    private static void rotateBetween(PoseStack poseStack, Vec3 from, Vec3 to) {
+        Vec3 source = safeNormalize(from, new Vec3(0.0D, 0.0D, 1.0D));
+        Vec3 target = safeNormalize(to, source);
+        double dot = Mth.clamp(source.dot(target), -1.0D, 1.0D);
+        if (dot > 0.9999D) {
+            return;
+        }
+        Vec3 axis = source.cross(target);
+        if (axis.lengthSqr() < 1.0E-8D) {
+            axis = safeNormalize(source.cross(WORLD_UP), new Vec3(1.0D, 0.0D, 0.0D));
+        }
+        rotateAround(poseStack, axis, Math.toDegrees(Math.acos(dot)));
+    }
+
+    private static Vec3 rotateVector(Vec3 value, Vec3 from, Vec3 to) {
+        Vec3 source = safeNormalize(from, new Vec3(0.0D, 0.0D, 1.0D));
+        Vec3 target = safeNormalize(to, source);
+        double dot = Mth.clamp(source.dot(target), -1.0D, 1.0D);
+        if (dot > 0.9999D) {
+            return value;
+        }
+        Vec3 axis = source.cross(target);
+        if (axis.lengthSqr() < 1.0E-8D) {
+            axis = safeNormalize(source.cross(WORLD_UP), new Vec3(1.0D, 0.0D, 0.0D));
+        }
+        Vec3 normalizedAxis = axis.normalize();
+        Quaternionf rotation = new Quaternionf().rotateAxis(
+                (float) Math.acos(dot),
+                (float) normalizedAxis.x,
+                (float) normalizedAxis.y,
+                (float) normalizedAxis.z
+        );
+        Vector3f rotated = new Vector3f((float) value.x, (float) value.y, (float) value.z).rotate(rotation);
+        return new Vec3(rotated.x, rotated.y, rotated.z);
+    }
+
+    private static double signedAngleOnPlane(Vec3 from, Vec3 to, Vec3 normal) {
+        Vec3 axis = safeNormalize(normal, new Vec3(0.0D, 0.0D, 1.0D));
+        Vec3 a = from.subtract(axis.scale(from.dot(axis)));
+        Vec3 b = to.subtract(axis.scale(to.dot(axis)));
+        if (a.lengthSqr() < 1.0E-8D || b.lengthSqr() < 1.0E-8D) {
+            return 0.0D;
+        }
+        Vec3 normalizedA = a.normalize();
+        Vec3 normalizedB = b.normalize();
+        double sin = axis.dot(normalizedA.cross(normalizedB));
+        double cos = Mth.clamp(normalizedA.dot(normalizedB), -1.0D, 1.0D);
+        return Math.atan2(sin, cos);
     }
 
     private static void alignBodyToFacing(AvatarRenderState state, Vec3 facing) {
@@ -414,6 +426,15 @@ public final class ClientSlideFeedbackPlayerRenderer {
         float yaw = yawFromFacing(horizontal);
         state.bodyRot = yaw;
         state.yRot = 0.0F;
+    }
+
+    private static Vec3 renderFacing(ClientSlidePoseController.PoseSnapshot pose, ClientSlidePoseController.SlidePoseFrame frame) {
+        Vec3 horizontal = new Vec3(frame.forward().x, 0.0D, frame.forward().z);
+        if (horizontal.lengthSqr() > 1.0E-6D) {
+            return horizontal.normalize();
+        }
+        Vec3 fallback = new Vec3(pose.visualFacing().x, 0.0D, pose.visualFacing().z);
+        return safeNormalize(fallback, new Vec3(0.0D, 0.0D, 1.0D));
     }
 
     private static double turnSignal(double signedTurn, double signedTurnPreview, double previewWeight) {
@@ -428,6 +449,77 @@ public final class ClientSlideFeedbackPlayerRenderer {
         return from + (to - from) * t;
     }
 
+    private static Vec3 lerpDirection(Vec3 from, Vec3 to, double t) {
+        Vec3 value = new Vec3(
+                from.x + (to.x - from.x) * t,
+                from.y + (to.y - from.y) * t,
+                from.z + (to.z - from.z) * t
+        );
+        return safeNormalize(value, to);
+    }
+
+    private static Vec3 rotateHorizontal(Vec3 direction, float degrees) {
+        Vec3 horizontal = new Vec3(direction.x, 0.0D, direction.z);
+        if (horizontal.lengthSqr() < 1.0E-8D || Math.abs(degrees) < 1.0E-4F) {
+            return direction;
+        }
+        double radians = degrees * Math.PI / 180.0D;
+        double sin = Math.sin(radians);
+        double cos = Math.cos(radians);
+        Vec3 normalized = horizontal.normalize();
+        return new Vec3(normalized.x * cos - normalized.z * sin, 0.0D, normalized.x * sin + normalized.z * cos).normalize();
+    }
+
+    private static float fixedStanceSide(ClientSlidePoseController.PoseSnapshot pose) {
+        return (pose.frame().sessionId().getLeastSignificantBits() & 1L) == 0L ? 1.0F : -1.0F;
+    }
+
+    private static float sideSlipYaw(ClientSlidePoseController.PoseSnapshot pose, ClientSlidePoseController.SlidePoseFrame frame, float sideStance) {
+        float inline = inlineSupportAmount(pose.ride());
+        if (inline <= 1.0E-4F) {
+            return 0.0F;
+        }
+        float vertical = (float) Mth.clamp(frame.verticalAmount(), 0.0D, 1.0D);
+        float speed = (float) Mth.clamp(pose.perceptualSpeed(), 0.0D, 1.0D);
+        float degrees = 48.0F + inline * 30.0F + speed * 6.0F;
+        return sideStance * degrees * (1.0F - vertical * 0.24F) * (float) Mth.clamp(pose.poseAlpha(), 0.0D, 1.0D);
+    }
+
+    private static float inlineSupportAmount(ClientSlidePoseController.RidePoseDescriptor ride) {
+        return switch (ride.family()) {
+            case MONORAIL -> 1.0F;
+            case INLINE -> 0.86F;
+            default -> 0.0F;
+        };
+    }
+
+    private static ModelPoseBlendState modelPoseBlendState(int entityId, UUID sessionId) {
+        return MODEL_POSE_BLEND_STATES.compute(entityId, (ignored, previous) -> {
+            if (previous == null || !previous.sessionId.equals(sessionId)) {
+                return new ModelPoseBlendState(sessionId);
+            }
+            return previous;
+        });
+    }
+
+    private static FloatBlendState renderYawState(int entityId, UUID sessionId) {
+        return RENDER_YAW_BLEND_STATES.compute(entityId, (ignored, previous) -> {
+            if (previous == null || !previous.sessionId.equals(sessionId)) {
+                return new FloatBlendState(sessionId);
+            }
+            return previous;
+        });
+    }
+
+    private static FloatBlendState rideRotationState(int entityId, UUID sessionId) {
+        return RIDE_ROTATION_BLEND_STATES.compute(entityId, (ignored, previous) -> {
+            if (previous == null || !previous.sessionId.equals(sessionId)) {
+                return new FloatBlendState(sessionId);
+            }
+            return previous;
+        });
+    }
+
     private static double smoothstep(double edge0, double edge1, double value) {
         double t = Mth.clamp((value - edge0) / (edge1 - edge0), 0.0D, 1.0D);
         return t * t * (3.0D - 2.0D * t);
@@ -435,5 +527,109 @@ public final class ClientSlideFeedbackPlayerRenderer {
 
     private static Vec3 safeNormalize(Vec3 value, Vec3 fallback) {
         return value.lengthSqr() < 1.0E-8D ? fallback : value.normalize();
+    }
+
+    private record ModelPose(float[] values) {
+        private static ModelPose capture(PlayerModel model) {
+            float[] values = new float[MODEL_POSE_CHANNELS];
+            values[BODY_X_ROT] = model.body.xRot;
+            values[BODY_Y_ROT] = model.body.yRot;
+            values[BODY_Z_ROT] = model.body.zRot;
+            values[HEAD_X_ROT] = model.head.xRot;
+            values[HEAD_Y_ROT] = model.head.yRot;
+            values[HEAD_Z_ROT] = model.head.zRot;
+            values[HAT_X_ROT] = model.hat.xRot;
+            values[HAT_Y_ROT] = model.hat.yRot;
+            values[HAT_Z_ROT] = model.hat.zRot;
+            values[RIGHT_ARM_X_ROT] = model.rightArm.xRot;
+            values[RIGHT_ARM_Y_ROT] = model.rightArm.yRot;
+            values[RIGHT_ARM_Z_ROT] = model.rightArm.zRot;
+            values[LEFT_ARM_X_ROT] = model.leftArm.xRot;
+            values[LEFT_ARM_Y_ROT] = model.leftArm.yRot;
+            values[LEFT_ARM_Z_ROT] = model.leftArm.zRot;
+            values[RIGHT_LEG_X_ROT] = model.rightLeg.xRot;
+            values[RIGHT_LEG_Y_ROT] = model.rightLeg.yRot;
+            values[RIGHT_LEG_Z_ROT] = model.rightLeg.zRot;
+            values[LEFT_LEG_X_ROT] = model.leftLeg.xRot;
+            values[LEFT_LEG_Y_ROT] = model.leftLeg.yRot;
+            values[LEFT_LEG_Z_ROT] = model.leftLeg.zRot;
+            values[RIGHT_LEG_X] = model.rightLeg.x;
+            values[RIGHT_LEG_Y] = model.rightLeg.y;
+            values[RIGHT_LEG_Z] = model.rightLeg.z;
+            values[LEFT_LEG_X] = model.leftLeg.x;
+            values[LEFT_LEG_Y] = model.leftLeg.y;
+            values[LEFT_LEG_Z] = model.leftLeg.z;
+            return new ModelPose(values);
+        }
+
+        private void applyTo(PlayerModel model) {
+            model.body.xRot = this.values[BODY_X_ROT];
+            model.body.yRot = this.values[BODY_Y_ROT];
+            model.body.zRot = this.values[BODY_Z_ROT];
+            model.head.xRot = this.values[HEAD_X_ROT];
+            model.head.yRot = this.values[HEAD_Y_ROT];
+            model.head.zRot = this.values[HEAD_Z_ROT];
+            model.hat.xRot = this.values[HAT_X_ROT];
+            model.hat.yRot = this.values[HAT_Y_ROT];
+            model.hat.zRot = this.values[HAT_Z_ROT];
+            model.rightArm.xRot = this.values[RIGHT_ARM_X_ROT];
+            model.rightArm.yRot = this.values[RIGHT_ARM_Y_ROT];
+            model.rightArm.zRot = this.values[RIGHT_ARM_Z_ROT];
+            model.leftArm.xRot = this.values[LEFT_ARM_X_ROT];
+            model.leftArm.yRot = this.values[LEFT_ARM_Y_ROT];
+            model.leftArm.zRot = this.values[LEFT_ARM_Z_ROT];
+            model.rightLeg.xRot = this.values[RIGHT_LEG_X_ROT];
+            model.rightLeg.yRot = this.values[RIGHT_LEG_Y_ROT];
+            model.rightLeg.zRot = this.values[RIGHT_LEG_Z_ROT];
+            model.leftLeg.xRot = this.values[LEFT_LEG_X_ROT];
+            model.leftLeg.yRot = this.values[LEFT_LEG_Y_ROT];
+            model.leftLeg.zRot = this.values[LEFT_LEG_Z_ROT];
+            model.rightLeg.x = this.values[RIGHT_LEG_X];
+            model.rightLeg.y = this.values[RIGHT_LEG_Y];
+            model.rightLeg.z = this.values[RIGHT_LEG_Z];
+            model.leftLeg.x = this.values[LEFT_LEG_X];
+            model.leftLeg.y = this.values[LEFT_LEG_Y];
+            model.leftLeg.z = this.values[LEFT_LEG_Z];
+        }
+    }
+
+    private static final class ModelPoseBlendState {
+        private final UUID sessionId;
+        private final float[] values = new float[MODEL_POSE_CHANNELS];
+        private boolean initialized;
+
+        private ModelPoseBlendState(UUID sessionId) {
+            this.sessionId = sessionId;
+        }
+
+        private ModelPose sample(ModelPose base, ModelPose target) {
+            if (!this.initialized) {
+                System.arraycopy(base.values, 0, this.values, 0, this.values.length);
+                this.initialized = true;
+            }
+            for (int i = 0; i < this.values.length; i++) {
+                this.values[i] = lerp(this.values[i], target.values[i], 0.22F);
+            }
+            return new ModelPose(this.values.clone());
+        }
+    }
+
+    private static final class FloatBlendState {
+        private final UUID sessionId;
+        private float value;
+        private boolean initialized;
+
+        private FloatBlendState(UUID sessionId) {
+            this.sessionId = sessionId;
+        }
+
+        private float sample(float target) {
+            if (!this.initialized) {
+                this.value = 0.0F;
+                this.initialized = true;
+            }
+            this.value = lerp(this.value, target, 0.18F);
+            return this.value;
+        }
     }
 }

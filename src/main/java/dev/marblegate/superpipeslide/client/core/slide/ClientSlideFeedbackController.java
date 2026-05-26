@@ -146,6 +146,8 @@ public final class ClientSlideFeedbackController {
                 alpha,
                 next.sessionId(),
                 next.connectionId(),
+                next.distanceOnConnection(),
+                next.connectionLength(),
                 next.position(),
                 tangent,
                 visualFacing,
@@ -212,7 +214,10 @@ public final class ClientSlideFeedbackController {
         if (frame == null || frame.alpha() <= 0.015D) {
             return Optional.empty();
         }
-        if (previousFrame == null || !previousFrame.sessionId().equals(frame.sessionId()) || previousFrame.position().distanceToSqr(frame.position()) > 16.0D) {
+        if (previousFrame == null
+                || !previousFrame.sessionId().equals(frame.sessionId())
+                || !previousFrame.connectionId().equals(frame.connectionId())
+                || previousFrame.position().distanceToSqr(frame.position()) > 16.0D) {
             return Optional.of(frame);
         }
         Minecraft minecraft = Minecraft.getInstance();
@@ -642,6 +647,8 @@ public final class ClientSlideFeedbackController {
                     this.alpha,
                     this.sessionId,
                     next.connection().id(),
+                    next.distanceOnConnection(),
+                    next.connection().length(),
                     next.position(),
                     next.tangent(),
                     visualFacing,
@@ -822,6 +829,8 @@ public final class ClientSlideFeedbackController {
             double alpha,
             UUID sessionId,
             UUID connectionId,
+            double distanceOnConnection,
+            double connectionLength,
             Vec3 position,
             Vec3 tangent,
             Vec3 visualFacing,
@@ -857,6 +866,8 @@ public final class ClientSlideFeedbackController {
                     lerp(previous.alpha, current.alpha, t),
                     current.sessionId,
                     current.connectionId,
+                    lerp(previous.distanceOnConnection, current.distanceOnConnection, t),
+                    lerp(previous.connectionLength, current.connectionLength, t),
                     lerp(previous.position, current.position, t),
                     lerpDirection(previous.tangent, current.tangent, t),
                     lerpDirection(previous.visualFacing, current.visualFacing, t),
@@ -887,6 +898,8 @@ public final class ClientSlideFeedbackController {
                     nextAlpha,
                     this.sessionId,
                     this.connectionId,
+                    this.distanceOnConnection,
+                    this.connectionLength,
                     this.position,
                     this.tangent,
                     this.visualFacing,
