@@ -57,7 +57,9 @@ public class FoldAnchorBlock extends Block {
 
     @Override
     protected void affectNeighborsAfterRemoval(BlockState state, ServerLevel level, BlockPos pos, boolean movedByPiston) {
-        PipeNetworkSavedData.get(level).removeFoldAnchorAndConnections(PipeAnchorId.of(level, pos), new FoldAnchorDirectory(level.getServer()));
+        PipeAnchorId anchorId = PipeAnchorId.of(level, pos);
+        PipeNetworkSavedData.get(level).removeFoldAnchorAndConnections(anchorId, new FoldAnchorDirectory(level.getServer()));
+        PipeConnectorItem.clearSelectedAnchorFromPlayers(level, anchorId);
         super.affectNeighborsAfterRemoval(state, level, pos, movedByPiston);
     }
 

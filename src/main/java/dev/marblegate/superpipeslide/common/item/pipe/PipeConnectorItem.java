@@ -11,9 +11,11 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
@@ -191,6 +193,11 @@ public class PipeConnectorItem extends Item {
             player.sendOverlayMessage(Component.translatable("message.superpipeslide.cross_dimension_connection").withStyle(ChatFormatting.RED));
             return InteractionResult.FAIL;
         }
+        if (first.equals(clicked)) {
+            clearSelectedAnchor(stack);
+            player.sendOverlayMessage(Component.translatable("message.superpipeslide.selection_cleared").withStyle(ChatFormatting.GRAY));
+            return InteractionResult.FAIL;
+        }
 
         if (!isConnectorAnchor(level.getBlockState(first.blockPos()))) {
             clearSelectedAnchor(stack);
@@ -282,6 +289,28 @@ public class PipeConnectorItem extends Item {
         stack.remove(SPSDataComponents.SELECTED_ANCHOR.get());
         stack.remove(SPSDataComponents.SELECTED_START_TANGENT.get());
         stack.remove(SPSDataComponents.PENDING_CONTROL_POINTS.get());
+    }
+
+    public static void clearSelectedAnchorFromPlayers(ServerLevel level, PipeAnchorId anchorId) {
+        if (!anchorId.levelKey().equals(level.dimension())) {
+            return;
+        }
+        for (ServerPlayer player : level.getServer().getPlayerList().getPlayers()) {
+            clearSelectedAnchorFromPlayer(player, anchorId);
+        }
+    }
+
+    private static void clearSelectedAnchorFromPlayer(ServerPlayer player, PipeAnchorId anchorId) {
+        Inventory inventory = player.getInventory();
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (!isConnector(stack) || !anchorId.equals(stack.get(SPSDataComponents.SELECTED_ANCHOR.get()))) {
+                continue;
+            }
+            clearSelectedAnchor(stack);
+            inventory.setChanged();
+            player.connection.send(inventory.createInventoryUpdatePacket(slot));
+        }
     }
 
     public static CurveSpec curveSpec(ItemStack stack, Player player, PipeAnchorId first, PipeAnchorId second) {

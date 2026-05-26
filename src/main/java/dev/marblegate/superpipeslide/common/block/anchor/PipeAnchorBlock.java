@@ -2,6 +2,7 @@ package dev.marblegate.superpipeslide.common.block.anchor;
 
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
+import dev.marblegate.superpipeslide.common.item.pipe.PipeConnectorItem;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.BlockGetter;
@@ -46,7 +47,9 @@ public class PipeAnchorBlock extends Block {
 
     @Override
     protected void affectNeighborsAfterRemoval(BlockState state, ServerLevel level, BlockPos pos, boolean movedByPiston) {
-        PipeNetworkSavedData.get(level).removeOrdinaryNodeAndConnections(PipeAnchorId.of(level, pos));
+        PipeAnchorId anchorId = PipeAnchorId.of(level, pos);
+        PipeNetworkSavedData.get(level).removeOrdinaryNodeAndConnections(anchorId);
+        PipeConnectorItem.clearSelectedAnchorFromPlayers(level, anchorId);
         super.affectNeighborsAfterRemoval(state, level, pos, movedByPiston);
     }
 }

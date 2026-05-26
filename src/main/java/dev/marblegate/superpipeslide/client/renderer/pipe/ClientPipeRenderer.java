@@ -1735,6 +1735,9 @@ public final class ClientPipeRenderer {
         if (start == null || !start.levelKey().equals(level.dimension())) {
             return null;
         }
+        if (!isConnectorAnchor(level.getBlockState(start.blockPos()))) {
+            return null;
+        }
 
         Target target = previewTarget(minecraft, level, start);
         if (target == null) {
@@ -1742,6 +1745,9 @@ public final class ClientPipeRenderer {
         }
 
         PipeAnchorId end = PipeAnchorId.of(level, target.pos());
+        if (start.equals(end)) {
+            return null;
+        }
         PipeConnectorMode mode = PipeConnectorItem.mode(stack);
         if (mode == PipeConnectorMode.CONTROLLED && !target.existingAnchor()) {
             List<Vec3> controlPath = new ArrayList<>();
@@ -1768,6 +1774,13 @@ public final class ClientPipeRenderer {
     }
 
     private static PipeConnection recomputeAutoPreview(ClientLevel level, PipeConnection preview) {
+        Set<PipeAnchorId> affectedAnchors = new LinkedHashSet<>();
+        affectedAnchors.add(preview.fromAnchor());
+        affectedAnchors.add(preview.toAnchor());
+        if (affectedAnchors.size() < 2) {
+            return preview;
+        }
+
         List<PipeConnection> temporaryConnections = new ArrayList<>(ClientPipeNetworkCache.connections(level.dimension()));
         temporaryConnections.removeIf(connection -> connection.id().equals(preview.id()));
         temporaryConnections.add(preview);
@@ -1778,7 +1791,7 @@ public final class ClientPipeRenderer {
         }
 
         PreviewNetworkView view = new PreviewNetworkView(temporaryConnections, branchNodes);
-        CurveSpec updatedSpec = AutoCurveSolver.recomputeAutoCurvesAround(view, Set.of(preview.fromAnchor(), preview.toAnchor()))
+        CurveSpec updatedSpec = AutoCurveSolver.recomputeAutoCurvesAround(view, affectedAnchors)
                 .get(preview.id());
         return updatedSpec == null ? preview : preview.withCurveSpec(updatedSpec);
     }

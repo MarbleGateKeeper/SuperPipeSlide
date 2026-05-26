@@ -54,6 +54,9 @@ public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> leve
         if (!fromAnchor.levelKey().equals(toAnchor.levelKey())) {
             throw new IllegalArgumentException("Pipe connections cannot cross dimensions");
         }
+        if (fromAnchor.equals(toAnchor)) {
+            throw new IllegalArgumentException("Pipe connections cannot connect an anchor to itself");
+        }
         levelKey = fromAnchor.levelKey();
         connectionKey = Math.max(TRANSIENT_CONNECTION_KEY, connectionKey);
         attributes = normalizeAttributes(attributes);
