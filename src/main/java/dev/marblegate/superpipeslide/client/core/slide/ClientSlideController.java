@@ -1070,11 +1070,6 @@ public final class ClientSlideController {
             return false;
         }
         if (!stop.get().id().equals(openStationPlatformStopId) || openStationSessionId == null) {
-            if (stationDecision.candidates().size() > 1) {
-                sendLocalNoticeOnce(state, stop.get().id(), "multi", ClientboundSlideNoticePayload.Kind.CHOICE, List.of(0xFF47A6FF),
-                        Component.translatable("notice.superpipeslide.slide.multiple_directions.title"),
-                        List.of(line(Component.translatable("notice.superpipeslide.slide.multiple_directions.body"))));
-            }
             openStationChoice(player, state, current, state.direction(), stop.get(), stationDecision.candidates(), stationDecision.holdUntilSelected() && stationDeparture);
         }
         return true;
@@ -1151,6 +1146,11 @@ public final class ClientSlideController {
     private static void openStationChoice(LocalPlayer player, ClientSlideState state, PipeConnection current, int direction, PlatformStop platformStop, List<RouteCandidate> candidates, boolean holdUntilSelected) {
         if (candidates.isEmpty()) {
             return;
+        }
+        if (candidates.size() > 1) {
+            sendLocalNoticeOnce(state, platformStop.id(), "multi", ClientboundSlideNoticePayload.Kind.CHOICE, List.of(0xFF47A6FF),
+                    Component.translatable("notice.superpipeslide.slide.multiple_directions.title"),
+                    List.of(line(Component.translatable("notice.superpipeslide.slide.multiple_directions.body"))));
         }
         Map<UUID, RouteCandidate> candidateByChoiceId = new HashMap<>();
         List<GazeChoice> choices = new ArrayList<>();
