@@ -318,7 +318,7 @@ public final class ProjectionLayoutCanvasScreen extends RouteEditorScreenBase {
         SPSGui.Rect scenarioButton = new SPSGui.Rect(layers.x() - 25, save.y(), 20, 20);
         SPSGui.Rect fit = new SPSGui.Rect(scenarioButton.x() - 25, save.y(), 20, 20);
         darkIcon(graphics, save, SPSGui.Icon.SAVE, mouseX, mouseY, draftValid() && !this.savePending ? 0xFFFFB04A : MUTED);
-        darkIcon(graphics, layers, SPSGui.Icon.STATION_ORDER, mouseX, mouseY, this.layersOpen ? ACCENT : MUTED);
+        darkIcon(graphics, layers, SPSGui.Icon.LAYERS, mouseX, mouseY, this.layersOpen ? ACCENT : MUTED);
         darkIcon(graphics, scenarioButton, SPSGui.Icon.CAMERA_TILTED, mouseX, mouseY, this.previewOpen ? ACCENT : MUTED);
         darkIcon(graphics, fit, SPSGui.Icon.FIT, mouseX, mouseY, MUTED);
         if (draftValid() && !this.savePending) {
@@ -394,8 +394,11 @@ public final class ProjectionLayoutCanvasScreen extends RouteEditorScreenBase {
         SPSGui.Rect button = new SPSGui.Rect(x, this.toolbar.y() + 8, 112, 20);
         graphics.fill(button.x(), button.y(), button.right(), button.bottom(), this.canvasSettingsOpen ? ACTIVE : button.contains(mouseX, mouseY) ? CHROME_HIGH : BG);
         graphics.outline(button.x(), button.y(), button.width(), button.height(), this.canvasSettingsOpen ? ACCENT : 0xFF324248);
-        SPSGui.smallText(graphics, this.font, Component.translatable("screen.superpipeslide.projection_designer.canvas_size.short").getString(), button.x() + 6, button.y() + 3, MUTED, 0.58F);
-        SPSGui.smallText(graphics, this.font, size, button.x() + 6, button.y() + 11, TEXT, 0.62F);
+        SPSGui.icon(graphics, new SPSGui.Rect(button.x() + 5, button.y() + 3, 14, 14), SPSGui.Icon.SETTINGS, this.canvasSettingsOpen ? ACCENT : MUTED);
+        int textX = button.x() + 24;
+        int textWidth = button.width() - 28;
+        SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, Component.translatable("screen.superpipeslide.projection_designer.canvas_size.short").getString(), textWidth), textX, button.y() + 3, MUTED, 0.58F);
+        SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, size, textWidth), textX, button.y() + 11, TEXT, 0.62F);
         this.addClick(button, () -> {
             this.canvasSettingsOpen = !this.canvasSettingsOpen;
             if (this.canvasSettingsOpen) {
