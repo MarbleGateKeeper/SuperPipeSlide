@@ -195,6 +195,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private UUID selectedNavigationStationGroupId;
     @Nullable
     private ClientNavigationController.NavigationPlan selectedNavigationPlan;
+    private boolean selectedNavigationPlanFromActiveSession;
     private long selectedNavigationPlanRouteRevision = Long.MIN_VALUE;
     private long selectedNavigationPlanPipeRevision = Long.MIN_VALUE;
     private String cachedNavigationQuery = "";
@@ -269,7 +270,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     ? HitTarget.none()
                     : this.renderer.hitTestPhysical(physicalGraph.get(), viewport, this.mapRect, mouseX, mouseY);
             this.renderer.renderPhysical(graphics, this.font, physicalGraph.get(), viewport, this.mapRect, this.hover, mouseX, mouseY);
-            this.currentNavigationPlan().ifPresent(plan -> this.navigationOverlayRenderer.renderPhysical(
+            this.currentNavigationOverlayPlan().ifPresent(plan -> this.navigationOverlayRenderer.renderPhysical(
                     graphics,
                     physicalGraph.get(),
                     viewport,
@@ -285,7 +286,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     ? HitTarget.none()
                     : this.renderer.hitTest(graph.get(), visualGraph.orElse(null), viewport, this.mapRect, mouseX, mouseY);
             this.renderer.render(graphics, this.font, graph.get(), visualGraph.orElse(null), viewport, this.mapRect, this.hover, mouseX, mouseY, this.schematicLegendHoverRouteLineId);
-            this.currentNavigationPlan().ifPresent(plan -> this.navigationOverlayRenderer.render(
+            this.currentNavigationOverlayPlan().ifPresent(plan -> this.navigationOverlayRenderer.render(
                     graphics,
                     graph.get(),
                     visualGraph.orElse(null),
@@ -1172,7 +1173,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     }
 
     private void renderActiveNavigationCompact(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-        ClientNavigationController.NavigationPlan plan = ClientNavigationController.sessionSnapshot().map(ClientNavigationController.NavigationSessionSnapshot::plan).orElse(null);
+        ClientNavigationController.NavigationPlan plan = ClientNavigationController.activeSessionSnapshot().map(ClientNavigationController.NavigationSessionSnapshot::plan).orElse(null);
         if (plan == null) {
             return;
         }
@@ -1472,6 +1473,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     private void selectNavigationDestination(UUID stationGroupId, boolean locate) {
         this.selectedNavigationStationGroupId = stationGroupId;
+        this.selectedNavigationPlanFromActiveSession = false;
         this.navigationSheetExpanded = true;
         this.searchExpanded = false;
         this.navigationCrossDimensionConfirmationArmed = false;
@@ -1493,6 +1495,18 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     private void refreshSelectedNavigationPlanIfStale(long routeRevision, long pipeRevision) {
         if (this.minecraft == null || this.minecraft.player == null || this.selectedNavigationStationGroupId == null) {
+            return;
+        }
+        if (this.selectedNavigationPlanFromActiveSession) {
+            Optional<ClientNavigationController.NavigationSessionSnapshot> active = ClientNavigationController.activeSessionSnapshot();
+            if (active.isEmpty()) {
+                this.clearNavigationPreview();
+                return;
+            }
+            this.selectedNavigationStationGroupId = active.get().plan().destinationStationGroupId();
+            this.selectedNavigationPlan = active.get().plan();
+            this.selectedNavigationPlanRouteRevision = active.get().plan().routeRevision();
+            this.selectedNavigationPlanPipeRevision = active.get().plan().pipeRevision();
             return;
         }
         if (this.selectedNavigationPlanRouteRevision == routeRevision && this.selectedNavigationPlanPipeRevision == pipeRevision) {
@@ -1541,6 +1555,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private void clearNavigationPreview() {
         this.selectedNavigationStationGroupId = null;
         this.selectedNavigationPlan = null;
+        this.selectedNavigationPlanFromActiveSession = false;
         this.selectedNavigationPlanRouteRevision = Long.MIN_VALUE;
         this.selectedNavigationPlanPipeRevision = Long.MIN_VALUE;
         this.navigationSheetExpanded = false;
@@ -1557,9 +1572,10 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     }
 
     private void expandActiveNavigation() {
-        ClientNavigationController.sessionSnapshot().ifPresent(snapshot -> {
+        ClientNavigationController.activeSessionSnapshot().ifPresent(snapshot -> {
             this.selectedNavigationStationGroupId = snapshot.plan().destinationStationGroupId();
             this.selectedNavigationPlan = snapshot.plan();
+            this.selectedNavigationPlanFromActiveSession = true;
             this.selectedNavigationPlanRouteRevision = snapshot.plan().routeRevision();
             this.selectedNavigationPlanPipeRevision = snapshot.plan().pipeRevision();
             this.navigationSheetExpanded = true;
@@ -1568,15 +1584,23 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         });
     }
 
-    private Optional<ClientNavigationController.NavigationPlan> currentNavigationPlan() {
-        if (this.selectedNavigationPlan != null) {
+    private Optional<ClientNavigationController.NavigationPlan> currentNavigationOverlayPlan() {
+        if (this.selectedNavigationPlan != null && this.selectedNavigationStationGroupId != null && this.selectedNavigationAllowedForOverlay(this.selectedNavigationPlan)) {
             return Optional.of(this.selectedNavigationPlan);
         }
-        return ClientNavigationController.sessionSnapshot().map(ClientNavigationController.NavigationSessionSnapshot::plan);
+        return ClientNavigationController.activeSessionSnapshot().map(ClientNavigationController.NavigationSessionSnapshot::plan);
+    }
+
+    private boolean selectedNavigationAllowedForOverlay(ClientNavigationController.NavigationPlan plan) {
+        Optional<ClientNavigationController.NavigationSessionSnapshot> active = ClientNavigationController.activeSessionSnapshot();
+        if (this.selectedNavigationPlanFromActiveSession) {
+            return active.filter(snapshot -> snapshot.plan().id().equals(plan.id())).isPresent();
+        }
+        return active.filter(snapshot -> snapshot.plan().destinationStationGroupId().equals(plan.destinationStationGroupId())).isEmpty();
     }
 
     private int navigationActiveSegmentIndex(ClientNavigationController.NavigationPlan plan) {
-        return ClientNavigationController.sessionSnapshot()
+        return ClientNavigationController.activeSessionSnapshot()
                 .filter(snapshot -> snapshot.plan().id().equals(plan.id()))
                 .map(ClientNavigationController.NavigationSessionSnapshot::segmentIndex)
                 .orElse(0);

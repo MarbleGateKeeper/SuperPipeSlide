@@ -465,15 +465,71 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
         double padWorld = Math.max(8.0D, (physicalNodeRadius(PhysicalNodeKind.PLATFORM, viewport.zoom()) + 7.0D) / Math.max(0.001D, scale(viewport)));
         double radiusX = Math.max(padWorld, (frame.worldBounds().maxX() - frame.worldBounds().minX()) * 0.5D + padWorld * 0.35D);
         double radiusZ = Math.max(padWorld, (frame.worldBounds().maxY() - frame.worldBounds().minY()) * 0.5D + padWorld * 0.35D);
-        int segments = Math.max(36, Math.min(96, (int) Math.ceil(Math.max(radiusX, radiusZ) * scale(viewport) * 0.75D)));
+        StationFrameScreenShape shape = stationFrameScreenShape(frame.centerX(), frame.centerZ(), radiusX, radiusZ, viewport, rect);
+        List<Vec2> points = capsuleOutlinePoints(shape.center(), shape.axis(), shape.length(), shape.height());
+        drawDashedPolyline(graphics, points, 1.2D, color, 7.0D, 5.0D);
+    }
+
+    private static StationFrameScreenShape stationFrameScreenShape(double centerX, double centerZ, double radiusX, double radiusZ, ViewportState viewport, SPSGui.Rect rect) {
+        Vec2 center = worldToScreen(centerX, centerZ, viewport, rect);
+        boolean xMajor = radiusX >= radiusZ;
+        double majorWorld = Math.max(radiusX, radiusZ);
+        double minorWorld = Math.max(1.0D, Math.min(radiusX, radiusZ));
+        Vec2 majorA = worldToScreen(centerX + (xMajor ? majorWorld : 0.0D), centerZ + (xMajor ? 0.0D : majorWorld), viewport, rect);
+        Vec2 majorB = worldToScreen(centerX - (xMajor ? majorWorld : 0.0D), centerZ - (xMajor ? 0.0D : majorWorld), viewport, rect);
+        Vec2 minorA = worldToScreen(centerX + (xMajor ? 0.0D : minorWorld), centerZ + (xMajor ? minorWorld : 0.0D), viewport, rect);
+        Vec2 minorB = worldToScreen(centerX - (xMajor ? 0.0D : minorWorld), centerZ - (xMajor ? minorWorld : 0.0D), viewport, rect);
+        Vec2 major = new Vec2(majorA.x() - majorB.x(), majorA.y() - majorB.y());
+        Vec2 minor = new Vec2(minorA.x() - minorB.x(), minorA.y() - minorB.y());
+        double majorLength = Math.max(1.0D, Math.hypot(major.x(), major.y()));
+        double minorLength = Math.max(1.0D, Math.hypot(minor.x(), minor.y()));
+        Vec2 axis = majorLength >= minorLength ? major : minor;
+        double length = Math.max(12.0D, Math.max(majorLength, minorLength));
+        double height = Math.max(8.0D, Math.min(length * 0.82D, Math.min(majorLength, minorLength)));
+        return new StationFrameScreenShape(center, axis, length, height);
+    }
+
+    private static List<Vec2> capsuleOutlinePoints(Vec2 center, Vec2 axis, double length, double height) {
+        double axisLength = Math.hypot(axis.x(), axis.y());
+        if (axisLength <= 0.001D || length <= height * 1.04D) {
+            return circleOutlinePoints(center, Math.max(length, height) * 0.5D);
+        }
+        double ux = axis.x() / axisLength;
+        double uy = axis.y() / axisLength;
+        double nx = -uy;
+        double ny = ux;
+        double radius = height * 0.5D;
+        double halfSegment = Math.max(0.0D, (length - height) * 0.5D);
+        Vec2 a = new Vec2(center.x() - ux * halfSegment, center.y() - uy * halfSegment);
+        Vec2 b = new Vec2(center.x() + ux * halfSegment, center.y() + uy * halfSegment);
+        int arcSegments = Math.max(10, Math.min(32, (int) Math.ceil(radius * 0.85D)));
+        List<Vec2> points = new ArrayList<>(arcSegments * 2 + 3);
+        double axisAngle = Math.atan2(uy, ux);
+        appendArc(points, b, radius, axisAngle - Math.PI * 0.5D, axisAngle + Math.PI * 0.5D, arcSegments);
+        appendArc(points, a, radius, axisAngle + Math.PI * 0.5D, axisAngle + Math.PI * 1.5D, arcSegments);
+        points.add(points.getFirst());
+        return points;
+    }
+
+    private static List<Vec2> circleOutlinePoints(Vec2 center, double radius) {
+        int segments = Math.max(24, Math.min(64, (int) Math.ceil(radius * 0.9D)));
         List<Vec2> points = new ArrayList<>(segments + 1);
         for (int i = 0; i <= segments; i++) {
             double angle = Math.PI * 2.0D * i / segments;
-            double x = frame.centerX() + Math.cos(angle) * radiusX;
-            double z = frame.centerZ() + Math.sin(angle) * radiusZ;
-            points.add(worldToScreen(x, z, viewport, rect));
+            points.add(new Vec2(center.x() + Math.cos(angle) * radius, center.y() + Math.sin(angle) * radius));
         }
-        drawDashedPolyline(graphics, points, 1.2D, color, 7.0D, 5.0D);
+        return points;
+    }
+
+    private static void appendArc(List<Vec2> points, Vec2 center, double radius, double startAngle, double endAngle, int segments) {
+        for (int i = 0; i <= segments; i++) {
+            if (!points.isEmpty() && i == 0) {
+                continue;
+            }
+            double t = i / (double) segments;
+            double angle = startAngle + (endAngle - startAngle) * t;
+            points.add(new Vec2(center.x() + Math.cos(angle) * radius, center.y() + Math.sin(angle) * radius));
+        }
     }
 
     private void drawPhysicalEdges(GuiGraphicsExtractor graphics, PhysicalRouteMapGraph graph, ViewportState viewport, SPSGui.Rect rect, Aabb2 worldView, HitTarget hover) {
@@ -985,7 +1041,7 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
             boolean hovered = hover.nodeId().filter(node.id()::equals).isPresent() || transferHighlightNodes.contains(displayNodeId(graph, node.id(), viewport.zoom())) || foldPeerHighlighted(graph, hover, node);
             int radius = nodeRadius(node, elementZoom);
             Optional<Vec2> transferAxis = node.kind() == NodeKind.STATION && node.isTransferStation()
-                    ? transferAxis(visualGraph, node.id())
+                    ? transferAxis(visualGraph, node.id(), viewport, rect)
                     : Optional.empty();
             if (hovered) {
                 if (transferAxis.isPresent()) {
@@ -1156,7 +1212,7 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
                 continue;
             }
             int radius = nodeRadius(raw, elementZoom);
-            Optional<Vec2> transferAxis = raw.isTransferStation() ? transferAxis(visualGraph, raw.id()) : Optional.empty();
+            Optional<Vec2> transferAxis = raw.isTransferStation() ? transferAxis(visualGraph, raw.id(), viewport, rect) : Optional.empty();
             if (hovered) {
                 if (transferAxis.isPresent()) {
                     drawDirectedTransferFocus(graphics, screen, radius, transferAxis.get());
@@ -2153,7 +2209,34 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
         return FullRouteMapConfig.MAP_FOLD_MULTI_LINE;
     }
 
-    private static Optional<Vec2> transferAxis(VisualRouteMapGraph graph, NodeId nodeId) {
+    private static Optional<Vec2> transferAxis(VisualRouteMapGraph graph, NodeId nodeId, ViewportState viewport, SPSGui.Rect rect) {
+        return transferAxisWorld(graph, nodeId)
+                .map(axis -> screenAxisAt(visualNodeCenter(graph, nodeId), axis, viewport, rect))
+                .filter(axis -> Math.hypot(axis.x(), axis.y()) > 0.001D);
+    }
+
+    private static Vec2 screenAxisAt(Vec2 center, Vec2 axis, ViewportState viewport, SPSGui.Rect rect) {
+        if (center == null) {
+            return axis;
+        }
+        double length = Math.hypot(axis.x(), axis.y());
+        if (length <= 0.001D) {
+            return axis;
+        }
+        double ux = axis.x() / length;
+        double uy = axis.y() / length;
+        Vec2 a = worldToScreen(center.x() - ux * 16.0D, center.y() - uy * 16.0D, viewport, rect);
+        Vec2 b = worldToScreen(center.x() + ux * 16.0D, center.y() + uy * 16.0D, viewport, rect);
+        return new Vec2(b.x() - a.x(), b.y() - a.y());
+    }
+
+    private static Vec2 visualNodeCenter(VisualRouteMapGraph graph, NodeId nodeId) {
+        return graph.node(nodeId)
+                .map(node -> new Vec2(node.x(), node.z()))
+                .orElse(new Vec2(0.0D, 0.0D));
+    }
+
+    private static Optional<Vec2> transferAxisWorld(VisualRouteMapGraph graph, NodeId nodeId) {
         List<TransferSpoke> spokes = new ArrayList<>();
         double total = 0.0D;
         for (VisualEdgePath path : graph.edgePaths()) {
@@ -3170,6 +3253,9 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
     }
 
     private record SegmentScreen(Vec2 a, Vec2 b) {
+    }
+
+    private record StationFrameScreenShape(Vec2 center, Vec2 axis, double length, double height) {
     }
 
     private record VisibleEdge(MapEdge edge, Vec2 a, Vec2 b) {

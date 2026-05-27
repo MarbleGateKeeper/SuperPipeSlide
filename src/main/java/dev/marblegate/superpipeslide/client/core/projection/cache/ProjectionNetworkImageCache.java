@@ -12,6 +12,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.InetAddress;
+import java.net.ProxySelector;
 import java.net.UnknownHostException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -35,6 +36,7 @@ import java.util.Queue;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.Set;
+import javax.net.ssl.SSLHandshakeException;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
@@ -45,27 +47,44 @@ import net.minecraft.resources.Identifier;
 public final class ProjectionNetworkImageCache {
     private static final int MAX_QUEUE_SIZE = 32;
     private static final long FAILURE_COOLDOWN_MILLIS = 300_000L;
+    private static final long FAILURE_BACKOFF_MAX_MILLIS = 3_600_000L;
+    private static final long FAILURE_LOG_COOLDOWN_MILLIS = 1_800_000L;
+    private static final long INACTIVE_FAILED_ENTRY_MILLIS = 900_000L;
+    private static final long INACTIVE_READY_ENTRY_MILLIS = 1_800_000L;
     private static final int MAX_REDIRECTS = 5;
     private static final int MAX_SCRIPT_CHALLENGES = 2;
     private static final String NETWORK_IMAGE_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) SuperPipeSlide/1.0 Safari/537.36";
     private static final String IMAGE_ACCEPT = "image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5";
     private static final Pattern DOCUMENT_COOKIE_PATTERN = Pattern.compile("document\\.cookie\\s*=\\s*['\"]([^'\"]+)['\"]", Pattern.CASE_INSENSITIVE);
     private static final Pattern LOCATION_HREF_PATTERN = Pattern.compile("(?:window\\.)?location\\.href\\s*=\\s*['\"]([^'\"]+)['\"]", Pattern.CASE_INSENSITIVE);
+    private static final String AIA_CA_ISSUERS_PROPERTY = "com.sun.security.enableAIAcaIssuers";
     private static final Set<String> LOGGED_NOT_IMAGE_RESPONSES = ConcurrentHashMap.newKeySet();
     private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(2, runnable -> {
         Thread thread = new Thread(runnable, "SuperPipeSlide Projection Image Loader");
         thread.setDaemon(true);
         return thread;
     });
-    private static final HttpClient HTTP = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(3))
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
+    static {
+        System.setProperty(AIA_CA_ISSUERS_PROPERTY, "true");
+    }
+    private static final HttpClient HTTP = createHttpClient();
     private static final Map<String, Entry> ENTRIES = new LinkedHashMap<>(32, 0.75F, true);
     private static final Queue<CompletedLoad> COMPLETED = new ConcurrentLinkedQueue<>();
     private static final AtomicInteger QUEUED_LOADS = new AtomicInteger();
 
     private ProjectionNetworkImageCache() {
+    }
+
+    private static HttpClient createHttpClient() {
+        HttpClient.Builder builder = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .version(HttpClient.Version.HTTP_1_1)
+                .followRedirects(HttpClient.Redirect.NEVER);
+        ProxySelector proxySelector = ProxySelector.getDefault();
+        if (proxySelector != null) {
+            builder.proxy(proxySelector);
+        }
+        return builder.build();
     }
 
     public static State state(String url) {
@@ -116,8 +135,18 @@ public final class ProjectionNetworkImageCache {
         }
     }
 
+    public static void clearUrls(Iterable<String> urls) {
+        if (urls == null) {
+            return;
+        }
+        for (String url : urls) {
+            clearUrl(url);
+        }
+    }
+
     public static void tick() {
         pumpCompleted();
+        pruneInactiveEntries();
     }
 
     public static void clear() {
@@ -263,7 +292,7 @@ public final class ProjectionNetworkImageCache {
         if (entry.status == Status.READY || entry.status == Status.QUEUED || entry.status == Status.DOWNLOADING || entry.status == Status.DECODING) {
             return;
         }
-        if (entry.failedAtMillis > 0L && now - entry.failedAtMillis < FAILURE_COOLDOWN_MILLIS) {
+        if (entry.failedAtMillis > 0L && now - entry.failedAtMillis < entry.failureBackoffMillis()) {
             return;
         }
         if (QUEUED_LOADS.get() >= MAX_QUEUE_SIZE) {
@@ -283,8 +312,9 @@ public final class ProjectionNetworkImageCache {
             markStatus(url, Status.DOWNLOADING, "screen.superpipeslide.projection_image.loading");
             COMPLETED.add(download(url, url, 0, 0, ""));
         } catch (Exception exception) {
-            COMPLETED.add(CompletedLoad.failure(url, Status.FAILED, "screen.superpipeslide.projection_image.failed"));
-            SuperPipeSlide.LOGGER.debug("Projection image failed to load {}", url, exception);
+            recordLoadException(url, exception);
+            ExceptionFailure failure = classifyLoadException(exception);
+            COMPLETED.add(CompletedLoad.failure(url, failure.status(), failure.messageKey()));
         } finally {
             QUEUED_LOADS.updateAndGet(value -> Math.max(0, value - 1));
         }
@@ -299,7 +329,7 @@ public final class ProjectionNetworkImageCache {
             return CompletedLoad.failure(entryUrl, Status.BLOCKED, "screen.superpipeslide.projection_image.blocked_host");
         }
         HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(uri)
-                .timeout(Duration.ofSeconds(8))
+                .timeout(Duration.ofSeconds(18))
                 .header("User-Agent", NETWORK_IMAGE_USER_AGENT)
                 .header("Accept", IMAGE_ACCEPT)
                 .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.7")
@@ -470,6 +500,106 @@ public final class ProjectionNetworkImageCache {
         if (LOGGED_NOT_IMAGE_RESPONSES.add(key)) {
             SuperPipeSlide.LOGGER.debug("Projection image URL did not return image data: url={}, contentType={}, firstBytes={}", entryUrl, contentType, firstBytes);
         }
+    }
+
+    private static void recordLoadException(String url, Exception exception) {
+        String failureKey = failureKey(exception);
+        FailureLogDecision decision;
+        synchronized (ENTRIES) {
+            Entry entry = ENTRIES.get(url);
+            if (entry == null) {
+                decision = new FailureLogDecision(true, 0, FAILURE_COOLDOWN_MILLIS, failureSummary(exception));
+            } else {
+                long now = System.currentTimeMillis();
+                boolean changed = !failureKey.equals(entry.lastFailureLogKey);
+                boolean due = entry.lastFailureLogAtMillis <= 0L || now - entry.lastFailureLogAtMillis >= FAILURE_LOG_COOLDOWN_MILLIS;
+                if (changed || due) {
+                    entry.lastFailureLogAtMillis = now;
+                    entry.lastFailureLogKey = failureKey;
+                    int failures = Math.min(16, entry.failureCount + 1);
+                    decision = new FailureLogDecision(true, failures, failureBackoffMillis(failures), failureSummary(exception));
+                } else {
+                    int failures = Math.min(16, entry.failureCount + 1);
+                    decision = new FailureLogDecision(false, failures, failureBackoffMillis(failures), failureSummary(exception));
+                }
+            }
+        }
+        if (decision.log()) {
+            SuperPipeSlide.LOGGER.debug("Projection image failed to load {} (failures={}, nextRetryMs={}, reason={})", url, decision.failures(), decision.nextRetryMillis(), decision.summary(), exception);
+        }
+    }
+
+    private static ExceptionFailure classifyLoadException(Throwable throwable) {
+        if (isTlsCertificatePathFailure(throwable)) {
+            return new ExceptionFailure(Status.TLS_CERTIFICATE_FAILED, "screen.superpipeslide.projection_image.tls_certificate_failed");
+        }
+        return new ExceptionFailure(Status.FAILED, "screen.superpipeslide.projection_image.failed");
+    }
+
+    private static String failureKey(Throwable throwable) {
+        if (throwable == null) {
+            return "unknown";
+        }
+        Throwable root = rootCause(throwable);
+        String message = root.getMessage() == null ? "" : root.getMessage();
+        return root.getClass().getName() + "|" + message;
+    }
+
+    private static String failureSummary(Throwable throwable) {
+        if (throwable == null) {
+            return "unknown";
+        }
+        if (isTlsCertificatePathFailure(throwable)) {
+            return "TLS certificate path failed: enableAIAcaIssuers=" + System.getProperty(AIA_CA_ISSUERS_PROPERTY);
+        }
+        Throwable root = rootCause(throwable);
+        String message = root.getMessage() == null || root.getMessage().isBlank() ? root.getClass().getSimpleName() : root.getMessage();
+        return root.getClass().getSimpleName() + ": " + message;
+    }
+
+    private static Throwable rootCause(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
+    }
+
+    private static boolean isTlsCertificatePathFailure(Throwable throwable) {
+        if (!hasCause(throwable, SSLHandshakeException.class)) {
+            return false;
+        }
+        Throwable current = throwable;
+        while (current != null) {
+            String className = current.getClass().getName();
+            String message = current.getMessage() == null ? "" : current.getMessage().toLowerCase(Locale.ROOT);
+            if (className.equals("sun.security.provider.certpath.SunCertPathBuilderException")
+                    || message.contains("pkix path building failed")
+                    || message.contains("unable to find valid certification path")) {
+                return true;
+            }
+            Throwable cause = current.getCause();
+            if (cause == null || cause == current) {
+                return false;
+            }
+            current = cause;
+        }
+        return false;
+    }
+
+    private static boolean hasCause(Throwable throwable, Class<? extends Throwable> type) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return true;
+            }
+            Throwable cause = current.getCause();
+            if (cause == null || cause == current) {
+                return false;
+            }
+            current = cause;
+        }
+        return false;
     }
 
     private static byte[] readLimited(InputStream input, int maxBytes) throws IOException {
@@ -679,6 +809,7 @@ public final class ProjectionNetworkImageCache {
                 entry.status = completed.status();
                 entry.messageKey = completed.messageKey();
                 entry.failedAtMillis = System.currentTimeMillis();
+                entry.failureCount = Math.min(16, entry.failureCount + 1);
                 return;
             }
             release(entry);
@@ -692,7 +823,30 @@ public final class ProjectionNetworkImageCache {
             entry.status = Status.READY;
             entry.messageKey = "";
             entry.failedAtMillis = 0L;
+            entry.failureCount = 0;
+            entry.lastFailureLogAtMillis = 0L;
+            entry.lastFailureLogKey = "";
             trimLocked();
+        }
+    }
+
+    private static void pruneInactiveEntries() {
+        long now = System.currentTimeMillis();
+        synchronized (ENTRIES) {
+            Iterator<Map.Entry<String, Entry>> iterator = ENTRIES.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Entry entry = iterator.next().getValue();
+                if (entry.status == Status.QUEUED || entry.status == Status.DOWNLOADING || entry.status == Status.DECODING) {
+                    continue;
+                }
+                long inactiveMillis = now - entry.lastAccessMillis;
+                boolean staleFailed = entry.status != Status.READY && inactiveMillis >= INACTIVE_FAILED_ENTRY_MILLIS;
+                boolean staleReady = entry.status == Status.READY && inactiveMillis >= INACTIVE_READY_ENTRY_MILLIS;
+                if (staleFailed || staleReady) {
+                    release(entry);
+                    iterator.remove();
+                }
+            }
         }
     }
 
@@ -743,6 +897,7 @@ public final class ProjectionNetworkImageCache {
         DECODING,
         READY,
         FAILED,
+        TLS_CERTIFICATE_FAILED,
         TOO_LARGE,
         UNSUPPORTED_FORMAT,
         NOT_IMAGE,
@@ -765,6 +920,9 @@ public final class ProjectionNetworkImageCache {
         private String messageKey = "screen.superpipeslide.projection_image.loading";
         private long failedAtMillis;
         private long lastAccessMillis = System.currentTimeMillis();
+        private int failureCount;
+        private long lastFailureLogAtMillis;
+        private String lastFailureLogKey = "";
 
         private Entry(String url) {
             this.url = url;
@@ -773,6 +931,18 @@ public final class ProjectionNetworkImageCache {
         private State state() {
             return new State(this.status, this.textureId, this.width, this.height, this.messageKey);
         }
+
+        private long failureBackoffMillis() {
+            return ProjectionNetworkImageCache.failureBackoffMillis(this.failureCount);
+        }
+    }
+
+    private static long failureBackoffMillis(int failureCount) {
+        if (failureCount <= 1) {
+            return FAILURE_COOLDOWN_MILLIS;
+        }
+        long multiplier = 1L << Math.min(4, failureCount - 1);
+        return Math.min(FAILURE_BACKOFF_MAX_MILLIS, FAILURE_COOLDOWN_MILLIS * multiplier);
     }
 
     private record Validation(boolean ok, String normalizedUrl, Status state, String messageKey) {
@@ -792,6 +962,12 @@ public final class ProjectionNetworkImageCache {
     }
 
     private record ScriptImageChallenge(String url, String cookie) {
+    }
+
+    private record FailureLogDecision(boolean log, int failures, long nextRetryMillis, String summary) {
+    }
+
+    private record ExceptionFailure(Status status, String messageKey) {
     }
 
     private enum ImageFormat {

@@ -87,6 +87,10 @@ public final class ClientNavigationController {
         return session == null ? Optional.empty() : Optional.of(session.snapshot());
     }
 
+    public static Optional<NavigationSessionSnapshot> activeSessionSnapshot() {
+        return sessionSnapshot().filter(NavigationSessionSnapshot::active);
+    }
+
     public static boolean isNavigating() {
         return session != null && session.phase != NavigationPhase.ARRIVED && session.phase != NavigationPhase.ROUTE_FAILED;
     }
@@ -1496,6 +1500,9 @@ public final class ClientNavigationController {
     }
 
     public record NavigationSessionSnapshot(NavigationPhase phase, NavigationPlan plan, int segmentIndex) {
+        public boolean active() {
+            return this.phase != NavigationPhase.ARRIVED && this.phase != NavigationPhase.ROUTE_FAILED;
+        }
     }
 
     public record NavigationHudSnapshot(

@@ -94,7 +94,7 @@ public final class FullMapNavigationViewModel {
                 .filter(values -> !values.isEmpty())
                 .map(List::getFirst)
                 .orElseGet(() -> dimensionOfStation(plan.destinationStationGroupId()).map(FullMapNavigationViewModel::dimensionLabel).orElse(""));
-        boolean activeSameDestination = ClientNavigationController.sessionSnapshot()
+        boolean activeSameDestination = ClientNavigationController.activeSessionSnapshot()
                 .map(snapshot -> snapshot.plan().destinationStationGroupId().equals(plan.destinationStationGroupId()))
                 .orElse(false);
         boolean activeOtherDestination = ClientNavigationController.isNavigating() && !activeSameDestination;

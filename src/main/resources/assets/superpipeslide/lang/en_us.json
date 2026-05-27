@@ -1245,6 +1245,7 @@
   "screen.superpipeslide.projection_image.blocked_host": "Blocked Host",
   "screen.superpipeslide.projection_image.loading": "Loading",
   "screen.superpipeslide.projection_image.failed": "Load Failed",
+  "screen.superpipeslide.projection_image.tls_certificate_failed": "TLS Certificate Chain Failed",
   "screen.superpipeslide.projection_image.too_large": "Too Large",
   "screen.superpipeslide.projection_image.unsupported": "Unsupported",
   "screen.superpipeslide.projection_image.queue_full": "Queue Full",

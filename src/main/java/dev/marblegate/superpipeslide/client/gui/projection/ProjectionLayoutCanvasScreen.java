@@ -10,6 +10,8 @@ import dev.marblegate.superpipeslide.client.core.projection.preview.ProjectionLa
 import dev.marblegate.superpipeslide.client.core.projection.cache.ProjectionBuiltinIconTextureCache;
 import dev.marblegate.superpipeslide.client.core.projection.cache.ProjectionNetworkImageCache;
 import dev.marblegate.superpipeslide.client.core.projection.preview.ProjectionPreviewScenario;
+import dev.marblegate.superpipeslide.client.renderer.projection.PlatformProjectorRenderer;
+import dev.marblegate.superpipeslide.client.renderer.projection.StationNameProjectorRenderer;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionCanvas;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionBuiltinIcon;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponent;
@@ -2332,6 +2334,9 @@ public final class ProjectionLayoutCanvasScreen extends RouteEditorScreenBase {
         if (!draftValid()) {
             return;
         }
+        this.clearUnusedNetworkImages(List.of(), this.draft.components());
+        PlatformProjectorRenderer.clearStaticCache();
+        StationNameProjectorRenderer.clearStaticCache();
         this.savePending = true;
         this.pendingSaveUpdatedAt = this.draft.updatedAt();
         ClientPacketDistributor.sendToServer(new ServerboundProjectionLayoutSavePayload(this.draft, true));
@@ -2381,16 +2386,44 @@ public final class ProjectionLayoutCanvasScreen extends RouteEditorScreenBase {
             return;
         }
         this.draft = this.draft.withComponents(this.draft.components().stream().map(component -> component.id().equals(replacement.id()) ? replacement : component).toList());
+        this.clearUnusedNetworkImages(current == null ? List.of() : List.of(current), this.draft.components());
+        PlatformProjectorRenderer.clearStaticCache();
+        StationNameProjectorRenderer.clearStaticCache();
         markDirty();
     }
 
     private void deleteComponent(UUID id) {
+        List<ProjectionComponent> previous = this.draft.components().stream().filter(component -> component.id().equals(id)).toList();
         List<ProjectionComponent> next = this.draft.components().stream().filter(component -> !component.id().equals(id)).toList();
         this.draft = this.draft.withComponents(next);
+        this.clearUnusedNetworkImages(previous, next);
+        PlatformProjectorRenderer.clearStaticCache();
+        StationNameProjectorRenderer.clearStaticCache();
         markDirty();
         this.selectedId = next.stream().max(Comparator.comparingInt(ProjectionComponent::layer)).map(ProjectionComponent::id).orElse(null);
         this.propertiesOpen = false;
         this.propertiesPositionInitialized = false;
+    }
+
+    private void clearUnusedNetworkImages(List<ProjectionComponent> previous, List<ProjectionComponent> current) {
+        List<String> currentUrls = networkImageUrls(current);
+        for (String url : networkImageUrls(previous)) {
+            if (!url.isBlank() && currentUrls.stream().noneMatch(url::equals)) {
+                ProjectionNetworkImageCache.clearUrl(url);
+            }
+        }
+    }
+
+    private static List<String> networkImageUrls(List<ProjectionComponent> components) {
+        return components.stream()
+                .map(ProjectionComponent::settings)
+                .filter(ProjectionComponentSettings.NetworkImage.class::isInstance)
+                .map(ProjectionComponentSettings.NetworkImage.class::cast)
+                .map(ProjectionComponentSettings.NetworkImage::url)
+                .map(url -> url == null ? "" : url.trim())
+                .filter(url -> !url.isBlank())
+                .distinct()
+                .toList();
     }
 
     private List<ProjectionComponent> layersDescending() {

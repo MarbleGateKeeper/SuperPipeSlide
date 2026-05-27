@@ -1245,6 +1245,7 @@
   "screen.superpipeslide.projection_image.blocked_host": "主机被阻止",
   "screen.superpipeslide.projection_image.loading": "加载中",
   "screen.superpipeslide.projection_image.failed": "加载失败",
+  "screen.superpipeslide.projection_image.tls_certificate_failed": "TLS 证书链失败",
   "screen.superpipeslide.projection_image.too_large": "图片过大",
   "screen.superpipeslide.projection_image.unsupported": "格式不支持",
   "screen.superpipeslide.projection_image.queue_full": "队列已满",
