@@ -6,11 +6,11 @@ import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptio
 import dev.marblegate.superpipeslide.client.core.fold.ClientFoldTraversalEffectController;
 import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
+import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.Mth;
@@ -62,8 +62,7 @@ public final class ClientFoldTraversalEffectRenderer {
         PoseStack poseStack = event.getPoseStack();
         poseStack.pushPose();
         poseStack.translate(-camera.x, -camera.y, -camera.z);
-        event.getSubmitNodeCollector().submitCustomGeometry(poseStack, RenderTypes.debugQuads(), (pose, buffer) -> renderWorldSurfaces(pose, buffer, snapshot, minecraft.level.dimension(), camera));
-        event.getSubmitNodeCollector().submitCustomGeometry(poseStack, RenderTypes.lightning(), (pose, buffer) -> renderWorldGlow(pose, buffer, snapshot, minecraft.level.dimension(), camera));
+        ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, ClientRenderCompatibility.effectQuads(), (pose, buffer) -> renderWorldSurfaces(pose, buffer, snapshot, minecraft.level.dimension(), camera));
         poseStack.popPose();
     }
 
@@ -112,15 +111,18 @@ public final class ClientFoldTraversalEffectRenderer {
 
     private static void renderWorldSurfaces(PoseStack.Pose pose, VertexConsumer buffer, ClientFoldTraversalEffectController.Snapshot effect, ResourceKey<Level> currentLevel, Vec3 camera) {
         if (effect.entryLevel().equals(currentLevel)) {
+            renderMembrane(pose, buffer, effect, effect.entryPosition(), effect.entryTangent(), true, camera);
+            renderMembraneCreases(pose, buffer, effect, effect.entryPosition(), effect.entryTangent(), true);
+            renderAnchorPulse(pose, buffer, effect, effect.entryPosition(), effect.entryTangent(), true);
             renderFoldSheets(pose, buffer, effect, effect.entryPosition(), effect.entryTangent(), true);
         }
         if (effect.exitLevel().equals(currentLevel) && shouldRenderExit(effect)) {
+            renderMembrane(pose, buffer, effect, effect.exitPosition(), effect.exitTangent(), false, camera);
+            renderMembraneCreases(pose, buffer, effect, effect.exitPosition(), effect.exitTangent(), false);
+            renderAnchorPulse(pose, buffer, effect, effect.exitPosition(), effect.exitTangent(), false);
             renderFoldSheets(pose, buffer, effect, effect.exitPosition(), effect.exitTangent(), false);
             renderSpatialSilhouette(pose, buffer, effect, effect.exitPosition(), effect.exitTangent());
         }
-    }
-
-    private static void renderWorldGlow(PoseStack.Pose pose, VertexConsumer buffer, ClientFoldTraversalEffectController.Snapshot effect, ResourceKey<Level> currentLevel, Vec3 camera) {
     }
 
     private static boolean shouldRenderExit(ClientFoldTraversalEffectController.Snapshot effect) {

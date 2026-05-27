@@ -5,9 +5,9 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.gaze.ClientGazeChoiceController;
 import dev.marblegate.superpipeslide.client.core.gaze.ClientGazeChoiceController.ChoiceVisualState;
+import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.gaze.GazeChoiceShapeType;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.context.ContextKey;
 import net.minecraft.world.phys.Vec3;
@@ -61,7 +61,7 @@ public final class ClientGazeChoiceGeometryRenderer {
         PoseStack poseStack = event.getPoseStack();
         poseStack.pushPose();
         poseStack.translate(-camera.x, -camera.y, -camera.z);
-        event.getSubmitNodeCollector().submitCustomGeometry(poseStack, RenderTypes.debugQuads(), (pose, buffer) -> {
+        ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, ClientRenderCompatibility.effectQuads(), (pose, buffer) -> {
             for (ChoiceMesh choice : renderData.choices()) {
                 renderChoice(pose, buffer, choice);
             }

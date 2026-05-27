@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.QuadInstance;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
+import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNode;
 import dev.marblegate.superpipeslide.common.item.anchor.BranchUpgraderItem;
@@ -194,7 +195,8 @@ public final class ClientAnchorVisibilityRenderer {
         if (batches.isEmpty()) {
             return;
         }
-        event.getSubmitNodeCollector().submitCustomGeometry(
+        ClientRenderCompatibility.submitCustomGeometry(
+                event.getSubmitNodeCollector(),
                 event.getPoseStack(),
                 renderType,
                 (pose, buffer) -> renderAnchorBatches(buffer, batches, camera)

@@ -2,6 +2,7 @@ package dev.marblegate.superpipeslide.client.renderer.gaze;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import dev.marblegate.superpipeslide.client.core.gaze.ClientGazeChoiceController;
+import dev.marblegate.superpipeslide.client.renderer.SubmitTextRenderer;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -61,8 +62,10 @@ public final class ClientGazeChoiceRenderer {
             poseStack.translate(label.position().x, label.position().y, label.position().z);
             poseStack.mulPose(minecraft.gameRenderer.getMainCamera().rotation());
             poseStack.scale(scale, -scale, scale);
-            event.getSubmitNodeCollector().submitText(
+            SubmitTextRenderer.submitText(
+                    event.getSubmitNodeCollector(),
                     poseStack,
+                    font,
                     -font.width(primary) * 0.5F,
                     hasSecondary ? -5.0F : 0.0F,
                     primary.getVisualOrderText(),
@@ -76,8 +79,10 @@ public final class ClientGazeChoiceRenderer {
             if (hasSecondary) {
                 poseStack.pushPose();
                 poseStack.scale(0.84F, 0.84F, 0.84F);
-                event.getSubmitNodeCollector().submitText(
+                SubmitTextRenderer.submitText(
+                        event.getSubmitNodeCollector(),
                         poseStack,
+                        font,
                         -font.width(secondary) * 0.5F,
                         7.0F,
                         secondary.getVisualOrderText(),

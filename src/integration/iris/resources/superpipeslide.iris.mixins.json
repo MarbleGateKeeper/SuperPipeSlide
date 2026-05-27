@@ -1,0 +1,20 @@
+{
+  "required": true,
+  "package": "dev.marblegate.superpipeslide.mixin.iris",
+  "compatibilityLevel": "JAVA_25",
+  "plugin": "dev.marblegate.superpipeslide.mixin.UniversalConditionalMixinPlugin",
+  "mixins": [],
+  "client": [
+    "IrisFinalPassRendererMixin",
+    "IrisItemFeatureRendererMixin",
+    "IrisRenderSetupAccessor",
+    "IrisRenderSetupTextureBindingAccessor",
+    "IrisShadowRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

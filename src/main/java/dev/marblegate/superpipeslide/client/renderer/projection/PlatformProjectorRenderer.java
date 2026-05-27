@@ -24,6 +24,7 @@ import dev.marblegate.superpipeslide.client.core.projection.render.ProjectionRen
 import dev.marblegate.superpipeslide.client.core.projection.render.ProjectionTextScroller;
 import dev.marblegate.superpipeslide.client.core.projection.render.ProjectionWorldTextRenderer;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
+import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import dev.marblegate.superpipeslide.common.block.station.PlatformProjectorBlock;
 import dev.marblegate.superpipeslide.common.block.station.PlatformProjectorBlockEntity;
 import dev.marblegate.superpipeslide.common.block.station.PlatformProjectorConfig;
@@ -258,6 +259,11 @@ public final class PlatformProjectorRenderer {
         StaticProjectionKey staticKey = staticKey(projector, frontSide, width, height);
         if (staticKey != null) {
             StaticProjectionEntry entry = STATIC_CACHE.get(staticKey);
+            if (entry != null && !entry.batches.validForCurrentRenderState()) {
+                entry.release();
+                STATIC_CACHE.remove(staticKey);
+                entry = null;
+            }
             if (entry == null) {
                 entry = new StaticProjectionEntry(compileStaticProjector(projector, frontSide, width, height));
                 STATIC_CACHE.put(staticKey, entry);
@@ -269,6 +275,11 @@ public final class PlatformProjectorRenderer {
         DynamicProjectionKey dynamicKey = dynamicKey(projector, frontSide, width, height);
         if (dynamicKey != null) {
             StaticProjectionEntry entry = DYNAMIC_CACHE.get(dynamicKey);
+            if (entry != null && !entry.batches.validForCurrentRenderState()) {
+                entry.release();
+                DYNAMIC_CACHE.remove(dynamicKey);
+                entry = null;
+            }
             if (entry == null) {
                 entry = new StaticProjectionEntry(compileDynamicProjector(projector, frontSide, width, height));
                 DYNAMIC_CACHE.put(dynamicKey, entry);
@@ -286,7 +297,7 @@ public final class PlatformProjectorRenderer {
         return ProjectionGpuBatchCache.compile(collector -> {
             PoseStack poseStack = new PoseStack();
             applyProjectorTransform(poseStack, projector.pos(), projector.facing(), projector.config(), frontSide);
-            collector.submitCustomGeometry(poseStack, PROJECTION_TRANSLUCENT_QUADS, (pose, buffer) -> renderProjectionSurfaces(pose, buffer, projector.layout(), projector.info(), width, height, SurfacePass.COLOR, ProjectionBatchMode.DYNAMIC_ONLY));
+            ClientRenderCompatibility.submitCustomGeometry(collector, poseStack, PROJECTION_TRANSLUCENT_QUADS, (pose, buffer) -> renderProjectionSurfaces(pose, buffer, projector.layout(), projector.info(), width, height, SurfacePass.COLOR, ProjectionBatchMode.DYNAMIC_ONLY));
             renderProjectionTextures(poseStack, collector, projector.layout(), projector.info(), width, height, ProjectionBatchMode.DYNAMIC_ONLY);
         });
     }
@@ -304,7 +315,7 @@ public final class PlatformProjectorRenderer {
         return ProjectionGpuBatchCache.compile(collector -> {
             PoseStack poseStack = new PoseStack();
             applyProjectorTransform(poseStack, projector.pos(), projector.facing(), projector.config(), frontSide);
-            collector.submitCustomGeometry(poseStack, PROJECTION_TRANSLUCENT_QUADS, (pose, buffer) -> renderProjectionSurfaces(pose, buffer, projector.layout(), projector.info(), width, height, SurfacePass.COLOR, ProjectionBatchMode.STATIC_ONLY));
+            ClientRenderCompatibility.submitCustomGeometry(collector, poseStack, PROJECTION_TRANSLUCENT_QUADS, (pose, buffer) -> renderProjectionSurfaces(pose, buffer, projector.layout(), projector.info(), width, height, SurfacePass.COLOR, ProjectionBatchMode.STATIC_ONLY));
             renderProjectionTextures(poseStack, collector, projector.layout(), projector.info(), width, height, ProjectionBatchMode.STATIC_ONLY);
         });
     }
@@ -696,7 +707,7 @@ public final class PlatformProjectorRenderer {
         }
         for (Map.Entry<Identifier, List<TexturedComponent>> entry : batches.entrySet()) {
             RenderType renderType = texturedRenderType(entry.getKey());
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            ClientRenderCompatibility.submitCustomGeometry(collector, poseStack, renderType, (pose, buffer) -> {
                 for (TexturedComponent item : entry.getValue()) {
                     addTransformedTexturedRect(pose, buffer, item.transform(), item.rect(), item.z(), item.color(), item.u0(), item.v0(), item.u1(), item.v1());
                 }

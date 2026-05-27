@@ -47,6 +47,8 @@ SuperPipeSlide adds anchor-based pipe routes that let players slide along pipe s
 [[mixins]]
 config="${mod_id}.mixins.json"
 
+${integration_mixin_blocks}
+
 # The [[accessTransformers]] block allows you to declare where your AT file is.
 # If this block is omitted, a fallback attempt will be made to load an AT from META-INF/accesstransformer.cfg
 #[[accessTransformers]]

@@ -255,6 +255,7 @@ public class SuperPipeSlideClient {
                     ProjectionWorldTextRenderer.clear();
                     StationNameProjectorRenderer.clearCaches();
                     PlatformProjectorRenderer.clearCaches();
+                    ClientPipeRenderer.clearRenderCache();
                 }
             });
         }

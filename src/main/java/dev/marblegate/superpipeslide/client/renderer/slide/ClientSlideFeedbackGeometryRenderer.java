@@ -5,6 +5,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.fold.ClientFoldTraversalEffectController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideFeedbackController;
+import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.config.ClientConfig;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
@@ -66,7 +67,7 @@ public final class ClientSlideFeedbackGeometryRenderer {
         poseStack.pushPose();
         poseStack.translate(-camera.x, -camera.y, -camera.z);
         if (!renderData.particles().isEmpty()) {
-            event.getSubmitNodeCollector().submitCustomGeometry(poseStack, RenderTypes.lightning(), (pose, buffer) -> {
+            ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, RenderTypes.lightning(), (pose, buffer) -> {
                 for (ClientSlideFeedbackController.TrailParticleSnapshot particle : renderData.particles()) {
                     renderParticle(pose, buffer, particle, camera);
                 }

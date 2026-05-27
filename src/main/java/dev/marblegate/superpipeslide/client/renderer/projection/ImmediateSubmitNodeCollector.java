@@ -2,6 +2,7 @@ package dev.marblegate.superpipeslide.client.renderer.projection;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.model.Model;
@@ -29,9 +30,11 @@ import java.util.List;
 
 final class ImmediateSubmitNodeCollector implements SubmitNodeCollector {
     private final MultiBufferSource.BufferSource bufferSource;
+    private final MultiBufferSource textBufferSource;
 
     ImmediateSubmitNodeCollector(MultiBufferSource.BufferSource bufferSource) {
         this.bufferSource = bufferSource;
+        this.textBufferSource = ClientRenderCompatibility.textBufferSource(bufferSource);
     }
 
     @Override
@@ -41,7 +44,7 @@ final class ImmediateSubmitNodeCollector implements SubmitNodeCollector {
 
     @Override
     public void submitCustomGeometry(PoseStack poseStack, RenderType renderType, CustomGeometryRenderer customGeometryRenderer) {
-        VertexConsumer buffer = this.bufferSource.getBuffer(renderType);
+        VertexConsumer buffer = this.bufferSource.getBuffer(ClientRenderCompatibility.world(renderType));
         customGeometryRenderer.render(poseStack.last(), buffer);
     }
 
@@ -49,10 +52,10 @@ final class ImmediateSubmitNodeCollector implements SubmitNodeCollector {
     public void submitText(PoseStack poseStack, float x, float y, FormattedCharSequence string, boolean dropShadow, Font.DisplayMode displayMode, int lightCoords, int color, int backgroundColor, int outlineColor) {
         Font font = Minecraft.getInstance().font;
         if (outlineColor == 0) {
-            font.drawInBatch(string, x, y, color, dropShadow, poseStack.last().pose(), this.bufferSource, displayMode, backgroundColor, lightCoords);
+            font.drawInBatch(string, x, y, color, dropShadow, poseStack.last().pose(), this.textBufferSource, displayMode, backgroundColor, lightCoords);
             return;
         }
-        font.drawInBatch8xOutline(string, x, y, color, outlineColor, poseStack.last().pose(), this.bufferSource, lightCoords);
+        font.drawInBatch8xOutline(string, x, y, color, outlineColor, poseStack.last().pose(), this.textBufferSource, lightCoords);
     }
 
     @Override

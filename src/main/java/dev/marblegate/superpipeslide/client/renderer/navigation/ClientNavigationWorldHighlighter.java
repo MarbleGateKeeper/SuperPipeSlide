@@ -4,11 +4,12 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.navigation.ClientNavigationController;
+import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
+import dev.marblegate.superpipeslide.client.renderer.SubmitTextRenderer;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.LightCoordsUtil;
@@ -51,9 +52,10 @@ public final class ClientNavigationWorldHighlighter {
         poseStack.pushPose();
         poseStack.translate(-camera.x, -camera.y, -camera.z);
         renderData.target().ifPresent(target -> {
-            event.getSubmitNodeCollector().submitCustomGeometry(
+            ClientRenderCompatibility.submitCustomGeometry(
+                    event.getSubmitNodeCollector(),
                     poseStack,
-                    RenderTypes.debugQuads(),
+                    ClientRenderCompatibility.effectQuads(),
                     (pose, buffer) -> renderTarget(pose, buffer, target, camera, photic)
             );
             renderTargetLabel(event, poseStack, target, camera);
@@ -102,8 +104,10 @@ public final class ClientNavigationWorldHighlighter {
         poseStack.translate(target.position().x, target.position().y + 0.72D + markerScale * 0.48D, target.position().z);
         poseStack.mulPose(minecraft.gameRenderer.getMainCamera().rotation());
         poseStack.scale(scale, -scale, scale);
-        event.getSubmitNodeCollector().submitText(
+        SubmitTextRenderer.submitText(
+                event.getSubmitNodeCollector(),
                 poseStack,
+                font,
                 -font.width(label) * 0.5F,
                 0.0F,
                 label.getVisualOrderText(),

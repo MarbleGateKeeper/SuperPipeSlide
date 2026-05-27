@@ -2,6 +2,7 @@ package dev.marblegate.superpipeslide.client.core.projection.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.font.TextRenderable;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -30,6 +31,7 @@ public final class ProjectionWorldTextRenderer {
         synchronized (PREPARED_TEXT) {
             PREPARED_TEXT.clear();
         }
+        ClientRenderCompatibility.clearCaches();
     }
 
     public static void drawClipped(PoseStack poseStack, SubmitNodeCollector collector, Font font, String text,
@@ -67,7 +69,7 @@ public final class ProjectionWorldTextRenderer {
         poseStack.scale(scale, -scale, scale);
         for (Map.Entry<RenderType, List<TextRenderable>> entry : prepared.byType().entrySet()) {
             List<TextRenderable> typedRenderables = entry.getValue();
-            collector.submitCustomGeometry(poseStack, entry.getKey(), (pose, buffer) -> {
+            ClientRenderCompatibility.submitCustomGeometry(collector, poseStack, ClientRenderCompatibility.text(entry.getKey()), (pose, buffer) -> {
                 ClippedTextVertexConsumer clipped = new ClippedTextVertexConsumer(buffer, pose.pose(), localClip, minX, maxX, canvasClip, worldToCanvas, canvasMinX, canvasMinY, canvasMaxX, canvasMaxY);
                 for (TextRenderable renderable : typedRenderables) {
                     renderable.render(IDENTITY_POSE, clipped, LightCoordsUtil.FULL_BRIGHT, false);

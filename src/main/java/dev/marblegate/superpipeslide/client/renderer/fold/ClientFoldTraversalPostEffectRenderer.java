@@ -7,6 +7,7 @@ import com.mojang.blaze3d.framegraph.FrameGraphBuilder;
 import com.mojang.blaze3d.framegraph.FramePass;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.resource.RenderTargetDescriptor;
 import com.mojang.blaze3d.resource.ResourceHandle;
 import com.mojang.blaze3d.shaders.UniformType;
@@ -30,6 +31,7 @@ import org.joml.Vector4f;
 
 import javax.annotation.Nullable;
 import java.nio.ByteBuffer;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
@@ -60,10 +62,22 @@ public final class ClientFoldTraversalPostEffectRenderer {
             .withUniform("FoldTraversal", UniformType.UNIFORM_BUFFER)
             .build();
 
+    private static final FoldTraversalPostEffectExtension.Scope NOOP_SCOPE = () -> {
+    };
+    private static volatile FoldTraversalPostEffectExtension renderExtension = FoldTraversalPostEffectExtension.NONE;
+
     @Nullable
     private static DynamicUniformStorage<FoldTraversalUniform> uniforms;
+    @Nullable
+    private static PendingPostEffect pendingPostEffect;
+    @Nullable
+    private static TextureTarget postEffectSource;
 
     private ClientFoldTraversalPostEffectRenderer() {
+    }
+
+    public static void registerRenderExtension(FoldTraversalPostEffectExtension extension) {
+        renderExtension = Objects.requireNonNull(extension, "extension");
     }
 
     public static void registerPipelines(RegisterRenderPipelinesEvent event) {
@@ -71,6 +85,7 @@ public final class ClientFoldTraversalPostEffectRenderer {
     }
 
     public static void addToFrame(FrameGraphBuilder frame, LevelTargetBundle targets, int width, int height, CameraRenderState cameraState) {
+        pendingPostEffect = null;
         if (ClientSafetyOptions.reduceMotionSicknessRisk() || ClientSafetyOptions.reducePhotosensitivityRisk()) {
             return;
         }
@@ -83,6 +98,10 @@ public final class ClientFoldTraversalPostEffectRenderer {
         }
         FoldTraversalUniform uniform = uniform(snapshot.get(), width, height, cameraState);
         if (uniform.intensity() <= 0.01F) {
+            return;
+        }
+        if (renderExtension.deferUntilExternalFinalPass()) {
+            pendingPostEffect = new PendingPostEffect(uniform);
             return;
         }
 
@@ -100,10 +119,31 @@ public final class ClientFoldTraversalPostEffectRenderer {
         distortionPass.executes(() -> renderDistortion(source.get(), mainOutput.get(), uniform));
     }
 
+    public static void renderAfterExternalFinalPass(RenderTarget mainTarget) {
+        PendingPostEffect pending = pendingPostEffect;
+        pendingPostEffect = null;
+        if (pending == null || mainTarget.width <= 0 || mainTarget.height <= 0) {
+            return;
+        }
+        RenderTarget source = postEffectSource(mainTarget.width, mainTarget.height);
+        copyColor(mainTarget, source);
+        renderDistortion(source, mainTarget, pending.uniform());
+    }
+
     public static void endFrame() {
+        pendingPostEffect = null;
         if (uniforms != null) {
             uniforms.endFrame();
         }
+    }
+
+    private static RenderTarget postEffectSource(int width, int height) {
+        if (postEffectSource == null) {
+            postEffectSource = new TextureTarget("SuperPipeSlide fold traversal source", width, height, false);
+        } else if (postEffectSource.width != width || postEffectSource.height != height) {
+            postEffectSource.resize(width, height);
+        }
+        return postEffectSource;
     }
 
     private static void copyColor(RenderTarget input, RenderTarget output) {
@@ -135,7 +175,9 @@ public final class ClientFoldTraversalPostEffectRenderer {
                 output.useDepth ? output.getDepthTextureView() : null,
                 OptionalDouble.empty()
         )) {
-            renderPass.setPipeline(DISTORTION_PIPELINE);
+            try (FoldTraversalPostEffectExtension.Scope ignored = renderExtension.pipelineOverrideScope()) {
+                renderPass.setPipeline(DISTORTION_PIPELINE);
+            }
             RenderSystem.bindDefaultUniforms(renderPass);
             renderPass.bindTexture("InSampler", source.getColorTextureView(), RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
             renderPass.setUniform("FoldTraversal", uniformSlice);
@@ -344,5 +386,26 @@ public final class ClientFoldTraversalPostEffectRenderer {
     }
 
     private record ProjectedPoint(float x, float y, boolean visible, boolean front) {
+    }
+
+    private record PendingPostEffect(FoldTraversalUniform uniform) {
+    }
+
+    public interface FoldTraversalPostEffectExtension {
+        FoldTraversalPostEffectExtension NONE = new FoldTraversalPostEffectExtension() {
+        };
+
+        default boolean deferUntilExternalFinalPass() {
+            return false;
+        }
+
+        default Scope pipelineOverrideScope() {
+            return NOOP_SCOPE;
+        }
+
+        interface Scope extends AutoCloseable {
+            @Override
+            void close();
+        }
     }
 }

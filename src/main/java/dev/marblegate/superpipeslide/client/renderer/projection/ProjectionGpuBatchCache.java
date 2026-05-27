@@ -12,6 +12,7 @@ import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -64,15 +65,20 @@ final class ProjectionGpuBatchCache {
     }
 
     static final class GpuBatches {
-        private static final GpuBatches EMPTY = new GpuBatches(List.of());
         private final List<GpuBatch> batches;
+        private final String renderStateKey;
 
-        private GpuBatches(List<GpuBatch> batches) {
+        private GpuBatches(List<GpuBatch> batches, String renderStateKey) {
             this.batches = batches;
+            this.renderStateKey = renderStateKey;
         }
 
         boolean empty() {
             return this.batches.isEmpty();
+        }
+
+        boolean validForCurrentRenderState() {
+            return this.renderStateKey.equals(ClientRenderCompatibility.renderStateKey());
         }
 
         void draw() {
@@ -98,13 +104,13 @@ final class ProjectionGpuBatchCache {
 
         @Override
         public void submitCustomGeometry(PoseStack poseStack, RenderType renderType, CustomGeometryRenderer customGeometryRenderer) {
-            GeometryBuffer geometry = this.buffers.computeIfAbsent(renderType, GeometryBuffer::new);
+            GeometryBuffer geometry = this.buffers.computeIfAbsent(ClientRenderCompatibility.world(renderType), GeometryBuffer::new);
             customGeometryRenderer.render(poseStack.last(), geometry.builder());
         }
 
         GpuBatches upload() {
             if (this.buffers.isEmpty()) {
-                return GpuBatches.EMPTY;
+                return new GpuBatches(List.of(), ClientRenderCompatibility.renderStateKey());
             }
             List<GpuBatch> uploaded = new ArrayList<>();
             for (GeometryBuffer buffer : this.buffers.values()) {
@@ -114,7 +120,7 @@ final class ProjectionGpuBatchCache {
                 }
             }
             this.closeBuilders();
-            return uploaded.isEmpty() ? GpuBatches.EMPTY : new GpuBatches(List.copyOf(uploaded));
+            return new GpuBatches(List.copyOf(uploaded), ClientRenderCompatibility.renderStateKey());
         }
 
         private void closeBuilders() {
@@ -188,7 +194,7 @@ final class ProjectionGpuBatchCache {
 
         @Override
         public VertexConsumer getBuffer(RenderType renderType) {
-            return this.buffers.computeIfAbsent(renderType, GeometryBuffer::new).builder();
+            return this.buffers.computeIfAbsent(ClientRenderCompatibility.world(renderType), GeometryBuffer::new).builder();
         }
     }
 
