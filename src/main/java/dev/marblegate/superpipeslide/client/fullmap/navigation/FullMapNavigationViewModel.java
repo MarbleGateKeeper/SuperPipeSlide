@@ -1,21 +1,20 @@
-package dev.marblegate.superpipeslide.client.gui.navigation;
+package dev.marblegate.superpipeslide.client.fullmap.navigation;
 
 import dev.marblegate.superpipeslide.client.core.navigation.ClientNavigationController;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
-public final class DestinationNavigationViewModel {
-    private DestinationNavigationViewModel() {
+public final class FullMapNavigationViewModel {
+    private FullMapNavigationViewModel() {
     }
 
     public static DestinationCard destinationCard(LocalPlayer player, ClientNavigationController.DestinationSearchResult result, boolean selected) {
@@ -94,7 +93,7 @@ public final class DestinationNavigationViewModel {
                 .map(StationGroup::translatedNames)
                 .filter(values -> !values.isEmpty())
                 .map(List::getFirst)
-                .orElseGet(() -> dimensionOfStation(plan.destinationStationGroupId()).map(DestinationNavigationViewModel::dimensionLabel).orElse(""));
+                .orElseGet(() -> dimensionOfStation(plan.destinationStationGroupId()).map(FullMapNavigationViewModel::dimensionLabel).orElse(""));
         boolean activeSameDestination = ClientNavigationController.sessionSnapshot()
                 .map(snapshot -> snapshot.plan().destinationStationGroupId().equals(plan.destinationStationGroupId()))
                 .orElse(false);
@@ -128,7 +127,7 @@ public final class DestinationNavigationViewModel {
         ArrayList<String> parts = new ArrayList<>();
         if (plan.segments().isEmpty()) {
             parts.add(Component.translatable("screen.superpipeslide.navigation.badge.already_here").getString());
-            return String.join(" · ", parts);
+            return String.join(" / ", parts);
         }
         parts.add(Component.translatable("screen.superpipeslide.navigation.badge.time", timeText(plan.estimatedTicks())).getString());
         parts.add(Component.translatable("screen.superpipeslide.navigation.badge.transfers", plan.transferCount()).getString());
@@ -141,7 +140,7 @@ public final class DestinationNavigationViewModel {
         if (plan.finalWalk()) {
             parts.add(Component.translatable("screen.superpipeslide.navigation.badge.final_walk").getString());
         }
-        return String.join(" · ", parts);
+        return String.join(" / ", parts);
     }
 
     private static List<ItineraryStep> itinerary(ClientNavigationController.NavigationPlan plan) {

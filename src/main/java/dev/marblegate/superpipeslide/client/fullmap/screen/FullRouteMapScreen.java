@@ -1,5 +1,6 @@
 package dev.marblegate.superpipeslide.client.fullmap.screen;
 
+import dev.marblegate.superpipeslide.client.core.navigation.ClientNavigationController;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.fullmap.cache.FullRouteMapCache;
@@ -36,6 +37,8 @@ import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeKind;
 import dev.marblegate.superpipeslide.client.fullmap.model.search.SearchKind;
 import dev.marblegate.superpipeslide.client.fullmap.model.search.SearchResult;
+import dev.marblegate.superpipeslide.client.fullmap.navigation.FullMapNavigationOverlayRenderer;
+import dev.marblegate.superpipeslide.client.fullmap.navigation.FullMapNavigationViewModel;
 import dev.marblegate.superpipeslide.client.fullmap.physical.PhysicalMapEdge;
 import dev.marblegate.superpipeslide.client.fullmap.physical.PhysicalMapNode;
 import dev.marblegate.superpipeslide.client.fullmap.physical.PhysicalNodeKind;
@@ -80,6 +83,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -96,13 +100,20 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
+import javax.annotation.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScreen {
     private static final int MAX_CARD_STACK_DEPTH = 10;
     private static final int MAX_ROUTE_CARD_GRAPH_CACHE_ENTRIES = 96;
+    private static final int NAVIGATION_RESULT_LIMIT = 32;
+    private static final int NAVIGATION_RESULT_ROW_HEIGHT = 30;
+    private static final int NAVIGATION_SIMPLE_STEP_HEIGHT = 22;
+    private static final int NAVIGATION_RIDE_STATION_ROW_HEIGHT = 10;
+    private static final int NAVIGATION_ITINERARY_STEP_GAP = 2;
 
     private final FullRouteMapRenderer renderer = new FullRouteMapRenderer();
+    private final FullMapNavigationOverlayRenderer navigationOverlayRenderer = new FullMapNavigationOverlayRenderer();
     private final RouteCardSemanticBuilder routeCardSemanticBuilder = new RouteCardSemanticBuilder();
     private final RouteCardLayoutSolver routeCardLayoutSolver = new RouteCardLayoutSolver();
     private final RouteCardPhysicalLayoutBuilder routeCardPhysicalLayoutBuilder = new RouteCardPhysicalLayoutBuilder();
@@ -142,6 +153,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private final List<SPSGui.Rect> mapChromeBounds = new ArrayList<>();
     private Optional<ContextPicker> contextPicker = Optional.empty();
     private SPSGui.Rect contextPickerBounds = new SPSGui.Rect(0, 0, 0, 0);
+    private final List<SPSGui.Rect> contextPickerActionBounds = new ArrayList<>();
     private final List<SPSGui.Rect> contextPickerRowBounds = new ArrayList<>();
     private double contextPickerScroll;
     private double contextPickerMaxScroll;
@@ -161,14 +173,39 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private SPSGui.Rect dimensionMenuBounds = new SPSGui.Rect(0, 0, 0, 0);
     private SPSGui.Rect searchControlBounds = new SPSGui.Rect(0, 0, 0, 0);
     private SPSGui.Rect searchResultsBounds = new SPSGui.Rect(0, 0, 0, 0);
+    private SPSGui.Rect navigationDrawerBounds = new SPSGui.Rect(0, 0, 0, 0);
+    private SPSGui.Rect activeNavigationPillBounds = new SPSGui.Rect(0, 0, 0, 0);
+    private SPSGui.Rect navigationItineraryBounds = new SPSGui.Rect(0, 0, 0, 0);
+    @Nullable
+    private SPSGui.Rect navigationDrawerUserBounds;
+    private double navigationDrawerUserXRatio = Double.NaN;
+    private double navigationDrawerUserYRatio = Double.NaN;
     private EditBox searchBox;
     private boolean dimensionMenuOpen;
     private boolean searchExpanded;
+    private boolean navigationSheetExpanded;
+    private boolean navigationCrossDimensionConfirmationArmed;
     private boolean draggingMapCamera;
+    private boolean draggingNavigationDrawer;
     private boolean schematicLegendCollapsed;
     private double schematicLegendScroll;
     private double schematicLegendMaxScroll;
     private Optional<UUID> schematicLegendHoverRouteLineId = Optional.empty();
+    @Nullable
+    private UUID selectedNavigationStationGroupId;
+    @Nullable
+    private ClientNavigationController.NavigationPlan selectedNavigationPlan;
+    private long selectedNavigationPlanRouteRevision = Long.MIN_VALUE;
+    private long selectedNavigationPlanPipeRevision = Long.MIN_VALUE;
+    private String cachedNavigationQuery = "";
+    private long cachedNavigationRouteRevision = Long.MIN_VALUE;
+    private long cachedNavigationPipeRevision = Long.MIN_VALUE;
+    @Nullable
+    private ResourceKey<Level> cachedNavigationLevelKey;
+    private List<ClientNavigationController.DestinationSearchResult> cachedNavigationResults = List.of();
+    private double navigationResultScroll;
+    private double navigationItineraryScroll;
+    private final Set<Integer> navigationExpandedRideSteps = new HashSet<>();
     private HitTarget hover = HitTarget.none();
     private String toast = "";
     private long toastUntilMillis;
@@ -216,6 +253,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         this.mapChromeBounds.clear();
         this.mapRect = new SPSGui.Rect(0, 0, this.width, this.height);
         FullRouteMapCache.refresh(false);
+        this.refreshSelectedNavigationPlanIfStale(ClientRouteDataCache.revision(), ClientPipeNetworkCache.aggregateRevision());
         this.ensureActiveDimension();
         this.updateMapChromeBounds();
 
@@ -231,6 +269,14 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     ? HitTarget.none()
                     : this.renderer.hitTestPhysical(physicalGraph.get(), viewport, this.mapRect, mouseX, mouseY);
             this.renderer.renderPhysical(graphics, this.font, physicalGraph.get(), viewport, this.mapRect, this.hover, mouseX, mouseY);
+            this.currentNavigationPlan().ifPresent(plan -> this.navigationOverlayRenderer.renderPhysical(
+                    graphics,
+                    physicalGraph.get(),
+                    viewport,
+                    this.mapRect,
+                    plan,
+                    this.navigationActiveSegmentIndex(plan)
+            ));
         } else if (graph.isPresent()) {
             ViewportState viewport = this.viewportFor(graph.get());
             List<SchematicLegendRow> schematicLegendRows = this.schematicLegendRows(graph.get(), visualGraph.orElse(null), viewport);
@@ -239,6 +285,15 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     ? HitTarget.none()
                     : this.renderer.hitTest(graph.get(), visualGraph.orElse(null), viewport, this.mapRect, mouseX, mouseY);
             this.renderer.render(graphics, this.font, graph.get(), visualGraph.orElse(null), viewport, this.mapRect, this.hover, mouseX, mouseY, this.schematicLegendHoverRouteLineId);
+            this.currentNavigationPlan().ifPresent(plan -> this.navigationOverlayRenderer.render(
+                    graphics,
+                    graph.get(),
+                    visualGraph.orElse(null),
+                    viewport,
+                    this.mapRect,
+                    plan,
+                    this.navigationActiveSegmentIndex(plan)
+            ));
         } else {
             FullRouteMapRenderer.drawMapBackground(graphics, this.mapRect, 0.0D, 0.0D, FullRouteMapConfig.BASE_SCALE, FullRouteMapCache.layoutMode());
             SPSGui.centeredText(graphics, this.font, Component.translatable("screen.superpipeslide.full_map.no_data"), this.width / 2, this.height / 2, FullRouteMapConfig.MAP_LABEL_MUTED);
@@ -253,9 +308,10 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         this.renderSearchControl(graphics, mouseX, mouseY);
         super.extractRenderState(graphics, mouseX, mouseY, partialTick);
         this.renderCards(graphics, mouseX, mouseY);
+        this.renderFullMapNavigationSearch(graphics, mouseX, mouseY);
+        this.renderFullMapNavigationPanel(graphics, mouseX, mouseY);
         this.renderDimensionMenu(graphics, mouseX, mouseY);
         this.renderContextPicker(graphics, mouseX, mouseY);
-        this.renderSearchResults(graphics, mouseX, mouseY);
         this.renderToast(graphics);
         if (this.topmostCardAt(mouseX, mouseY).isEmpty() && this.contextPicker.isEmpty()) {
             if (FullRouteMapCache.layoutMode().physical()) {
@@ -286,6 +342,13 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     @Override
     protected void renderTooltips(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         if (this.contextPicker.isPresent() && this.contextPickerBounds.contains(mouseX, mouseY)) {
+            ContextPicker picker = this.contextPicker.get();
+            for (int i = 0; i < Math.min(this.contextPickerActionBounds.size(), picker.actions().size()); i++) {
+                if (this.contextPickerActionBounds.get(i).contains(mouseX, mouseY) && !picker.actions().get(i).tooltip().getString().isBlank()) {
+                    FullMapTooltipCard.renderComponent(graphics, this.font, this.screenBounds(), mouseX, mouseY, picker.actions().get(i).tooltip());
+                    return;
+                }
+            }
             return;
         }
         Optional<String> hoveredCard = this.mapPopoverBlocks(mouseX, mouseY) ? Optional.empty() : this.topmostCardAt(mouseX, mouseY);
@@ -322,12 +385,14 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     private void updateMapChromeBounds() {
         this.mapChromeBounds.clear();
-        this.layoutModeStripBounds = this.computeLayoutModeStripBounds();
         this.cameraCompassBounds = this.computeCameraCompassBounds();
         this.schematicLegendBounds = this.computeSchematicLegendBounds();
+        this.layoutModeStripBounds = this.computeLayoutModeStripBounds();
         this.dimensionChipBounds = this.computeDimensionChipBounds();
         this.searchControlBounds = this.computeSearchControlBounds();
         this.searchResultsBounds = this.computeSearchResultsBounds();
+        this.navigationDrawerBounds = this.computeNavigationDrawerBounds();
+        this.activeNavigationPillBounds = this.computeActiveNavigationPillBounds();
         this.dimensionMenuBounds = this.computeDimensionMenuBounds();
         this.mapChromeBounds.add(this.layoutModeStripBounds);
         if (this.cameraCompassBounds.width() > 0 && this.cameraCompassBounds.height() > 0) {
@@ -340,6 +405,12 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         this.mapChromeBounds.add(this.searchControlBounds);
         if (this.searchResultsBounds.width() > 0 && this.searchResultsBounds.height() > 0) {
             this.mapChromeBounds.add(this.searchResultsBounds);
+        }
+        if (this.navigationDrawerBounds.width() > 0 && this.navigationDrawerBounds.height() > 0) {
+            this.mapChromeBounds.add(this.navigationDrawerBounds);
+        }
+        if (this.activeNavigationPillBounds.width() > 0 && this.activeNavigationPillBounds.height() > 0) {
+            this.mapChromeBounds.add(this.activeNavigationPillBounds);
         }
         if (this.dimensionMenuBounds.width() > 0 && this.dimensionMenuBounds.height() > 0) {
             this.mapChromeBounds.add(this.dimensionMenuBounds);
@@ -401,25 +472,29 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (this.searchBox == null) {
             return;
         }
-        boolean expanded = this.searchExpanded || this.searchBox.isFocused() || !this.searchBox.getValue().isBlank();
         SPSGui.Rect bounds = this.searchControlBounds;
-        if (!expanded) {
-            this.searchBox.setX(-1000);
-            this.searchBox.setY(-1000);
-            this.searchBox.setWidth(1);
-            FullMapUi.toolbarPanel(graphics, bounds);
-            SPSGui.icon(graphics, bounds, SPSGui.Icon.SEARCH, bounds.contains(mouseX, mouseY) ? SPSGui.INFO : FullMapTheme.TEXT_SECONDARY);
-            this.addClick(bounds, this::focusSearch, Component.translatable("screen.superpipeslide.full_map.search_hint"));
-            return;
-        }
 
-        this.searchBox.setX(bounds.x() + 24);
-        this.searchBox.setY(bounds.y() + 5);
-        this.searchBox.setWidth(Math.max(32, bounds.width() - 32));
+        int clearSize = 16;
+        boolean hasText = !this.searchBox.getValue().isEmpty();
+        this.searchBox.setX(bounds.x() + 25);
+        this.searchBox.setY(bounds.y() + 8);
+        this.searchBox.setWidth(Math.max(32, bounds.width() - 36 - (hasText ? clearSize + 4 : 0)));
+        graphics.fill(bounds.x() + 2, bounds.y() + 3, bounds.right() + 2, bounds.bottom() + 3, FullMapTheme.SHADOW);
         FullMapUi.toolbarPanel(graphics, bounds);
-        SPSGui.Rect icon = new SPSGui.Rect(bounds.x() + 4, bounds.y() + 3, 16, 16);
+        SPSGui.Rect icon = new SPSGui.Rect(bounds.x() + 6, bounds.y() + 6, 14, 14);
         SPSGui.icon(graphics, icon, SPSGui.Icon.SEARCH, this.searchBox.isFocused() ? SPSGui.INFO : FullMapTheme.TEXT_SECONDARY);
-        this.drawSearchPlaceholder(graphics, this.searchBox);
+        if (this.searchBox.getValue().isEmpty()) {
+            SPSGui.text(graphics, this.font, Component.translatable("screen.superpipeslide.full_map.search_hint"), this.searchBox.getX() + 2, this.searchBox.getY() + 3, SPSGui.TEXT_MUTED);
+        }
+        if (hasText) {
+            SPSGui.Rect clear = new SPSGui.Rect(bounds.right() - 21, bounds.y() + 6, clearSize, clearSize);
+            FullMapUi.iconButton(graphics, clear, clear.contains(mouseX, mouseY), false, false, SPSGui.Icon.CLOSE);
+            this.addPriorityClick(clear, () -> {
+                this.searchBox.setValue("");
+                this.navigationResultScroll = 0.0D;
+                this.focusSearch();
+            }, Component.translatable("screen.superpipeslide.full_map.search_clear"));
+        }
         this.addClick(icon, this::focusSearch, Component.translatable("screen.superpipeslide.full_map.search_hint"));
     }
 
@@ -852,8 +927,11 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 active
         );
         SPSGui.Rect transferEdit = new SPSGui.Rect(bounds.right() - 22, bounds.y() + 5, 16, 16);
+        SPSGui.Rect navigate = new SPSGui.Rect(bounds.right() - 42, bounds.y() + 5, 16, 16);
+        FullMapUi.iconButton(graphics, navigate, hoverable && navigate.contains(mouseX, mouseY), false, false, SPSGui.Icon.LOCATE);
         FullMapUi.iconButton(graphics, transferEdit, hoverable && transferEdit.contains(mouseX, mouseY), false, false, SPSGui.Icon.SPLIT);
         if (active) {
+            this.addClick(navigate, () -> this.selectNavigationDestination(station.get().id(), true), Component.translatable("screen.superpipeslide.full_map.navigate_here"));
             this.addClick(transferEdit, () -> this.minecraft.setScreen(new StationTransferEditorScreen(station.get().id())), Component.translatable("screen.superpipeslide.station_transfer.open"));
         }
         List<PlatformStop> platforms = ClientRouteDataCache.platformStopsInStation(station.get().id());
@@ -966,29 +1044,662 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         }
     }
 
-    private void renderSearchResults(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-        if (this.searchBox == null || this.searchBox.getValue().trim().isEmpty() || this.searchResultsBounds.width() <= 0 || this.searchResultsBounds.height() <= 0) {
+    private void renderFullMapNavigationSearch(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        if (this.searchBox == null || this.searchResultsBounds.width() <= 0 || this.searchResultsBounds.height() <= 0) {
             return;
         }
+        boolean searchOpen = this.searchExpanded || this.searchBox.isFocused();
+        if (!searchOpen) {
+            return;
+        }
+        List<ClientNavigationController.DestinationSearchResult> destinations = this.navigationDestinationResults();
         List<SearchResult> results = this.searchResults();
-        if (results.isEmpty()) {
-            return;
-        }
-        int rowHeight = 23;
         SPSGui.Rect panel = this.searchResultsBounds;
+        this.navigationResultScroll = clamp(this.navigationResultScroll, 0.0D, this.maxNavigationResultScroll(destinations, results, panel));
+        graphics.fill(panel.x() + 2, panel.y() + 3, panel.right() + 2, panel.bottom() + 3, FullMapTheme.SHADOW);
         graphics.fill(panel.x(), panel.y(), panel.right(), panel.bottom(), FullMapTheme.SURFACE_CARD_ACTIVE);
         graphics.outline(panel.x(), panel.y(), panel.width(), panel.height(), FullMapTheme.BORDER);
-        int y = panel.y() + 4;
-        for (SearchResult result : results) {
-            SPSGui.Rect row = new SPSGui.Rect(panel.x() + 4, y, panel.width() - 8, rowHeight - 2);
-            graphics.fill(row.x(), row.y(), row.right(), row.bottom(), row.contains(mouseX, mouseY) ? FullMapTheme.HIGHLIGHT_SOFT : FullMapTheme.SURFACE_CARD_ACTIVE);
-            DisplayNameStack title = result.title();
-            SPSGui.text(graphics, this.font, SPSGui.ellipsize(this.font, title.primary(), row.width() - 8), row.x() + 4, row.y() + 2, FullMapTheme.TEXT_PRIMARY);
-            String secondary = title.hasSecondary() ? title.secondary() + " · " + result.subtitle() : result.subtitle();
-            SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, secondary, Math.round((row.width() - 8) / FullMapTheme.TYPE_TINY)), row.x() + 4, row.y() + 12, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_TINY);
-            this.addClick(row, () -> this.selectSearchResult(result), Component.translatable("screen.superpipeslide.full_map.search_select", title.flat()));
-            y += rowHeight;
+        graphics.fill(panel.x() + 1, panel.y() + 1, panel.right() - 1, panel.y() + 2, 0x66FFFFFF);
+        if (destinations.isEmpty() && results.isEmpty()) {
+            Component hint = this.searchBox.getValue().trim().isEmpty()
+                    ? Component.translatable("screen.superpipeslide.full_map.search_empty_hint")
+                    : Component.translatable("screen.superpipeslide.full_map.search_no_results");
+            SPSGui.text(graphics, this.font, hint, panel.x() + 10, panel.y() + 11, FullMapTheme.TEXT_MUTED);
+            return;
         }
+        SPSGui.Rect list = new SPSGui.Rect(panel.x() + 4, panel.y() + 4, panel.width() - 8, panel.height() - 8);
+        graphics.enableScissor(list.x(), list.y(), list.right(), list.bottom());
+        int y = (int) Math.round(list.y() - this.navigationResultScroll);
+        for (ClientNavigationController.DestinationSearchResult result : destinations) {
+            SPSGui.Rect row = new SPSGui.Rect(list.x(), y, list.width(), NAVIGATION_RESULT_ROW_HEIGHT - 2);
+            if (rectsOverlap(row, list)) {
+                this.renderNavigationDestinationRow(graphics, result, clipRect(row, list), mouseX, mouseY);
+            }
+            y += NAVIGATION_RESULT_ROW_HEIGHT;
+        }
+        if (!destinations.isEmpty() && !results.isEmpty()) {
+            y += 4;
+        }
+        for (SearchResult result : results) {
+            SPSGui.Rect row = new SPSGui.Rect(list.x(), y, list.width(), 21);
+            if (rectsOverlap(row, list)) {
+                SPSGui.Rect visibleRow = clipRect(row, list);
+                graphics.fill(visibleRow.x(), visibleRow.y(), visibleRow.right(), visibleRow.bottom(), visibleRow.contains(mouseX, mouseY) ? FullMapTheme.HIGHLIGHT_SOFT : FullMapTheme.SURFACE_CARD_ACTIVE);
+                DisplayNameStack title = result.title();
+                SPSGui.text(graphics, this.font, SPSGui.ellipsize(this.font, title.primary(), visibleRow.width() - 8), visibleRow.x() + 4, visibleRow.y() + 2, FullMapTheme.TEXT_PRIMARY);
+                String secondary = title.hasSecondary() ? title.secondary() + " / " + result.subtitle() : result.subtitle();
+                SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, secondary, Math.round((visibleRow.width() - 8) / FullMapTheme.TYPE_TINY)), visibleRow.x() + 4, visibleRow.y() + 12, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_TINY);
+                this.addClick(visibleRow, () -> this.selectSearchResult(result), Component.translatable("screen.superpipeslide.full_map.search_select", title.flat()));
+            }
+            y += 23;
+        }
+        graphics.disableScissor();
+        double maxScroll = this.maxNavigationResultScroll(destinations, results, panel);
+        if (maxScroll > 0.0D) {
+            int contentHeight = destinations.size() * NAVIGATION_RESULT_ROW_HEIGHT + results.size() * 23 + (destinations.isEmpty() || results.isEmpty() ? 0 : 4);
+            int barHeight = Math.max(18, (int) Math.round(list.height() * list.height() / (double) Math.max(list.height(), contentHeight)));
+            int barY = list.y() + (int) Math.round((list.height() - barHeight) * (this.navigationResultScroll / maxScroll));
+            graphics.fill(list.right() - 2, list.y(), list.right() - 1, list.bottom(), SPSGui.withAlpha(FullMapTheme.TEXT_MUTED, 0x30));
+            graphics.fill(list.right() - 3, barY, list.right(), barY + barHeight, SPSGui.withAlpha(SPSGui.INFO, 0xAA));
+        }
+    }
+
+    private void renderFullMapNavigationPanel(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        if (this.navigationDrawerBounds.width() > 0 && this.navigationDrawerBounds.height() > 0) {
+            this.renderNavigationRouteSheet(graphics, mouseX, mouseY);
+            return;
+        }
+        this.navigationItineraryBounds = new SPSGui.Rect(0, 0, 0, 0);
+        if (this.activeNavigationPillBounds.width() > 0 && this.activeNavigationPillBounds.height() > 0) {
+            this.renderActiveNavigationCompact(graphics, mouseX, mouseY);
+        }
+    }
+
+    private void renderNavigationDestinationRow(GuiGraphicsExtractor graphics, ClientNavigationController.DestinationSearchResult result, SPSGui.Rect row, int mouseX, int mouseY) {
+        if (this.minecraft == null || this.minecraft.player == null) {
+            return;
+        }
+        FullMapNavigationViewModel.DestinationCard model = FullMapNavigationViewModel.destinationCard(
+                this.minecraft.player,
+                result,
+                result.stationGroupId().equals(this.selectedNavigationStationGroupId)
+        );
+        boolean hovered = row.contains(mouseX, mouseY);
+        int accent = this.navigationChipColor(model.statusTone());
+        graphics.fill(row.x(), row.y(), row.right(), row.bottom(), model.selected() ? SPSGui.withAlpha(SPSGui.INFO, 0x18) : hovered ? FullMapTheme.HIGHLIGHT_SOFT : FullMapTheme.SURFACE_CARD_ACTIVE);
+        if (model.selected()) {
+            graphics.outline(row.x(), row.y(), row.width(), row.height(), SPSGui.withAlpha(SPSGui.INFO, 0xAA));
+        }
+        graphics.fill(row.x(), row.y() + 3, row.x() + 3, row.bottom() - 3, SPSGui.withAlpha(accent, model.selected() ? 0xEA : 0xA8));
+        Vec2 iconCenter = new Vec2(row.x() + 12, row.y() + row.height() / 2.0D);
+        if (!model.reachable()) {
+            SmoothGuiPrimitives.diamond(graphics, iconCenter, 4.2D, SPSGui.withAlpha(SPSGui.DANGER, 0xD8));
+        } else if (model.crossDimension()) {
+            SmoothGuiPrimitives.diamond(graphics, iconCenter, 4.0D, SPSGui.withAlpha(SPSGui.INFO, 0xD8));
+            SmoothGuiPrimitives.circle(graphics, iconCenter, 1.3D, SPSGui.withAlpha(0xFFFFFFFF, 0xB8));
+        } else {
+            SmoothGuiPrimitives.circle(graphics, iconCenter, 4.0D, SPSGui.withAlpha(accent, 0xC8));
+        }
+        SPSGui.Rect action = new SPSGui.Rect(row.right() - 22, row.y() + 6, 16, 16);
+        int textX = row.x() + 24;
+        int textWidth = Math.max(32, action.x() - textX - 6);
+        int textY = row.y() + Math.max(2, Math.min(3, row.height() - 24));
+        SPSGui.text(graphics, this.font, SPSGui.ellipsize(this.font, model.primaryName(), textWidth), textX, textY, model.reachable() ? FullMapTheme.TEXT_PRIMARY : FullMapTheme.TEXT_SECONDARY);
+        String detail = model.translatedName().isBlank() ? model.dimensionText() : model.translatedName() + " / " + model.dimensionText();
+        detail += " / " + model.statusText();
+        SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, detail, Math.round(textWidth / FullMapTheme.TYPE_TINY)), textX, textY + 12, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_TINY);
+
+        FullMapUi.iconButton(graphics, action, action.contains(mouseX, mouseY), model.selected(), false, SPSGui.Icon.LOCATE);
+        this.addClick(row, () -> ClientRouteDataCache.stationGroup(model.stationGroupId()).ifPresent(this::locateStation), Component.translatable("screen.superpipeslide.full_map.search_select", model.primaryName()));
+        this.addPriorityClick(action, () -> this.selectNavigationDestination(model.stationGroupId(), true), Component.translatable("screen.superpipeslide.full_map.navigate_here"));
+    }
+
+    private void renderNavigationRouteSheet(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        FullMapNavigationViewModel.RoutePreview preview = this.navigationPreviewModel();
+        SPSGui.Rect panel = this.navigationDrawerBounds;
+        if (panel.width() <= 0 || panel.height() <= 0) {
+            return;
+        }
+        graphics.fill(panel.x() + 2, panel.y() + 3, panel.right() + 2, panel.bottom() + 3, FullMapTheme.SHADOW);
+        graphics.fill(panel.x(), panel.y(), panel.right(), panel.bottom(), FullMapTheme.SURFACE_CARD_ACTIVE);
+        graphics.outline(panel.x(), panel.y(), panel.width(), panel.height(), preview.reachable() ? FullMapTheme.BORDER_SELECTED : FullMapTheme.BORDER);
+        graphics.fill(panel.x() + 1, panel.y() + 1, panel.right() - 1, panel.y() + 2, 0x99FFFFFF);
+        SPSGui.Rect header = new SPSGui.Rect(panel.x() + 6, panel.y() + 5, panel.width() - 12, 58);
+        this.renderNavigationSummary(graphics, header, preview, mouseX, mouseY, true);
+        int listTop = header.bottom() + 4;
+        this.navigationItineraryBounds = new SPSGui.Rect(panel.x() + 6, listTop, panel.width() - 12, Math.max(42, panel.bottom() - listTop - 6));
+        this.renderNavigationItinerary(graphics, this.navigationItineraryBounds, preview, mouseX, mouseY);
+    }
+
+    private void renderActiveNavigationCompact(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        ClientNavigationController.NavigationPlan plan = ClientNavigationController.sessionSnapshot().map(ClientNavigationController.NavigationSessionSnapshot::plan).orElse(null);
+        if (plan == null) {
+            return;
+        }
+        SPSGui.Rect panel = this.activeNavigationPillBounds;
+        if (panel.width() <= 0 || panel.height() <= 0) {
+            return;
+        }
+        FullMapNavigationViewModel.RoutePreview preview = FullMapNavigationViewModel.routePreview(plan);
+        int accent = preview.primaryColor();
+        graphics.fill(panel.x() + 2, panel.y() + 3, panel.right() + 2, panel.bottom() + 3, FullMapTheme.SHADOW);
+        graphics.fill(panel.x(), panel.y(), panel.right(), panel.bottom(), FullMapTheme.SURFACE_CARD_ACTIVE);
+        graphics.outline(panel.x(), panel.y(), panel.width(), panel.height(), FullMapTheme.BORDER_SELECTED);
+        graphics.fill(panel.x(), panel.y(), panel.x() + 4, panel.bottom(), SPSGui.withAlpha(accent, 0xD8));
+
+        SPSGui.Rect cancel = new SPSGui.Rect(panel.right() - 22, panel.y() + 6, 16, 16);
+        SPSGui.Rect open = new SPSGui.Rect(cancel.x() - 20, panel.y() + 6, 16, 16);
+        FullMapUi.iconButton(graphics, open, open.contains(mouseX, mouseY), false, false, SPSGui.Icon.ROUTE_LINE);
+        this.renderNavigationDangerIconButton(graphics, cancel, cancel.contains(mouseX, mouseY), SPSGui.Icon.REMOVE);
+        this.addPriorityClick(open, this::expandActiveNavigation, Component.translatable("screen.superpipeslide.full_map.navigation.view_route"));
+        this.addPriorityClick(cancel, this::cancelNavigationFromMap, Component.translatable("screen.superpipeslide.navigation.cancel"));
+        this.addClick(panel, this::expandActiveNavigation, Component.translatable("screen.superpipeslide.full_map.navigation.view_route"));
+
+        int textX = panel.x() + 12;
+        int textWidth = Math.max(42, open.x() - textX - 6);
+        SPSGui.text(graphics, this.font, SPSGui.scrollingText(this.font, preview.destinationName(), textWidth, preview.destinationName().hashCode()), textX, panel.y() + 5, FullMapTheme.TEXT_PRIMARY);
+        String summary = preview.summaryText().isBlank() ? preview.destinationSubtitle() : preview.summaryText();
+        SPSGui.smallText(graphics, this.font, SPSGui.scrollingText(this.font, summary, Math.round(textWidth / FullMapTheme.TYPE_TINY), summary.hashCode()), textX, panel.y() + 17, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_TINY);
+    }
+
+    private void renderNavigationSummary(GuiGraphicsExtractor graphics, SPSGui.Rect rect, FullMapNavigationViewModel.RoutePreview preview, int mouseX, int mouseY, boolean expanded) {
+        int accent = preview.reachable() ? preview.primaryColor() : 0xFFFFB13B;
+        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), SPSGui.withAlpha(accent, 0x10));
+        graphics.outline(rect.x(), rect.y(), rect.width(), rect.height(), SPSGui.withAlpha(accent, preview.reachable() ? 0xAA : 0x88));
+        graphics.fill(rect.x(), rect.y(), rect.x() + 4, rect.bottom(), SPSGui.withAlpha(accent, 0xD0));
+        int right = rect.right() - 4;
+        if (expanded) {
+            SPSGui.Rect close = new SPSGui.Rect(right - 16, rect.y() + 5, 16, 16);
+            FullMapUi.iconButton(graphics, close, close.contains(mouseX, mouseY), false, false, SPSGui.Icon.CLOSE);
+            this.addPriorityClick(close, this::clearNavigationPreview, Component.translatable("screen.superpipeslide.full_map.navigation.close"));
+            right = close.x() - 4;
+        } else {
+            SPSGui.Rect cancel = new SPSGui.Rect(right - 16, rect.y() + 7, 16, 16);
+            this.renderNavigationDangerIconButton(graphics, cancel, cancel.contains(mouseX, mouseY), SPSGui.Icon.REMOVE);
+            this.addPriorityClick(cancel, this::cancelNavigationFromMap, Component.translatable("screen.superpipeslide.navigation.cancel"));
+            right = cancel.x() - 4;
+            SPSGui.Rect open = new SPSGui.Rect(right - 74, rect.y() + 7, 70, 16);
+            this.renderNavigationTextButton(graphics, open, Component.translatable("screen.superpipeslide.full_map.navigation.view_route").getString(), accent, true, open.contains(mouseX, mouseY));
+            this.addClick(open, this::expandActiveNavigation, Component.translatable("screen.superpipeslide.full_map.navigation.view_route"));
+            right = open.x() - 4;
+        }
+
+        int titleRight = right;
+        int detailRight = right;
+        if (expanded) {
+            if (ClientNavigationController.isNavigating()) {
+                SPSGui.Rect cancel = new SPSGui.Rect(right - 16, rect.bottom() - 18, 16, 16);
+                this.renderNavigationDangerIconButton(graphics, cancel, cancel.contains(mouseX, mouseY), SPSGui.Icon.REMOVE);
+                this.addPriorityClick(cancel, this::cancelNavigationFromMap, Component.translatable("screen.superpipeslide.navigation.cancel"));
+                right = cancel.x() - 4;
+            }
+            String actionLabel = this.navigationCrossDimensionConfirmationArmed && preview.needsCrossDimensionConfirmation()
+                    ? Component.translatable("screen.superpipeslide.navigation.confirm_cross_dimension").getString()
+                    : preview.primaryActionLabel();
+            int maxActionWidth = Math.max(44, right - rect.x() - 4);
+            int actionWidth = Math.min(maxActionWidth, Math.min(132, Math.max(62, Math.round(this.font.width(actionLabel) * 0.58F) + 16)));
+            SPSGui.Rect action = new SPSGui.Rect(right - actionWidth, rect.bottom() - 18, actionWidth, 16);
+            this.renderNavigationTextButton(graphics, action, actionLabel, accent, preview.primaryAction() != FullMapNavigationViewModel.PrimaryAction.UNAVAILABLE, action.contains(mouseX, mouseY));
+            if (preview.primaryAction() != FullMapNavigationViewModel.PrimaryAction.UNAVAILABLE) {
+                this.addClick(action, () -> this.handleNavigationPrimaryAction(preview), Component.literal(actionLabel));
+            }
+        }
+
+        int textX = expanded ? rect.x() + 22 : rect.x() + 10;
+        if (expanded) {
+            SPSGui.icon(graphics, new SPSGui.Rect(rect.x() + 6, rect.y() + 5, 12, 12), SPSGui.Icon.DRAG, FullMapTheme.TEXT_MUTED);
+        }
+        int titleWidth = Math.max(32, titleRight - textX);
+        int detailWidth = Math.max(32, detailRight - textX);
+        SPSGui.text(graphics, this.font, SPSGui.scrollingText(this.font, preview.destinationName(), titleWidth, preview.destinationName().hashCode()), textX, rect.y() + 6, preview.reachable() ? FullMapTheme.TEXT_PRIMARY : 0xFFFFB13B);
+        String summary = preview.summaryText().isBlank() ? preview.destinationSubtitle() : preview.summaryText();
+        SPSGui.smallText(graphics, this.font, SPSGui.scrollingText(this.font, summary, Math.round(detailWidth / FullMapTheme.TYPE_META), summary.hashCode()), textX, rect.y() + 20, preview.warnings().isEmpty() ? FullMapTheme.TEXT_SECONDARY : 0xFFFFB13B, FullMapTheme.TYPE_META);
+        if (expanded && !preview.destinationSubtitle().isBlank()) {
+            SPSGui.smallText(graphics, this.font, SPSGui.scrollingText(this.font, preview.destinationSubtitle(), Math.round(detailWidth / FullMapTheme.TYPE_TINY), preview.destinationSubtitle().hashCode()), textX, rect.y() + 32, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_TINY);
+        }
+    }
+
+    private void renderNavigationTextButton(GuiGraphicsExtractor graphics, SPSGui.Rect button, String label, int accent, boolean enabled, boolean hovered) {
+        int fill = !enabled ? FullMapTheme.SURFACE_CONTROL_DISABLED : hovered ? SPSGui.withAlpha(accent, 0x24) : FullMapTheme.SURFACE_CONTROL;
+        int border = !enabled ? FullMapTheme.BORDER_MUTED : hovered ? SPSGui.withAlpha(accent, 0xE0) : SPSGui.withAlpha(accent, 0x9C);
+        graphics.fill(button.x(), button.y(), button.right(), button.bottom(), fill);
+        graphics.outline(button.x(), button.y(), button.width(), button.height(), border);
+        SPSGui.centeredText(graphics, this.font, SPSGui.ellipsize(this.font, label, button.width() - 8), button.x() + button.width() / 2, button.y() + 4, enabled ? FullMapTheme.TEXT_PRIMARY : FullMapTheme.TEXT_DISABLED);
+    }
+
+    private void renderNavigationDangerIconButton(GuiGraphicsExtractor graphics, SPSGui.Rect rect, boolean hovered, SPSGui.Icon icon) {
+        int fill = hovered ? SPSGui.withAlpha(SPSGui.DANGER, 0x22) : FullMapTheme.SURFACE_CONTROL;
+        int border = hovered ? SPSGui.withAlpha(SPSGui.DANGER, 0xE0) : SPSGui.withAlpha(SPSGui.DANGER, 0x88);
+        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), fill);
+        graphics.outline(rect.x(), rect.y(), rect.width(), rect.height(), border);
+        SPSGui.icon(graphics, rect, icon, hovered ? SPSGui.DANGER : SPSGui.withAlpha(SPSGui.DANGER, 0xD8));
+    }
+
+    private void renderNavigationItinerary(GuiGraphicsExtractor graphics, SPSGui.Rect rect, FullMapNavigationViewModel.RoutePreview preview, int mouseX, int mouseY) {
+        this.navigationItineraryScroll = clamp(this.navigationItineraryScroll, 0.0D, this.maxNavigationItineraryScroll(preview, rect));
+        if (preview.itinerary().isEmpty()) {
+            SPSGui.centeredText(graphics, this.font, Component.translatable("screen.superpipeslide.navigation.pick_destination"), rect.x() + rect.width() / 2, rect.y() + rect.height() / 2 - 4, FullMapTheme.TEXT_MUTED);
+            return;
+        }
+        graphics.enableScissor(rect.x(), rect.y(), rect.right(), rect.bottom());
+        int y = rect.y() + 3 - (int) Math.round(this.navigationItineraryScroll);
+        for (int i = 0; i < preview.itinerary().size(); i++) {
+            FullMapNavigationViewModel.ItineraryStep step = preview.itinerary().get(i);
+            int height = this.navigationItineraryStepHeight(step, i);
+            SPSGui.Rect stepRect = new SPSGui.Rect(rect.x() + 2, y, rect.width() - 4, height);
+            if (rectsOverlap(stepRect, rect)) {
+                this.renderNavigationItineraryStep(graphics, stepRect, step, i, preview.primaryColor(), mouseX, mouseY);
+            }
+            y += height + NAVIGATION_ITINERARY_STEP_GAP;
+        }
+        graphics.disableScissor();
+        double maxScroll = this.maxNavigationItineraryScroll(preview, rect);
+        if (maxScroll > 0.0D) {
+            int contentHeight = this.navigationItineraryContentHeight(preview);
+            int barHeight = Math.max(18, (int) Math.round(rect.height() * rect.height() / (double) Math.max(rect.height(), contentHeight)));
+            int barY = rect.y() + (int) Math.round((rect.height() - barHeight) * (this.navigationItineraryScroll / maxScroll));
+            graphics.fill(rect.right() - 2, rect.y(), rect.right() - 1, rect.bottom(), SPSGui.withAlpha(FullMapTheme.TEXT_MUTED, 0x30));
+            graphics.fill(rect.right() - 3, barY, rect.right(), barY + barHeight, SPSGui.withAlpha(SPSGui.INFO, 0xAA));
+        }
+    }
+
+    private void renderNavigationItineraryStep(GuiGraphicsExtractor graphics, SPSGui.Rect rect, FullMapNavigationViewModel.ItineraryStep step, int index, int primaryColor, int mouseX, int mouseY) {
+        if (step.kind() == FullMapNavigationViewModel.ItineraryKind.RIDE) {
+            this.renderNavigationRideStep(graphics, rect, step, index, mouseX, mouseY);
+            return;
+        }
+        int lineX = rect.x() + 10;
+        int nodeY = rect.y() + 10;
+        int color = this.navigationStepColor(step, primaryColor);
+        if (step.kind() != FullMapNavigationViewModel.ItineraryKind.ORIGIN
+                && step.kind() != FullMapNavigationViewModel.ItineraryKind.DESTINATION
+                && step.kind() != FullMapNavigationViewModel.ItineraryKind.UNREACHABLE) {
+            this.drawNavigationDottedLine(graphics, lineX, rect.y(), rect.bottom(), SPSGui.withAlpha(color, 0x8A));
+        }
+        this.drawNavigationStepGlyph(graphics, step.kind(), new Vec2(lineX, nodeY), color, primaryColor);
+        int textX = rect.x() + 24;
+        int textWidth = Math.max(24, rect.right() - textX - 4);
+        SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, step.title(), Math.round(textWidth / 0.68F)), textX, rect.y() + 2, step.warning() ? 0xFFFFB13B : FullMapTheme.TEXT_PRIMARY, 0.68F);
+        SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, step.detail(), Math.round(textWidth / 0.54F)), textX, rect.y() + 13, step.warning() ? 0xFFFFB13B : FullMapTheme.TEXT_MUTED, 0.54F);
+    }
+
+    private void drawNavigationStepGlyph(GuiGraphicsExtractor graphics, FullMapNavigationViewModel.ItineraryKind kind, Vec2 center, int color, int primaryColor) {
+        switch (kind) {
+            case ORIGIN -> {
+                SmoothGuiPrimitives.circle(graphics, center, 6.2D, SPSGui.withAlpha(SPSGui.SUCCESS, 0xE0));
+                SmoothGuiPrimitives.circle(graphics, center, 2.0D, 0xEFFFFFFF);
+            }
+            case DESTINATION -> {
+                SmoothGuiPrimitives.diamond(graphics, center, 6.8D, SPSGui.withAlpha(primaryColor, 0xEA));
+                SmoothGuiPrimitives.circle(graphics, center, 1.7D, 0xEFFFFFFF);
+            }
+            case UNREACHABLE -> {
+                SmoothGuiPrimitives.diamond(graphics, center, 6.4D, SPSGui.withAlpha(SPSGui.DANGER, 0xE8));
+                SmoothGuiPrimitives.line(graphics, new Vec2(center.x() - 3.0D, center.y() - 3.0D), new Vec2(center.x() + 3.0D, center.y() + 3.0D), 1.2D, 0xEEFFFFFF);
+            }
+            case SAME_STATION_TRANSFER -> this.drawSameStationTransferGlyph(graphics, center);
+            case OUT_OF_STATION_TRANSFER, FINAL_WALK -> this.drawOutStationTransferGlyph(graphics, center, kind == FullMapNavigationViewModel.ItineraryKind.FINAL_WALK);
+            case CROSS_DIMENSION_TRANSFER, CROSS_DIMENSION_FINAL_WALK -> this.drawCrossDimensionTransferGlyph(graphics, center);
+            case WALK_TO_BOARD -> this.drawWalkGlyph(graphics, center, FullMapTheme.TEXT_MUTED);
+            default -> SmoothGuiPrimitives.circle(graphics, center, 4.5D, SPSGui.withAlpha(color, 0xC8));
+        }
+    }
+
+    private void drawSameStationTransferGlyph(GuiGraphicsExtractor graphics, Vec2 center) {
+        SmoothGuiPrimitives.circle(graphics, center, 6.4D, 0xEFFFFFFF);
+        SmoothGuiPrimitives.line(graphics, new Vec2(center.x() - 3.4D, center.y()), new Vec2(center.x() + 3.4D, center.y()), 1.8D, SPSGui.SUCCESS);
+        SmoothGuiPrimitives.circle(graphics, new Vec2(center.x() - 3.2D, center.y()), 2.4D, SPSGui.SUCCESS);
+        SmoothGuiPrimitives.circle(graphics, new Vec2(center.x() + 3.2D, center.y()), 2.4D, SPSGui.SUCCESS);
+    }
+
+    private void drawOutStationTransferGlyph(GuiGraphicsExtractor graphics, Vec2 center, boolean walkOnly) {
+        SmoothGuiPrimitives.circle(graphics, center, 6.4D, 0xEFFFFFFF);
+        int color = 0xFFFFB13B;
+        if (walkOnly) {
+            this.drawWalkGlyph(graphics, center, color);
+            return;
+        }
+        graphics.fill((int) Math.round(center.x() - 3.2D), (int) Math.round(center.y() - 4.0D), (int) Math.round(center.x() + 1.8D), (int) Math.round(center.y() + 4.0D), SPSGui.withAlpha(color, 0xE8));
+        SmoothGuiPrimitives.line(graphics, new Vec2(center.x() - 0.6D, center.y()), new Vec2(center.x() + 4.4D, center.y()), 1.5D, color);
+        SmoothGuiPrimitives.line(graphics, new Vec2(center.x() + 2.0D, center.y() - 2.0D), new Vec2(center.x() + 4.4D, center.y()), 1.2D, color);
+        SmoothGuiPrimitives.line(graphics, new Vec2(center.x() + 2.0D, center.y() + 2.0D), new Vec2(center.x() + 4.4D, center.y()), 1.2D, color);
+    }
+
+    private void drawCrossDimensionTransferGlyph(GuiGraphicsExtractor graphics, Vec2 center) {
+        SmoothGuiPrimitives.diamond(graphics, center, 6.7D, 0xF2FFFFFF);
+        SmoothGuiPrimitives.ring(graphics, center, 4.2D, 1.6D, 0xFFC59BFF);
+        SmoothGuiPrimitives.circle(graphics, center, 1.5D, 0xFFC59BFF);
+    }
+
+    private void drawWalkGlyph(GuiGraphicsExtractor graphics, Vec2 center, int color) {
+        SmoothGuiPrimitives.circle(graphics, new Vec2(center.x(), center.y() - 4.0D), 1.5D, SPSGui.withAlpha(color, 0xE0));
+        SmoothGuiPrimitives.line(graphics, new Vec2(center.x(), center.y() - 2.4D), new Vec2(center.x() - 1.2D, center.y() + 1.0D), 1.2D, color);
+        SmoothGuiPrimitives.line(graphics, new Vec2(center.x() - 1.2D, center.y() - 0.5D), new Vec2(center.x() + 2.4D, center.y() - 1.7D), 1.0D, color);
+        SmoothGuiPrimitives.line(graphics, new Vec2(center.x() - 1.0D, center.y() + 1.0D), new Vec2(center.x() - 3.4D, center.y() + 4.4D), 1.1D, color);
+        SmoothGuiPrimitives.line(graphics, new Vec2(center.x() - 1.0D, center.y() + 1.0D), new Vec2(center.x() + 2.8D, center.y() + 4.1D), 1.1D, color);
+    }
+
+    private void renderNavigationRideStep(GuiGraphicsExtractor graphics, SPSGui.Rect rect, FullMapNavigationViewModel.ItineraryStep step, int index, int mouseX, int mouseY) {
+        boolean hovered = step.expandable() && rect.contains(mouseX, mouseY);
+        if (hovered) {
+            graphics.fill(rect.x() + 18, rect.y(), rect.right(), rect.bottom(), SPSGui.withAlpha(SPSGui.INFO, 0x08));
+        }
+        int lineX = rect.x() + 10;
+        int textX = rect.x() + 24;
+        int railColor = this.firstNavigationColor(step.colors());
+        List<NavigationStationDisplay> stations = this.displayedNavigationStations(step, index);
+        int stationStartY = rect.y() + 22;
+        int railTop = stationStartY + 4;
+        int railBottom = stations.size() <= 1 ? rect.bottom() - 6 : stationStartY + (stations.size() - 1) * NAVIGATION_RIDE_STATION_ROW_HEIGHT + 4;
+        this.drawNavigationVerticalRail(graphics, lineX, railTop, railBottom, step.colors(), 4);
+
+        int maxBadgeWidth = Math.max(34, Math.min(78, rect.right() - textX - 6));
+        int badgeWidth = this.drawNavigationLineBadge(graphics, textX, rect.y() + 3, step.lineName(), railColor, maxBadgeWidth);
+        int detailX = textX + badgeWidth + 4;
+        int detailWidth = rect.right() - detailX - 4;
+        if (detailWidth >= 24) {
+            SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, step.detail(), Math.round(detailWidth / 0.56F)), detailX, rect.y() + 7, FullMapTheme.TEXT_MUTED, 0.56F);
+        }
+
+        for (int i = 0; i < stations.size(); i++) {
+            NavigationStationDisplay station = stations.get(i);
+            int y = stationStartY + i * NAVIGATION_RIDE_STATION_ROW_HEIGHT;
+            if (station.placeholder()) {
+                SPSGui.smallText(graphics, this.font, station.label(), textX + 11, y + 2, FullMapTheme.TEXT_MUTED, 0.54F);
+                continue;
+            }
+            boolean endpoint = station.endpoint();
+            if (endpoint) {
+                SmoothGuiPrimitives.circle(graphics, new Vec2(lineX, y + 4), 4.2D, 0xE8FFFFFF);
+                SmoothGuiPrimitives.circle(graphics, new Vec2(lineX, y + 4), 2.7D, SPSGui.withAlpha(railColor, 0xE2));
+            } else {
+                SmoothGuiPrimitives.circle(graphics, new Vec2(lineX, y + 4), 2.4D, 0x92FFFFFF);
+            }
+            SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, station.label(), Math.round((rect.right() - textX - 9) / 0.56F)), textX + 8, y + 1, endpoint ? FullMapTheme.TEXT_PRIMARY : FullMapTheme.TEXT_SECONDARY, endpoint ? 0.57F : 0.52F);
+        }
+        if (step.expandable()) {
+            this.addClick(rect, () -> this.toggleNavigationRideExpanded(index), Component.literal(this.navigationExpandedRideSteps.contains(index) ? "Collapse stops" : "Expand stops"));
+        }
+    }
+
+    private List<ClientNavigationController.DestinationSearchResult> navigationDestinationResults() {
+        if (this.minecraft == null || this.minecraft.player == null) {
+            return List.of();
+        }
+        String query = this.searchBox == null ? "" : this.searchBox.getValue().trim();
+        if (query.isEmpty()) {
+            this.cachedNavigationQuery = "";
+            this.cachedNavigationResults = List.of();
+            return List.of();
+        }
+        long routeRevision = ClientRouteDataCache.revision();
+        long pipeRevision = ClientPipeNetworkCache.aggregateRevision();
+        ResourceKey<Level> levelKey = this.minecraft.player.level().dimension();
+        boolean queryChanged = !query.equals(this.cachedNavigationQuery);
+        if (queryChanged
+                || this.cachedNavigationRouteRevision != routeRevision
+                || this.cachedNavigationPipeRevision != pipeRevision
+                || this.cachedNavigationLevelKey == null
+                || !this.cachedNavigationLevelKey.equals(levelKey)) {
+            this.cachedNavigationQuery = query;
+            this.cachedNavigationRouteRevision = routeRevision;
+            this.cachedNavigationPipeRevision = pipeRevision;
+            this.cachedNavigationLevelKey = levelKey;
+            this.cachedNavigationResults = ClientNavigationController.searchDestinations(this.minecraft.player, query, NAVIGATION_RESULT_LIMIT);
+            if (queryChanged) {
+                this.navigationResultScroll = 0.0D;
+                this.navigationCrossDimensionConfirmationArmed = false;
+            }
+        }
+        this.refreshSelectedNavigationPlanIfStale(routeRevision, pipeRevision);
+        return this.cachedNavigationResults;
+    }
+
+    private double maxNavigationResultScroll(List<ClientNavigationController.DestinationSearchResult> destinations, List<SearchResult> results, SPSGui.Rect panel) {
+        int contentHeight = destinations.size() * NAVIGATION_RESULT_ROW_HEIGHT + results.size() * 23 + (destinations.isEmpty() || results.isEmpty() ? 0 : 4);
+        return Math.max(0.0D, contentHeight + 8.0D - panel.height());
+    }
+
+    private FullMapNavigationViewModel.RoutePreview navigationPreviewModel() {
+        if (this.selectedNavigationStationGroupId == null) {
+            return FullMapNavigationViewModel.emptyPreview();
+        }
+        if (this.selectedNavigationPlan == null) {
+            return FullMapNavigationViewModel.unreachablePreview(this.selectedNavigationStationGroupId);
+        }
+        return FullMapNavigationViewModel.routePreview(this.selectedNavigationPlan);
+    }
+
+    private void selectNavigationDestination(UUID stationGroupId, boolean locate) {
+        this.selectedNavigationStationGroupId = stationGroupId;
+        this.navigationSheetExpanded = true;
+        this.searchExpanded = false;
+        this.navigationCrossDimensionConfirmationArmed = false;
+        this.navigationItineraryScroll = 0.0D;
+        this.navigationExpandedRideSteps.clear();
+        if (this.searchBox != null) {
+            this.searchBox.setFocused(false);
+            this.setFocused(null);
+        }
+        this.selectedNavigationPlanRouteRevision = ClientRouteDataCache.revision();
+        this.selectedNavigationPlanPipeRevision = ClientPipeNetworkCache.aggregateRevision();
+        this.selectedNavigationPlan = this.minecraft != null && this.minecraft.player != null
+                ? ClientNavigationController.previewPlan(this.minecraft.player, stationGroupId).orElse(null)
+                : null;
+        if (locate) {
+            ClientRouteDataCache.stationGroup(stationGroupId).ifPresent(this::locateStation);
+        }
+    }
+
+    private void refreshSelectedNavigationPlanIfStale(long routeRevision, long pipeRevision) {
+        if (this.minecraft == null || this.minecraft.player == null || this.selectedNavigationStationGroupId == null) {
+            return;
+        }
+        if (this.selectedNavigationPlanRouteRevision == routeRevision && this.selectedNavigationPlanPipeRevision == pipeRevision) {
+            return;
+        }
+        this.selectedNavigationPlanRouteRevision = routeRevision;
+        this.selectedNavigationPlanPipeRevision = pipeRevision;
+        this.selectedNavigationPlan = ClientNavigationController.previewPlan(this.minecraft.player, this.selectedNavigationStationGroupId).orElse(null);
+        this.navigationCrossDimensionConfirmationArmed = false;
+        this.navigationItineraryScroll = 0.0D;
+        this.navigationExpandedRideSteps.clear();
+    }
+
+    private void handleNavigationPrimaryAction(FullMapNavigationViewModel.RoutePreview preview) {
+        if (preview.needsCrossDimensionConfirmation() && !this.navigationCrossDimensionConfirmationArmed) {
+            this.navigationCrossDimensionConfirmationArmed = true;
+            return;
+        }
+        this.startSelectedNavigationFromMap();
+    }
+
+    private void startSelectedNavigationFromMap() {
+        if (this.minecraft == null || this.minecraft.player == null || this.selectedNavigationStationGroupId == null) {
+            return;
+        }
+        Optional<ClientNavigationController.NavigationPlan> plan = ClientNavigationController.startNavigation(this.minecraft.player, this.selectedNavigationStationGroupId);
+        if (plan.isPresent()) {
+            this.toast(Component.translatable("navigation.superpipeslide.started", FullMapNavigationViewModel.stationName(plan.get().destinationStationGroupId())).getString());
+            this.clearNavigationPreview();
+            this.searchExpanded = false;
+            if (this.searchBox != null) {
+                this.searchBox.setFocused(false);
+                this.setFocused(null);
+            }
+        } else {
+            this.selectedNavigationPlan = null;
+            this.navigationSheetExpanded = true;
+        }
+    }
+
+    private void cancelNavigationFromMap() {
+        ClientNavigationController.cancelNavigation();
+        this.clearNavigationPreview();
+    }
+
+    private void clearNavigationPreview() {
+        this.selectedNavigationStationGroupId = null;
+        this.selectedNavigationPlan = null;
+        this.selectedNavigationPlanRouteRevision = Long.MIN_VALUE;
+        this.selectedNavigationPlanPipeRevision = Long.MIN_VALUE;
+        this.navigationSheetExpanded = false;
+        this.navigationCrossDimensionConfirmationArmed = false;
+        this.navigationItineraryScroll = 0.0D;
+        this.navigationExpandedRideSteps.clear();
+        this.navigationItineraryBounds = new SPSGui.Rect(0, 0, 0, 0);
+        this.navigationDrawerBounds = new SPSGui.Rect(0, 0, 0, 0);
+        this.navigationDrawerUserBounds = null;
+        this.navigationDrawerUserXRatio = Double.NaN;
+        this.navigationDrawerUserYRatio = Double.NaN;
+        this.draggingNavigationDrawer = false;
+        this.activeNavigationPillBounds = new SPSGui.Rect(0, 0, 0, 0);
+    }
+
+    private void expandActiveNavigation() {
+        ClientNavigationController.sessionSnapshot().ifPresent(snapshot -> {
+            this.selectedNavigationStationGroupId = snapshot.plan().destinationStationGroupId();
+            this.selectedNavigationPlan = snapshot.plan();
+            this.selectedNavigationPlanRouteRevision = snapshot.plan().routeRevision();
+            this.selectedNavigationPlanPipeRevision = snapshot.plan().pipeRevision();
+            this.navigationSheetExpanded = true;
+            this.navigationCrossDimensionConfirmationArmed = false;
+            this.navigationItineraryScroll = 0.0D;
+        });
+    }
+
+    private Optional<ClientNavigationController.NavigationPlan> currentNavigationPlan() {
+        if (this.selectedNavigationPlan != null) {
+            return Optional.of(this.selectedNavigationPlan);
+        }
+        return ClientNavigationController.sessionSnapshot().map(ClientNavigationController.NavigationSessionSnapshot::plan);
+    }
+
+    private int navigationActiveSegmentIndex(ClientNavigationController.NavigationPlan plan) {
+        return ClientNavigationController.sessionSnapshot()
+                .filter(snapshot -> snapshot.plan().id().equals(plan.id()))
+                .map(ClientNavigationController.NavigationSessionSnapshot::segmentIndex)
+                .orElse(0);
+    }
+
+    private int navigationChipColor(FullMapNavigationViewModel.ChipTone tone) {
+        return switch (tone) {
+            case SUCCESS -> SPSGui.SUCCESS;
+            case WARNING -> 0xFFFFB13B;
+            case INFO -> SPSGui.INFO;
+            case NEUTRAL -> FullMapTheme.TEXT_MUTED;
+        };
+    }
+
+    private int navigationStepColor(FullMapNavigationViewModel.ItineraryStep step, int primaryColor) {
+        return switch (step.kind()) {
+            case ORIGIN, SAME_STATION_TRANSFER -> SPSGui.SUCCESS;
+            case WALK_TO_BOARD -> FullMapTheme.TEXT_MUTED;
+            case OUT_OF_STATION_TRANSFER, FINAL_WALK -> 0xFFFFB13B;
+            case CROSS_DIMENSION_TRANSFER, CROSS_DIMENSION_FINAL_WALK -> SPSGui.INFO;
+            case DESTINATION -> primaryColor;
+            case UNREACHABLE -> SPSGui.DANGER;
+            case RIDE -> this.firstNavigationColor(step.colors());
+        };
+    }
+
+    private int firstNavigationColor(List<Integer> colors) {
+        return colors == null || colors.isEmpty() ? SPSGui.INFO : SPSGui.opaque(colors.getFirst());
+    }
+
+    private List<Integer> normalizedNavigationColors(List<Integer> colors) {
+        if (colors == null || colors.isEmpty()) {
+            return List.of(SPSGui.INFO);
+        }
+        return colors.stream().limit(3).map(SPSGui::opaque).toList();
+    }
+
+    private void toggleNavigationRideExpanded(int index) {
+        if (!this.navigationExpandedRideSteps.add(index)) {
+            this.navigationExpandedRideSteps.remove(index);
+        }
+    }
+
+    private List<NavigationStationDisplay> displayedNavigationStations(FullMapNavigationViewModel.ItineraryStep step, int index) {
+        List<String> names = step.stationNames();
+        ArrayList<NavigationStationDisplay> result = new ArrayList<>();
+        if (names.isEmpty()) {
+            return result;
+        }
+        if (!step.expandable() || this.navigationExpandedRideSteps.contains(index) || names.size() <= 7) {
+            for (int i = 0; i < names.size(); i++) {
+                result.add(new NavigationStationDisplay(names.get(i), false, i == 0 || i == names.size() - 1));
+            }
+            return result;
+        }
+        result.add(new NavigationStationDisplay(names.get(0), false, true));
+        result.add(new NavigationStationDisplay(names.get(1), false, false));
+        int hidden = Math.max(0, names.size() - 4);
+        result.add(new NavigationStationDisplay(Component.translatable("screen.superpipeslide.navigation.itinerary.more_stops", hidden).getString(), true, false));
+        result.add(new NavigationStationDisplay(names.get(names.size() - 2), false, false));
+        result.add(new NavigationStationDisplay(names.getLast(), false, true));
+        return result;
+    }
+
+    private int navigationItineraryStepHeight(FullMapNavigationViewModel.ItineraryStep step, int index) {
+        if (step.kind() != FullMapNavigationViewModel.ItineraryKind.RIDE) {
+            return NAVIGATION_SIMPLE_STEP_HEIGHT;
+        }
+        int stationRows = Math.max(1, this.displayedNavigationStations(step, index).size());
+        return 25 + stationRows * NAVIGATION_RIDE_STATION_ROW_HEIGHT;
+    }
+
+    private int navigationItineraryContentHeight(FullMapNavigationViewModel.RoutePreview preview) {
+        int height = 8;
+        for (int i = 0; i < preview.itinerary().size(); i++) {
+            height += this.navigationItineraryStepHeight(preview.itinerary().get(i), i) + NAVIGATION_ITINERARY_STEP_GAP;
+        }
+        return height;
+    }
+
+    private double maxNavigationItineraryScroll(FullMapNavigationViewModel.RoutePreview preview, SPSGui.Rect rect) {
+        return Math.max(0.0D, this.navigationItineraryContentHeight(preview) - rect.height());
+    }
+
+    private void drawNavigationDottedLine(GuiGraphicsExtractor graphics, int x, int y1, int y2, int color) {
+        for (int y = y1; y < y2; y += 7) {
+            SmoothGuiPrimitives.line(graphics, new Vec2(x, y), new Vec2(x, Math.min(y2, y + 3)), 2.0D, color);
+        }
+    }
+
+    private void drawNavigationVerticalRail(GuiGraphicsExtractor graphics, int x, int y1, int y2, List<Integer> colors, int width) {
+        if (y2 <= y1) {
+            return;
+        }
+        List<Integer> normalized = this.normalizedNavigationColors(colors);
+        if (normalized.size() == 1) {
+            SmoothGuiPrimitives.line(graphics, new Vec2(x, y1), new Vec2(x, y2), width, normalized.getFirst());
+            return;
+        }
+        int left = x - width / 2;
+        int stripeWidth = Math.max(1, width / normalized.size());
+        for (int i = 0; i < normalized.size(); i++) {
+            int x1 = left + i * stripeWidth;
+            int x2 = i == normalized.size() - 1 ? x + width / 2 + 1 : x1 + stripeWidth;
+            graphics.fill(x1, y1, x2, y2, normalized.get(i));
+        }
+    }
+
+    private int drawNavigationLineBadge(GuiGraphicsExtractor graphics, int x, int y, String label, int color, int maxWidth) {
+        String text = SPSGui.ellipsize(this.font, label, Math.max(8, Math.round((maxWidth - 7) / 0.56F)));
+        int width = Math.min(maxWidth, Math.max(24, Math.round(this.font.width(text) * 0.56F) + 8));
+        graphics.fill(x, y, x + width, y + 12, SPSGui.withAlpha(color, 0xDD));
+        graphics.outline(x, y, width, 12, SPSGui.withAlpha(color, 0xF2));
+        SPSGui.smallText(graphics, this.font, text, x + 4, y + 3, 0xFFFFFFFF, 0.56F);
+        return width;
+    }
+
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private static int clampInt(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private void renderToast(GuiGraphicsExtractor graphics) {
@@ -1004,10 +1715,11 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     private void renderContextPicker(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         this.contextPickerBounds = new SPSGui.Rect(0, 0, 0, 0);
+        this.contextPickerActionBounds.clear();
         this.contextPickerRowBounds.clear();
         this.contextPickerMaxScroll = 0.0D;
         ContextPicker picker = this.contextPicker.orElse(null);
-        if (picker == null || picker.rows().isEmpty()) {
+        if (picker == null || (picker.rows().isEmpty() && picker.actions().isEmpty())) {
             return;
         }
         int width = Math.max(142, Math.min(Math.min(278, Math.max(142, picker.boundary().width() - 12)), this.contextPickerPreferredWidth(picker)));
@@ -1030,10 +1742,18 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.y() + headerHeight - 1, FullMapTheme.SURFACE_HEADER_ACTIVE);
         graphics.fill(bounds.x() + 1, bounds.y() + headerHeight, bounds.right() - 1, bounds.y() + headerHeight + 1, FullMapTheme.BORDER);
         int headerY = bounds.y() + 6;
-        FullMapUi.drawNameStack(graphics, this.font, picker.title(), bounds.x() + 7, headerY, bounds.width() - 16, FullMapTheme.TEXT_PRIMARY, FullMapTheme.TEXT_MUTED, 1.0F, FullMapTheme.TYPE_META, 0);
+        int actionRight = bounds.right() - 6;
+        for (int i = picker.actions().size() - 1; i >= 0; i--) {
+            ContextPickerAction action = picker.actions().get(i);
+            SPSGui.Rect actionBounds = new SPSGui.Rect(actionRight - 16, bounds.y() + 5, 16, 16);
+            this.contextPickerActionBounds.add(0, actionBounds);
+            FullMapUi.iconButton(graphics, actionBounds, actionBounds.contains(mouseX, mouseY), false, false, action.icon());
+            actionRight = actionBounds.x() - 4;
+        }
+        FullMapUi.drawNameStack(graphics, this.font, picker.title(), bounds.x() + 7, headerY, Math.max(32, actionRight - bounds.x() - 11), FullMapTheme.TEXT_PRIMARY, FullMapTheme.TEXT_MUTED, 1.0F, FullMapTheme.TYPE_META, 0);
         if (!picker.subtitle().isBlank()) {
             int subtitleY = headerY + FullMapUi.nameStackHeight(picker.title(), 1.0F, FullMapTheme.TYPE_META, 0) + 2;
-            SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, picker.subtitle(), Math.round((bounds.width() - 16) / FullMapTheme.TYPE_META)), bounds.x() + 7, subtitleY, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
+            SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, picker.subtitle(), Math.round(Math.max(32, actionRight - bounds.x() - 11) / FullMapTheme.TYPE_META)), bounds.x() + 7, subtitleY, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
         }
 
         SPSGui.Rect list = new SPSGui.Rect(bounds.x() + 4, bounds.y() + headerHeight + 4, bounds.width() - 8, Math.max(1, bounds.height() - headerHeight - 8));
@@ -1069,6 +1789,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     private int contextPickerPreferredWidth(ContextPicker picker) {
         int width = Math.max(FullMapUi.nameStackWidth(this.font, picker.title(), 1.0F, FullMapTheme.TYPE_META) + 20, Math.round(this.font.width(picker.subtitle()) * FullMapTheme.TYPE_META) + 20);
+        if (!picker.actions().isEmpty()) {
+            width += picker.actions().size() * 20;
+        }
         for (ContextPickerRow row : picker.rows()) {
             width = Math.max(width, FullMapUi.nameStackWidth(this.font, row.title(), 1.0F, FullMapTheme.TYPE_TINY) + 36);
             if (!row.subtitle().isBlank()) {
@@ -1081,10 +1804,10 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private void renderLayoutModeStrip(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         int size = FullMapTheme.ICON_BUTTON;
         int gap = 2;
-        int x = 10;
-        int y = this.height - size - 8;
         SPSGui.Rect panel = this.layoutModeStripBounds;
         FullMapUi.toolbarPanel(graphics, panel);
+        int x = panel.x() + 3;
+        int y = panel.y() + 3;
         for (FullRouteMapLayoutMode mode : FullRouteMapLayoutMode.values()) {
             SPSGui.Rect button = new SPSGui.Rect(x, y, size, size);
             boolean selected = FullRouteMapCache.layoutMode() == mode;
@@ -1365,7 +2088,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     private boolean mapPopoverBlocks(double mouseX, double mouseY) {
         return (this.dimensionMenuBounds.width() > 0 && this.dimensionMenuBounds.contains(mouseX, mouseY))
-                || (this.searchResultsBounds.width() > 0 && this.searchResultsBounds.contains(mouseX, mouseY));
+                || (this.searchResultsBounds.width() > 0 && this.searchResultsBounds.contains(mouseX, mouseY))
+                || (this.navigationDrawerBounds.width() > 0 && this.navigationDrawerBounds.contains(mouseX, mouseY))
+                || (this.activeNavigationPillBounds.width() > 0 && this.activeNavigationPillBounds.contains(mouseX, mouseY));
     }
 
     private SPSGui.Rect computeDimensionChipBounds() {
@@ -1388,24 +2113,83 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     }
 
     private SPSGui.Rect computeSearchControlBounds() {
-        boolean expanded = this.searchExpanded || (this.searchBox != null && (this.searchBox.isFocused() || !this.searchBox.getValue().isBlank()));
-        if (!expanded) {
-            return new SPSGui.Rect(this.width - 30, 8, 22, 22);
+        int desiredWidth = Math.min(370, Math.max(260, (int) Math.round(this.width * 0.30D)));
+        int x = this.dimensionChipBounds.right() + 8;
+        int y = 8;
+        int maxRight = this.width - 10;
+        int width = Math.min(desiredWidth, maxRight - x);
+        if (width < 220) {
+            x = 8;
+            y = this.dimensionChipBounds.bottom() + 6;
+            width = Math.min(desiredWidth, maxRight - x);
         }
-        int width = Math.min(202, Math.max(158, this.width / 5));
-        return new SPSGui.Rect(this.width - width - 8, 8, width, 22);
+        width = Math.max(168, width);
+        return new SPSGui.Rect(x, y, width, 28);
     }
 
     private SPSGui.Rect computeSearchResultsBounds() {
-        if (this.searchBox == null || this.searchBox.getValue().trim().isEmpty()) {
+        if (this.searchBox == null) {
             return new SPSGui.Rect(0, 0, 0, 0);
         }
-        int rows = Math.min(8, this.searchResults().size());
-        if (rows <= 0) {
+        boolean searchOpen = this.searchExpanded || this.searchBox.isFocused();
+        if (!searchOpen) {
             return new SPSGui.Rect(0, 0, 0, 0);
         }
-        int rowHeight = 23;
-        return new SPSGui.Rect(this.searchControlBounds.x(), this.searchControlBounds.bottom() + 4, this.searchControlBounds.width(), rows * rowHeight + 5);
+        int rows = Math.min(8, this.navigationDestinationResults().size() + this.searchResults().size());
+        int height = rows <= 0 ? 42 : Math.min(Math.max(42, this.height - this.searchControlBounds.bottom() - 18), rows * 29 + 8);
+        return new SPSGui.Rect(this.searchControlBounds.x(), this.searchControlBounds.bottom() + 5, this.searchControlBounds.width(), height);
+    }
+
+    private SPSGui.Rect computeNavigationDrawerBounds() {
+        if (!this.navigationSheetExpanded && this.selectedNavigationStationGroupId == null) {
+            this.draggingNavigationDrawer = false;
+            return new SPSGui.Rect(0, 0, 0, 0);
+        }
+        int width = Math.min(280, Math.max(180, Math.round(this.width * 0.20F)));
+        width = Math.min(width, Math.max(148, this.width - 24));
+        int height = this.navigationSheetExpanded
+                ? Math.min(360, Math.max(190, Math.round(this.height * 0.42F)))
+                : 118;
+        height = Math.min(height, Math.max(96, this.height - 72));
+        if (this.navigationDrawerUserBounds != null) {
+            int x = Double.isFinite(this.navigationDrawerUserXRatio) ? (int) Math.round(this.navigationDrawerUserXRatio * Math.max(1, this.width - width)) : this.navigationDrawerUserBounds.x();
+            int y = Double.isFinite(this.navigationDrawerUserYRatio) ? (int) Math.round(this.navigationDrawerUserYRatio * Math.max(1, this.height - height)) : this.navigationDrawerUserBounds.y();
+            return this.clampNavigationDrawerBounds(new SPSGui.Rect(x, y, width, height));
+        }
+        int x = this.width - width - 12;
+        int y = Math.max(this.searchControlBounds.bottom() + 10, 48);
+        return this.clampNavigationDrawerBounds(new SPSGui.Rect(x, y, width, height));
+    }
+
+    private SPSGui.Rect navigationDrawerDragHandleBounds() {
+        SPSGui.Rect panel = this.navigationDrawerBounds;
+        if (panel.width() <= 0 || panel.height() <= 0) {
+            return new SPSGui.Rect(0, 0, 0, 0);
+        }
+        return new SPSGui.Rect(panel.x() + 6, panel.y() + 5, Math.max(0, panel.width() - 12), 58);
+    }
+
+    private SPSGui.Rect clampNavigationDrawerBounds(SPSGui.Rect bounds) {
+        int margin = 8;
+        int width = Math.min(bounds.width(), Math.max(1, this.width - margin * 2));
+        int height = Math.min(bounds.height(), Math.max(1, this.height - margin * 2));
+        int maxX = Math.max(margin, this.width - width - margin);
+        int maxY = Math.max(margin, this.height - height - margin);
+        int x = clampInt(bounds.x(), margin, maxX);
+        int y = clampInt(bounds.y(), margin, maxY);
+        return new SPSGui.Rect(x, y, width, height);
+    }
+
+    private SPSGui.Rect computeActiveNavigationPillBounds() {
+        if (!ClientNavigationController.isNavigating() || this.navigationSheetExpanded || this.selectedNavigationStationGroupId != null) {
+            return new SPSGui.Rect(0, 0, 0, 0);
+        }
+        int width = Math.min(330, Math.max(230, Math.round(this.width * 0.24F)));
+        width = Math.min(width, Math.max(180, this.width - 24));
+        int height = 34;
+        int x = this.width - width - 12;
+        int y = Math.max(this.searchControlBounds.bottom() + 10, 48);
+        return new SPSGui.Rect(x, y, width, height);
     }
 
     private void focusSearch() {
@@ -1900,6 +2684,12 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (event.button() == 0 && this.contextPicker.isPresent()) {
             if (this.contextPickerBounds.contains(event.x(), event.y())) {
                 ContextPicker picker = this.contextPicker.get();
+                for (int i = 0; i < Math.min(this.contextPickerActionBounds.size(), picker.actions().size()); i++) {
+                    if (this.contextPickerActionBounds.get(i).contains(event.x(), event.y())) {
+                        picker.actions().get(i).action().run();
+                        return true;
+                    }
+                }
                 for (int i = 0; i < Math.min(this.contextPickerRowBounds.size(), picker.rows().size()); i++) {
                     if (this.contextPickerRowBounds.get(i).contains(event.x(), event.y())) {
                         picker.rows().get(i).action().run();
@@ -1927,6 +2717,24 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             if (this.mapPopoverBlocks(event.x(), event.y())) {
                 if (this.dispatchClickActions(this.backgroundClickActions, event.x(), event.y())) {
                     return true;
+                }
+                if (this.navigationDrawerDragHandleBounds().contains(event.x(), event.y())) {
+                    this.draggingNavigationDrawer = true;
+                    this.navigationDrawerUserBounds = this.navigationDrawerBounds;
+                    return true;
+                }
+                return true;
+            }
+            if (this.mapChromeBlocks(event.x(), event.y())) {
+                if (this.dispatchClickActions(this.backgroundClickActions, event.x(), event.y())) {
+                    return true;
+                }
+                if (this.searchControlBounds.contains(event.x(), event.y()) && this.dispatchWidgetMouseClicked(event, doubleClick)) {
+                    this.searchExpanded = true;
+                    return true;
+                }
+                if (this.searchControlBounds.contains(event.x(), event.y())) {
+                    this.focusSearch();
                 }
                 return true;
             }
@@ -1986,15 +2794,6 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         }
         if (event.button() != 0) {
             return this.dispatchWidgetMouseClicked(event, doubleClick);
-        }
-        if (this.dispatchClickActions(this.backgroundClickActions, event.x(), event.y())) {
-            return true;
-        }
-        if (this.mapChromeBlocks(event.x(), event.y())) {
-            if (this.searchControlBounds.contains(event.x(), event.y()) && this.dispatchWidgetMouseClicked(event, doubleClick)) {
-                this.searchExpanded = true;
-            }
-            return true;
         }
         if (this.dispatchWidgetMouseClicked(event, doubleClick)) {
             return true;
@@ -2081,6 +2880,20 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             }
             this.draggingMapCamera = false;
         }
+        if (event.button() == 0 && this.draggingNavigationDrawer) {
+            SPSGui.Rect current = this.navigationDrawerUserBounds == null ? this.navigationDrawerBounds : this.navigationDrawerUserBounds;
+            SPSGui.Rect moved = this.clampNavigationDrawerBounds(new SPSGui.Rect(
+                    current.x() + (int) Math.round(dragX),
+                    current.y() + (int) Math.round(dragY),
+                    this.navigationDrawerBounds.width() <= 0 ? current.width() : this.navigationDrawerBounds.width(),
+                    this.navigationDrawerBounds.height() <= 0 ? current.height() : this.navigationDrawerBounds.height()
+            ));
+            this.navigationDrawerUserBounds = moved;
+            this.navigationDrawerUserXRatio = moved.x() / (double) Math.max(1, this.width - moved.width());
+            this.navigationDrawerUserYRatio = moved.y() / (double) Math.max(1, this.height - moved.height());
+            this.navigationDrawerBounds = moved;
+            return true;
+        }
         if (event.button() == 0 && this.draggingRouteCardViewportKey.isPresent()) {
             String key = this.draggingRouteCardViewportKey.get();
             if (this.panRouteCardViewport(key, dragX, dragY)) {
@@ -2132,11 +2945,32 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             this.draggingMapCamera = false;
             return true;
         }
+        if (event.button() == 0 && this.draggingNavigationDrawer) {
+            this.draggingNavigationDrawer = false;
+            return true;
+        }
         return super.mouseReleased(event);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (this.navigationItineraryBounds.width() > 0 && this.navigationItineraryBounds.contains(mouseX, mouseY)) {
+            FullMapNavigationViewModel.RoutePreview preview = this.navigationPreviewModel();
+            double maxScroll = this.maxNavigationItineraryScroll(preview, this.navigationItineraryBounds);
+            if (maxScroll > 0.0D) {
+                this.navigationItineraryScroll = clamp(this.navigationItineraryScroll - scrollY * 24.0D, 0.0D, maxScroll);
+            }
+            return true;
+        }
+        if (this.searchResultsBounds.width() > 0 && this.searchResultsBounds.contains(mouseX, mouseY)) {
+            List<ClientNavigationController.DestinationSearchResult> destinations = this.navigationDestinationResults();
+            List<SearchResult> results = this.searchResults();
+            double maxScroll = this.maxNavigationResultScroll(destinations, results, this.searchResultsBounds);
+            if (maxScroll > 0.0D) {
+                this.navigationResultScroll = clamp(this.navigationResultScroll - scrollY * 26.0D, 0.0D, maxScroll);
+            }
+            return true;
+        }
         if (this.contextPicker.isPresent()) {
             if (this.contextPickerBounds.contains(mouseX, mouseY)) {
                 if (this.contextPickerMaxScroll > 0.0D) {
@@ -2234,6 +3068,10 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     public boolean keyPressed(KeyEvent event) {
         int key = event.key();
         if (key == GLFW.GLFW_KEY_ESCAPE) {
+            if (this.selectedNavigationStationGroupId != null || this.navigationSheetExpanded) {
+                this.clearNavigationPreview();
+                return true;
+            }
             if (this.searchBox != null && (this.searchBox.isFocused() || this.searchExpanded || !this.searchBox.getValue().isBlank())) {
                 if (!this.searchBox.getValue().isBlank()) {
                     this.searchBox.setValue("");
@@ -2377,7 +3215,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (station.isEmpty()) {
             return;
         }
-        List<ContextPickerRow> rows = ClientRouteDataCache.platformStopsInStation(stationId).stream()
+        List<ContextPickerRow> routeRows = ClientRouteDataCache.platformStopsInStation(stationId).stream()
                 .flatMap(platform -> ClientRouteDataCache.routeLayoutIdsForPlatformStop(platform.id()).stream())
                 .distinct()
                 .map(ClientRouteDataCache::routeLayout)
@@ -2399,7 +3237,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 })
                 .filter(row -> row != null)
                 .toList();
-        if (rows.isEmpty()) {
+        if (routeRows.isEmpty()) {
             this.pushCard(MapCard.station(stationId, levelKey));
             return;
         }
@@ -2410,7 +3248,15 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 anchorX,
                 anchorY,
                 boundary,
-                rows
+                List.of(new ContextPickerAction(
+                        SPSGui.Icon.LOCATE,
+                        Component.translatable("screen.superpipeslide.full_map.navigate_here"),
+                        () -> {
+                            this.clearContextPicker();
+                            this.selectNavigationDestination(stationId, true);
+                        }
+                )),
+                routeRows
         ));
     }
 
@@ -2483,7 +3329,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             return;
         }
         this.contextPickerScroll = 0.0D;
-        this.contextPicker = Optional.of(new ContextPicker(DisplayNameStack.of(title), subtitle, anchorX, anchorY, boundary, rows));
+        this.contextPicker = Optional.of(new ContextPicker(DisplayNameStack.of(title), subtitle, anchorX, anchorY, boundary, List.of(), rows));
     }
 
     private static String edgePickerSubtitle(int count) {
@@ -3099,12 +3945,6 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             return List.of();
         }
         List<SearchResult> results = new ArrayList<>();
-        for (StationGroup station : ClientRouteDataCache.stationGroups()) {
-            DisplayNameStack name = FullMapText.displayNameStack(station);
-            if (name.searchText().toLowerCase(Locale.ROOT).contains(query)) {
-                results.add(new SearchResult(SearchKind.STATION, station.id(), station.levelKey(), name, dimensionLabel(station.levelKey()) + " " + station.stationBlockPos().toShortString()));
-            }
-        }
         for (RouteLine line : ClientRouteDataCache.routeLines()) {
             DisplayNameStack name = FullMapText.displayNameStack(line);
             if (name.searchText().toLowerCase(Locale.ROOT).contains(query)) {
@@ -3289,15 +4129,22 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private void clearContextPicker() {
         this.contextPicker = Optional.empty();
         this.contextPickerBounds = new SPSGui.Rect(0, 0, 0, 0);
+        this.contextPickerActionBounds.clear();
         this.contextPickerRowBounds.clear();
         this.contextPickerScroll = 0.0D;
         this.contextPickerMaxScroll = 0.0D;
     }
 
-    private record ContextPicker(DisplayNameStack title, String subtitle, int anchorX, int anchorY, SPSGui.Rect boundary, List<ContextPickerRow> rows) {
+    private record ContextPicker(DisplayNameStack title, String subtitle, int anchorX, int anchorY, SPSGui.Rect boundary, List<ContextPickerAction> actions, List<ContextPickerRow> rows) {
+    }
+
+    private record ContextPickerAction(SPSGui.Icon icon, Component tooltip, Runnable action) {
     }
 
     private record ContextPickerRow(DisplayNameStack title, String subtitle, List<Integer> colors, Runnable action) {
+    }
+
+    private record NavigationStationDisplay(String label, boolean placeholder, boolean endpoint) {
     }
 
     private record RouteCardGraphCacheKey(long routeRevision, long pipeRevision, UUID routeLineId, UUID routeLayoutId, RouteCardViewMode viewMode) {

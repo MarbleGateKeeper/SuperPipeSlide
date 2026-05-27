@@ -949,7 +949,7 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
             if (edge == null) {
                 continue;
             }
-            Optional<List<Vec2>> visualPath = this.visualWorldPathForEdge(graph, visualGraph, path, edge, viewport.zoom());
+            Optional<List<Vec2>> visualPath = visualWorldPathForEdge(graph, visualGraph, path, edge, viewport.zoom());
             if (visualPath.isEmpty() || !visualView.intersects(boundsForPath(visualPath.get()).inflate(32.0D / scale(viewport)))) {
                 continue;
             }
@@ -2708,7 +2708,7 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
         return new SegmentScreen(new Vec2(a.x() + nx, a.y() + ny), new Vec2(b.x() + nx, b.y() + ny));
     }
 
-    private static List<Vec2> offsetScreenPath(List<Vec2> points, double offset) {
+    public static List<Vec2> offsetScreenPath(List<Vec2> points, double offset) {
         if (points.size() < 2 || Math.abs(offset) < 0.001D) {
             return points;
         }
@@ -2896,7 +2896,7 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
         return new Vec2(fallbackX, fallbackZ);
     }
 
-    private Optional<List<Vec2>> visualWorldPathForEdge(MapDimensionGraph graph, VisualRouteMapGraph visualGraph, VisualEdgePath path, MapEdge edge, double zoom) {
+    public static Optional<List<Vec2>> visualWorldPathForEdge(MapDimensionGraph graph, VisualRouteMapGraph visualGraph, VisualEdgePath path, MapEdge edge, double zoom) {
         NodeId fromId = displayNodeId(graph, edge.from(), zoom);
         NodeId toId = displayNodeId(graph, edge.to(), zoom);
         if (fromId.equals(toId)) {
@@ -2922,7 +2922,7 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
     }
 
     private Optional<List<Vec2>> visualScreenPathForEdge(MapDimensionGraph graph, VisualRouteMapGraph visualGraph, VisualEdgePath path, MapEdge edge, ViewportState viewport, SPSGui.Rect rect) {
-        return this.visualWorldPathForEdge(graph, visualGraph, path, edge, viewport.zoom())
+        return visualWorldPathForEdge(graph, visualGraph, path, edge, viewport.zoom())
                 .map(points -> points.stream().map(point -> worldToScreen(point.x(), point.y(), viewport, rect)).toList());
     }
 

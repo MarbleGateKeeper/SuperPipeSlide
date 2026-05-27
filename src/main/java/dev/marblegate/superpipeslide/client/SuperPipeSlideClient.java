@@ -19,7 +19,6 @@ import dev.marblegate.superpipeslide.client.core.slide.ClientSlideNoticeControll
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlidePoseController;
 import dev.marblegate.superpipeslide.client.core.sync.ClientDataResyncRequests;
 import dev.marblegate.superpipeslide.client.fullmap.screen.FullRouteMapScreen;
-import dev.marblegate.superpipeslide.client.gui.navigation.DestinationNavigationScreen;
 import dev.marblegate.superpipeslide.client.renderer.anchor.ClientAnchorVisibilityRenderer;
 import dev.marblegate.superpipeslide.client.renderer.fold.ClientFoldTraversalEffectRenderer;
 import dev.marblegate.superpipeslide.client.renderer.fold.ClientFoldTraversalPostEffectRenderer;
@@ -76,13 +75,6 @@ public class SuperPipeSlideClient {
             InputConstants.KEY_M,
             KEY_CATEGORY
     );
-    private static final KeyMapping OPEN_NAVIGATION = new KeyMapping(
-            "key.superpipeslide.navigation",
-            KeyConflictContext.IN_GAME,
-            InputConstants.Type.KEYSYM,
-            InputConstants.KEY_N,
-            KEY_CATEGORY
-    );
 
     public SuperPipeSlideClient(IEventBus modEventBus, ModContainer container) {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
@@ -103,7 +95,6 @@ public class SuperPipeSlideClient {
     private static void registerKeyMappings(RegisterKeyMappingsEvent event) {
         event.registerCategory(KEY_CATEGORY);
         event.register(OPEN_FULL_ROUTE_MAP);
-        event.register(OPEN_NAVIGATION);
     }
 
     private static void registerRenderPipelines(RegisterRenderPipelinesEvent event) {
@@ -152,11 +143,6 @@ public class SuperPipeSlideClient {
             while (OPEN_FULL_ROUTE_MAP.consumeClick()) {
                 if (minecraft.screen == null) {
                     minecraft.setScreen(new FullRouteMapScreen());
-                }
-            }
-            while (OPEN_NAVIGATION.consumeClick()) {
-                if (minecraft.screen == null) {
-                    minecraft.setScreen(new DestinationNavigationScreen());
                 }
             }
             ClientNavigationController.tick(minecraft, player);

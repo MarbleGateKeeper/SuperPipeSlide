@@ -814,6 +814,7 @@ public final class ClientNavigationController {
                                 layout.id(),
                                 direction,
                                 section.id(),
+                                step.sectionIndex(),
                                 cost,
                                 colors,
                                 lineName
@@ -1373,6 +1374,7 @@ public final class ClientNavigationController {
             UUID alightingPlatformStopId,
             List<UUID> stationSequence,
             List<UUID> routeSectionIds,
+            List<NavigationSectionRef> routeSections,
             Optional<TransferInstruction> transferInstruction,
             Optional<FinalWalkInstruction> finalWalkInstruction,
             boolean finalSegment,
@@ -1384,6 +1386,7 @@ public final class ClientNavigationController {
             routeDirection = routeDirection < 0 ? -1 : 1;
             stationSequence = List.copyOf(stationSequence);
             routeSectionIds = List.copyOf(routeSectionIds);
+            routeSections = List.copyOf(routeSections);
             transferInstruction = transferInstruction == null ? Optional.empty() : transferInstruction;
             finalWalkInstruction = finalWalkInstruction == null ? Optional.empty() : finalWalkInstruction;
             colors = List.copyOf(colors);
@@ -1392,6 +1395,9 @@ public final class ClientNavigationController {
         public boolean transferAfter() {
             return this.transferInstruction.isPresent();
         }
+    }
+
+    public record NavigationSectionRef(UUID routeSectionId, int layoutIndex) {
     }
 
     public record TransferInstruction(
@@ -1603,8 +1609,8 @@ public final class ClientNavigationController {
 
         double cost();
 
-        static RideEdge ride(UUID from, UUID to, UUID routeLineId, UUID layoutId, int routeDirection, UUID routeSectionId, double cost, List<Integer> colors, String lineName) {
-            return new RideEdge(NodeKey.platform(from), NodeKey.platform(to), routeLineId, layoutId, routeDirection, routeSectionId, cost, colors, lineName);
+        static RideEdge ride(UUID from, UUID to, UUID routeLineId, UUID layoutId, int routeDirection, UUID routeSectionId, int layoutIndex, double cost, List<Integer> colors, String lineName) {
+            return new RideEdge(NodeKey.platform(from), NodeKey.platform(to), routeLineId, layoutId, routeDirection, routeSectionId, layoutIndex, cost, colors, lineName);
         }
 
         static StationAccessEdge stationAccess(UUID platformStopId, StationGroup station) {
@@ -1647,6 +1653,7 @@ public final class ClientNavigationController {
             UUID layoutId,
             int routeDirection,
             UUID routeSectionId,
+            int layoutIndex,
             double cost,
             List<Integer> colors,
             String lineName
@@ -1732,6 +1739,7 @@ public final class ClientNavigationController {
         private final UUID boardingPlatformStopId;
         private final ArrayList<UUID> stationSequence = new ArrayList<>();
         private final ArrayList<UUID> sectionIds = new ArrayList<>();
+        private final ArrayList<NavigationSectionRef> sectionRefs = new ArrayList<>();
         private final ArrayList<Integer> colors;
         private final String lineName;
         private double cost;
@@ -1758,6 +1766,7 @@ public final class ClientNavigationController {
         private void add(RideEdge edge) {
             this.stationSequence.add(edge.to().id());
             this.sectionIds.add(edge.routeSectionId());
+            this.sectionRefs.add(new NavigationSectionRef(edge.routeSectionId(), edge.layoutIndex()));
             this.cost += edge.cost();
         }
 
@@ -1775,6 +1784,7 @@ public final class ClientNavigationController {
                     this.alightingPlatformStopId(),
                     this.stationSequence,
                     this.sectionIds,
+                    this.sectionRefs,
                     transferInstruction,
                     finalWalkInstruction,
                     finalSegment,
