@@ -41,6 +41,7 @@ public final class ClientNavigationWorldHighlighter {
     }
 
     public static void submit(SubmitCustomGeometryEvent event) {
+        boolean photic = ClientSafetyOptions.reducePhotosensitivityRisk();
         RenderData renderData = event.getLevelRenderState().getRenderData(RENDER_DATA);
         if (renderData == null || renderData.empty()) {
             return;
@@ -50,20 +51,23 @@ public final class ClientNavigationWorldHighlighter {
         poseStack.pushPose();
         poseStack.translate(-camera.x, -camera.y, -camera.z);
         renderData.target().ifPresent(target -> {
-            event.getSubmitNodeCollector().submitCustomGeometry(poseStack, RenderTypes.debugQuads(), (pose, buffer) -> renderTarget(pose, buffer, target, camera));
+            event.getSubmitNodeCollector().submitCustomGeometry(
+                    poseStack,
+                    RenderTypes.debugQuads(),
+                    (pose, buffer) -> renderTarget(pose, buffer, target, camera, photic)
+            );
             renderTargetLabel(event, poseStack, target, camera);
         });
         poseStack.popPose();
     }
 
-    private static void renderTarget(PoseStack.Pose pose, VertexConsumer buffer, ClientNavigationController.WorldTarget target, Vec3 camera) {
+    private static void renderTarget(PoseStack.Pose pose, VertexConsumer buffer, ClientNavigationController.WorldTarget target, Vec3 camera, boolean photic) {
         Vec3 normal = safeNormalize(camera.subtract(target.position()), new Vec3(0.0D, 0.0D, 1.0D));
         Vec3 right = safeNormalize(WORLD_UP.cross(normal), new Vec3(1.0D, 0.0D, 0.0D));
         Vec3 up = safeNormalize(normal.cross(right), WORLD_UP);
         double distanceToCamera = Math.max(4.0D, camera.distanceTo(target.position()));
         double markerScale = markerScale(distanceToCamera);
         double distanceFade = Math.max(0.58D, Math.min(1.0D, 96.0D / Math.max(16.0D, distanceToCamera)));
-        boolean photic = ClientSafetyOptions.reducePhotosensitivityRisk();
         long now = System.currentTimeMillis();
         double pulse = photic ? 0.0D : 0.5D + 0.5D * Math.sin(now / 230.0D);
         int color = withAlpha(target.color(), (int) Math.round((photic ? 0x6A : 0x86 + pulse * 0x48) * distanceFade));

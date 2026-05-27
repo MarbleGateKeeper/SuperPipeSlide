@@ -406,9 +406,10 @@ public final class ClientPipeRenderer {
     }
 
     private static void renderQuads(PoseStack.Pose pose, VertexConsumer buffer, List<TexturedQuad> quads, double animationTime, FrameLightSampler lightSampler) {
+        boolean photic = ClientSafetyOptions.reducePhotosensitivityRisk();
         for (TexturedQuad quad : quads) {
-            int color = animatedMarkerColor(quad.color(), quad.animationKind(), quad.animationPhase(), animationTime);
-            boolean fullBright = quad.fullBright() && !ClientSafetyOptions.reducePhotosensitivityRisk();
+            int color = animatedMarkerColor(quad.color(), quad.animationKind(), quad.animationPhase(), animationTime, photic);
+            boolean fullBright = quad.fullBright() && !photic;
             addQuadVertex(pose, buffer, quad.a(), quad.u0(), quad.v0(), color, lightSampler.lightAt(quad.lightA(), fullBright), quad.normal());
             addQuadVertex(pose, buffer, quad.b(), quad.u1(), quad.v0(), color, lightSampler.lightAt(quad.lightB(), fullBright), quad.normal());
             addQuadVertex(pose, buffer, quad.c(), quad.u1(), quad.v1(), color, lightSampler.lightAt(quad.lightC(), fullBright), quad.normal());
@@ -429,8 +430,8 @@ public final class ClientPipeRenderer {
         return System.nanoTime() / 1_000_000_000.0D;
     }
 
-    private static int animatedMarkerColor(int color, int animationKind, double phase, double time) {
-        if (ClientSafetyOptions.reducePhotosensitivityRisk()) {
+    private static int animatedMarkerColor(int color, int animationKind, double phase, double time, boolean photic) {
+        if (photic) {
             return color;
         }
         return switch (animationKind) {
