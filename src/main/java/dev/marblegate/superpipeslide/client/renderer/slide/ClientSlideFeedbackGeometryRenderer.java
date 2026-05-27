@@ -2,6 +2,7 @@ package dev.marblegate.superpipeslide.client.renderer.slide;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.fold.ClientFoldTraversalEffectController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideFeedbackController;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
@@ -46,6 +47,10 @@ public final class ClientSlideFeedbackGeometryRenderer {
     }
 
     public static void extract(ExtractLevelRenderStateEvent event) {
+        if (ClientSafetyOptions.reduceMotionSicknessRisk() || ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            event.getRenderState().setRenderData(RENDER_DATA, new RenderData(List.of()));
+            return;
+        }
         List<ClientSlideFeedbackController.TrailParticleSnapshot> particles = ClientSlideFeedbackController.trailParticles();
         event.getRenderState().setRenderData(RENDER_DATA, new RenderData(particles));
     }

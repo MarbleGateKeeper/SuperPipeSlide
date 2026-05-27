@@ -9,6 +9,14 @@ public final class ClientConfig {
             .comment("Whether sliding may adjust camera pitch and roll for slope, turning, and upcoming sharp-turn anticipation. Disable this to keep sliding mechanics and visual effects while removing camera tilt feedback.")
             .define("enableSlideCameraFeedback", true);
 
+    public static final ModConfigSpec.BooleanValue REDUCE_MOTION_SICKNESS_RISK = BUILDER
+            .comment("Reduces 3D motion sickness risk during pipe sliding by disabling camera roll, FOV pushes, fold traversal screen distortion, and other strong first-person motion feedback. Sliding mechanics are unchanged.")
+            .define("reduceMotionSicknessRisk", false);
+
+    public static final ModConfigSpec.BooleanValue REDUCE_PHOTOSENSITIVITY_RISK = BUILDER
+            .comment("Reduces photosensitivity risk by removing pulsing marker brightness, full-bright pipe glow, slide streak particles, fold traversal flashes, and high-emphasis navigation highlights.")
+            .define("reducePhotosensitivityRisk", false);
+
     public static final ModConfigSpec.BooleanValue ENABLE_PROJECTION_NETWORK_IMAGES = BUILDER
             .comment("Whether projection layouts may load external image URLs on this client. Images are downloaded asynchronously and never by the server.")
             .define("enableProjectionNetworkImages", true);

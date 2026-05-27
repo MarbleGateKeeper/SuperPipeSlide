@@ -1,5 +1,6 @@
 package dev.marblegate.superpipeslide.client.core.slide;
 
+import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.SlideGeometry;
@@ -235,6 +236,9 @@ public final class ClientSlideFeedbackController {
     }
 
     public static List<TrailParticleSnapshot> trailParticles() {
+        if (ClientSafetyOptions.reduceMotionSicknessRisk() || ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return List.of();
+        }
         boolean hasRemoteTrails = REMOTE_STATES.values().stream().anyMatch(RemoteSlideState::hasTrails);
         if (TRAILS.isEmpty() && !hasRemoteTrails) {
             return List.of();
@@ -376,6 +380,9 @@ public final class ClientSlideFeedbackController {
     }
 
     private static void spawnTrails(ClientSlideFeedbackSnapshot snapshot) {
+        if (ClientSafetyOptions.reduceMotionSicknessRisk() || ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return;
+        }
         if (snapshot.speed01() <= 0.035D || alpha <= 0.08D) {
             return;
         }
@@ -401,6 +408,9 @@ public final class ClientSlideFeedbackController {
     }
 
     private static void spawnFrameTrails(List<TrailParticle> particles, Vec3 position, Vec3 frameTangent, double frameSpeed01, boolean frameHighway, boolean frameStationSlow, double frameAlpha, double framePerceptualSpeed, double frameAccelerationBlend, double frameHighwayBlend, double framePlatformBlend, double frameVerticalBlend, double frameUpBlend, double frameDownBlend, double frameAccelerationPulse, double densityScale, int maxTrails) {
+        if (ClientSafetyOptions.reduceMotionSicknessRisk() || ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return;
+        }
         if (frameSpeed01 <= 0.035D || frameAlpha <= 0.08D || densityScale <= 0.02D) {
             return;
         }
@@ -506,6 +516,9 @@ public final class ClientSlideFeedbackController {
     }
 
     private static double fovBoost() {
+        if (ClientSafetyOptions.reduceMotionSicknessRisk()) {
+            return 0.0D;
+        }
         double base = 3.20D * perceptualSpeed
                 + 1.55D * accelerationBlend
                 + 2.85D * highwayBlend
@@ -515,6 +528,9 @@ public final class ClientSlideFeedbackController {
     }
 
     private static double edgeIntensity() {
+        if (ClientSafetyOptions.reduceMotionSicknessRisk() || ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return 0.0D;
+        }
         return Mth.clamp(0.10D + perceptualSpeed * 0.78D + accelerationBlend * 0.30D + highwayBlend * 0.34D + accelerationPulse * 0.52D, 0.0D, 1.0D) * alpha;
     }
 

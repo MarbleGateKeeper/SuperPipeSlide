@@ -2,6 +2,7 @@ package dev.marblegate.superpipeslide.client.renderer.gaze;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.gaze.ClientGazeChoiceController;
 import dev.marblegate.superpipeslide.client.core.gaze.ClientGazeChoiceController.ChoiceVisualState;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
@@ -352,6 +353,15 @@ public final class ClientGazeChoiceGeometryRenderer {
     }
 
     private static int colorWithState(int argb, ChoiceVisualState state, double focusProgress) {
+        if (ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return switch (state) {
+                case ACCEPTED -> 0xFFDFF6E8;
+                case REJECTED -> 0xFFF4D6CC;
+                case SUBMITTED, READY -> 0xFFF1F7FB;
+                case FOCUSED -> 0xFFE7F1F8;
+                case IDLE -> 0xD0D8E1EA;
+            };
+        }
         if (state == ChoiceVisualState.ACCEPTED) {
             return 0xFFE6FFF0;
         }
@@ -378,6 +388,9 @@ public final class ClientGazeChoiceGeometryRenderer {
     }
 
     private static int glowColor(ChoiceMesh choice) {
+        if (ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return withAlpha(choice.color(), 0x68);
+        }
         if (choice.visualState() == ChoiceVisualState.ACCEPTED) {
             return 0xD065FF9B;
         }
@@ -399,6 +412,9 @@ public final class ClientGazeChoiceGeometryRenderer {
     }
 
     private static int outlineAlpha(ChoiceMesh choice) {
+        if (ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return 0x7A;
+        }
         return switch (choice.visualState()) {
             case READY -> 0xD8;
             case FOCUSED -> 0xA0 + (int) Math.round(choice.focusProgress() * 48.0D);

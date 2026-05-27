@@ -2,9 +2,9 @@ package dev.marblegate.superpipeslide.client.renderer.slide;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideFeedbackController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlidePoseController;
-import dev.marblegate.superpipeslide.config.ClientConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.player.PlayerModel;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
@@ -62,6 +62,9 @@ public final class ClientSlideFeedbackPlayerRenderer {
     }
 
     public static void onComputeFov(ViewportEvent.ComputeFov event) {
+        if (ClientSafetyOptions.reduceMotionSicknessRisk()) {
+            return;
+        }
         Optional<ClientSlideFeedbackController.Frame> frame = ClientSlideFeedbackController.currentRenderFrame();
         if (frame.isEmpty()) {
             return;
@@ -70,7 +73,7 @@ public final class ClientSlideFeedbackPlayerRenderer {
     }
 
     public static void onComputeCameraAngles(ViewportEvent.ComputeCameraAngles event) {
-        if (!ClientConfig.ENABLE_SLIDE_CAMERA_FEEDBACK.get()) {
+        if (!ClientSafetyOptions.slideCameraFeedbackEnabled()) {
             return;
         }
         Optional<ClientSlideFeedbackController.Frame> frame = ClientSlideFeedbackController.currentRenderFrame();

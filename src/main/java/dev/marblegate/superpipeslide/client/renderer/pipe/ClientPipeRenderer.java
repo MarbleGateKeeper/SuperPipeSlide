@@ -20,6 +20,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeAppearanceCache;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.client.core.pipe.PipeCoatingRenderResolver;
+import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.common.core.appearance.coating.PipeCoatingSelection;
 import dev.marblegate.superpipeslide.common.core.appearance.model.PipeAppearanceProfile;
 import dev.marblegate.superpipeslide.common.core.appearance.storage.PipeAppearanceDefinitions;
@@ -407,10 +408,11 @@ public final class ClientPipeRenderer {
     private static void renderQuads(PoseStack.Pose pose, VertexConsumer buffer, List<TexturedQuad> quads, double animationTime, FrameLightSampler lightSampler) {
         for (TexturedQuad quad : quads) {
             int color = animatedMarkerColor(quad.color(), quad.animationKind(), quad.animationPhase(), animationTime);
-            addQuadVertex(pose, buffer, quad.a(), quad.u0(), quad.v0(), color, lightSampler.lightAt(quad.lightA(), quad.fullBright()), quad.normal());
-            addQuadVertex(pose, buffer, quad.b(), quad.u1(), quad.v0(), color, lightSampler.lightAt(quad.lightB(), quad.fullBright()), quad.normal());
-            addQuadVertex(pose, buffer, quad.c(), quad.u1(), quad.v1(), color, lightSampler.lightAt(quad.lightC(), quad.fullBright()), quad.normal());
-            addQuadVertex(pose, buffer, quad.d(), quad.u0(), quad.v1(), color, lightSampler.lightAt(quad.lightD(), quad.fullBright()), quad.normal());
+            boolean fullBright = quad.fullBright() && !ClientSafetyOptions.reducePhotosensitivityRisk();
+            addQuadVertex(pose, buffer, quad.a(), quad.u0(), quad.v0(), color, lightSampler.lightAt(quad.lightA(), fullBright), quad.normal());
+            addQuadVertex(pose, buffer, quad.b(), quad.u1(), quad.v0(), color, lightSampler.lightAt(quad.lightB(), fullBright), quad.normal());
+            addQuadVertex(pose, buffer, quad.c(), quad.u1(), quad.v1(), color, lightSampler.lightAt(quad.lightC(), fullBright), quad.normal());
+            addQuadVertex(pose, buffer, quad.d(), quad.u0(), quad.v1(), color, lightSampler.lightAt(quad.lightD(), fullBright), quad.normal());
         }
     }
 
@@ -428,6 +430,9 @@ public final class ClientPipeRenderer {
     }
 
     private static int animatedMarkerColor(int color, int animationKind, double phase, double time) {
+        if (ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return color;
+        }
         return switch (animationKind) {
             case MARKER_ANIMATION_ACCELERATION -> multiplyColor(color, 0.72D + 0.48D * impulseWave(time * 1.35D - phase));
             case MARKER_ANIMATION_HIGHWAY -> multiplyColor(color, 0.78D + 0.34D * softPulse(time * 0.66D - phase));
@@ -494,7 +499,7 @@ public final class ClientPipeRenderer {
         PipeVariantDefinition variant = PipeAppearanceDefinitions.variant(normalizedProfile.variantId()).orElse(PipeAppearanceDefinitions.defaultVariant());
         PipeStyleGeometry geometry = PipeStyleGeometry.resolve(style, variant, normalizedProfile.styleParameters());
         PipeSurfaceModel surfaceModel = PipeSurfaceModel.build(style.shape(), variant, geometry, lod);
-        boolean glow = normalizedProfile.glow();
+        boolean glow = normalizedProfile.glow() && !ClientSafetyOptions.reducePhotosensitivityRisk();
         Map<String, PipeCoatingRenderResolver.ResolvedPipeCoating> coatings = new LinkedHashMap<>();
         for (String slotId : surfaceModel.slotIds()) {
             PipeCoatingSelection selection = PipeAppearanceDefinitions.selectionFor(normalizedProfile, slotId);
@@ -1935,7 +1940,7 @@ public final class ClientPipeRenderer {
                 generatedTexture,
                 textureId,
                 translucent,
-                fullBright,
+                fullBright && !ClientSafetyOptions.reducePhotosensitivityRisk(),
                 cullBackFace,
                 animationKind,
                 animationPhase,

@@ -1,6 +1,7 @@
 package dev.marblegate.superpipeslide.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.fold.ClientFoldTraversalEffectController;
 import dev.marblegate.superpipeslide.client.core.gaze.ClientGazeChoiceController;
 import dev.marblegate.superpipeslide.client.core.navigation.ClientNavigationController;
@@ -146,6 +147,7 @@ public class SuperPipeSlideClient {
                 }
             }
             ClientNavigationController.tick(minecraft, player);
+            ClientSafetyOptions.tick();
             ClientSlideController.tick(minecraft, player);
             ClientFoldTraversalEffectController.tick(minecraft, player);
             ClientSlideFeedbackController.tick(minecraft, player);

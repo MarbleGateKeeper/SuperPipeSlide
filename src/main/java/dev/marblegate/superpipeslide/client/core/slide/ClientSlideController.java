@@ -1,5 +1,6 @@
 package dev.marblegate.superpipeslide.client.core.slide;
 
+import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.fold.ClientFoldTraversalEffectController;
 import dev.marblegate.superpipeslide.client.core.gaze.ClientGazeChoiceController;
 import dev.marblegate.superpipeslide.client.core.navigation.ClientNavigationController;
@@ -10,6 +11,7 @@ import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteHudSnapshot;
 import dev.marblegate.superpipeslide.client.core.route.RouteCandidate;
+import dev.marblegate.superpipeslide.client.gui.accessibility.SlideSafetyWarningScreen;
 import dev.marblegate.superpipeslide.client.core.sync.ClientDataResyncRequests;
 import dev.marblegate.superpipeslide.common.core.gaze.GazeChoice;
 import dev.marblegate.superpipeslide.common.core.gaze.GazeChoiceExpireCondition;
@@ -88,6 +90,7 @@ public final class ClientSlideController {
     private static final int DEFAULT_BRANCH_EXIT_COLOR = 0xFFD8F4FF;
     private static final int BRANCH_EXIT_COLOR = 0xFF80D8FF;
     private static final int ROUTE_COLOR = 0xFF7CCBFF;
+    private static final int SAFETY_PROMPT_COOLDOWN_TICKS = 20;
 
     @Nullable
     private static ClientSlideState active;
@@ -150,6 +153,9 @@ public final class ClientSlideController {
             return;
         }
 
+        if (minecraft.screen instanceof SlideSafetyWarningScreen) {
+            return;
+        }
         if (!wantsSneakExit(player) && !wantsJumpExit(player)) {
             tryCapture(player);
         }
@@ -495,6 +501,9 @@ public final class ClientSlideController {
             } else {
                 return;
             }
+        }
+        if (blockForInitialSafetyWarning(player, capturedConnection)) {
+            return;
         }
         StationEntryDecision stationDecision = platformStop.isPresent()
                 ? StationEntryPolicy.resolve(StationEntryMode.ACTIVE_BOARDING, candidates)
@@ -2248,6 +2257,21 @@ public final class ClientSlideController {
 
     private static boolean isCaptureSuppressedByCooldown() {
         return cooldown != null && cooldown.requireExit() && cooldown.ticks() > 0;
+    }
+
+    private static boolean blockForInitialSafetyWarning(LocalPlayer player, PipeConnection connection) {
+        if (ClientSafetyOptions.slideSafetyWarningAcknowledged()) {
+            return false;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.screen instanceof SlideSafetyWarningScreen) {
+            return true;
+        }
+        if (minecraft.screen != null) {
+            return true;
+        }
+        minecraft.setScreen(new SlideSafetyWarningScreen(() -> cooldown = new CaptureCooldown(connection.id(), SAFETY_PROMPT_COOLDOWN_TICKS, true)));
+        return true;
     }
 
     private static boolean isStillOnCooldownConnection(LocalPlayer player, UUID connectionId) {

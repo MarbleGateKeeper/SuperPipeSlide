@@ -2,6 +2,7 @@ package dev.marblegate.superpipeslide.client.renderer.navigation;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.navigation.ClientNavigationController;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import net.minecraft.client.Minecraft;
@@ -49,7 +50,7 @@ public final class ClientNavigationWorldHighlighter {
         poseStack.pushPose();
         poseStack.translate(-camera.x, -camera.y, -camera.z);
         renderData.target().ifPresent(target -> {
-            event.getSubmitNodeCollector().submitCustomGeometry(poseStack, RenderTypes.lightning(), (pose, buffer) -> renderTarget(pose, buffer, target, camera));
+            event.getSubmitNodeCollector().submitCustomGeometry(poseStack, RenderTypes.debugQuads(), (pose, buffer) -> renderTarget(pose, buffer, target, camera));
             renderTargetLabel(event, poseStack, target, camera);
         });
         poseStack.popPose();
@@ -62,10 +63,11 @@ public final class ClientNavigationWorldHighlighter {
         double distanceToCamera = Math.max(4.0D, camera.distanceTo(target.position()));
         double markerScale = markerScale(distanceToCamera);
         double distanceFade = Math.max(0.58D, Math.min(1.0D, 96.0D / Math.max(16.0D, distanceToCamera)));
+        boolean photic = ClientSafetyOptions.reducePhotosensitivityRisk();
         long now = System.currentTimeMillis();
-        double pulse = 0.5D + 0.5D * Math.sin(now / 230.0D);
-        int color = withAlpha(target.color(), (int) Math.round((0x86 + pulse * 0x48) * distanceFade));
-        int core = withAlpha(0xFFFFFFFF, (int) Math.round(0xD0 * distanceFade));
+        double pulse = photic ? 0.0D : 0.5D + 0.5D * Math.sin(now / 230.0D);
+        int color = withAlpha(target.color(), (int) Math.round((photic ? 0x6A : 0x86 + pulse * 0x48) * distanceFade));
+        int core = withAlpha(0xFFFFFFFF, (int) Math.round((photic ? 0x96 : 0xD0) * distanceFade));
         double baseRadius = switch (target.kind()) {
             case SAME_STATION_TRANSFER -> 0.72D;
             case OUT_OF_STATION_TRANSFER -> 0.80D;

@@ -15,6 +15,7 @@ import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTexture;
+import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.fold.ClientFoldTraversalEffectController;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import net.minecraft.client.renderer.DynamicUniformStorage;
@@ -70,6 +71,9 @@ public final class ClientFoldTraversalPostEffectRenderer {
     }
 
     public static void addToFrame(FrameGraphBuilder frame, LevelTargetBundle targets, int width, int height, CameraRenderState cameraState) {
+        if (ClientSafetyOptions.reduceMotionSicknessRisk() || ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return;
+        }
         if (width <= 0 || height <= 0) {
             return;
         }

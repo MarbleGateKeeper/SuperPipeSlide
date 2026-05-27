@@ -2,6 +2,7 @@ package dev.marblegate.superpipeslide.client.renderer.fold;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.fold.ClientFoldTraversalEffectController;
 import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
@@ -44,6 +45,9 @@ public final class ClientFoldTraversalEffectRenderer {
     }
 
     public static void submit(SubmitCustomGeometryEvent event) {
+        if (ClientSafetyOptions.reduceMotionSicknessRisk() || ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return;
+        }
         RenderData renderData = event.getLevelRenderState().getRenderData(RENDER_DATA);
         if (renderData == null || renderData.snapshot() == null) {
             return;
@@ -64,6 +68,9 @@ public final class ClientFoldTraversalEffectRenderer {
     }
 
     public static void renderOverlay(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
+        if (ClientSafetyOptions.reduceMotionSicknessRisk() || ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return;
+        }
         Optional<ClientFoldTraversalEffectController.Snapshot> snapshot = ClientFoldTraversalEffectController.snapshot();
         if (snapshot.isEmpty()) {
             return;
@@ -90,10 +97,16 @@ public final class ClientFoldTraversalEffectRenderer {
     }
 
     public static void onComputeFov(ViewportEvent.ComputeFov event) {
+        if (ClientSafetyOptions.reduceMotionSicknessRisk()) {
+            return;
+        }
         event.setFOV(event.getFOV() + (float) ClientFoldTraversalEffectController.fovOffset());
     }
 
     public static void onComputeCameraAngles(ViewportEvent.ComputeCameraAngles event) {
+        if (ClientSafetyOptions.reduceMotionSicknessRisk()) {
+            return;
+        }
         event.setRoll(event.getRoll() + (float) ClientFoldTraversalEffectController.cameraRollOffset());
     }
 
