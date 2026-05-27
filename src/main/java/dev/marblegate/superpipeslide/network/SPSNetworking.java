@@ -16,6 +16,7 @@ import dev.marblegate.superpipeslide.network.projection.ClientboundOpenProjectio
 import dev.marblegate.superpipeslide.network.projection.ServerboundProjectionLayoutDeletePayload;
 import dev.marblegate.superpipeslide.network.projection.ServerboundProjectionLayoutSavePayload;
 import dev.marblegate.superpipeslide.network.projection.ServerboundProjectionLayoutSelectPayload;
+import dev.marblegate.superpipeslide.network.route.ClientboundOpenFullRouteMapPayload;
 import dev.marblegate.superpipeslide.network.route.ClientboundOpenRouteEditorPayload;
 import dev.marblegate.superpipeslide.network.route.ServerboundRouteEditPayload;
 import dev.marblegate.superpipeslide.network.slide.ClientboundSlideNoticePayload;
@@ -69,6 +70,7 @@ public final class SPSNetworking {
                 .playToClient(ClientboundPlatformProjectorConfigPayload.TYPE, ClientboundPlatformProjectorConfigPayload.STREAM_CODEC)
                 .playToClient(ClientboundOpenProjectionLayoutDesignerPayload.TYPE, ClientboundOpenProjectionLayoutDesignerPayload.STREAM_CODEC)
                 .playToClient(ClientboundOpenPlatformEditorPayload.TYPE, ClientboundOpenPlatformEditorPayload.STREAM_CODEC)
+                .playToClient(ClientboundOpenFullRouteMapPayload.TYPE, ClientboundOpenFullRouteMapPayload.STREAM_CODEC)
                 .playToClient(ClientboundOpenRouteEditorPayload.TYPE, ClientboundOpenRouteEditorPayload.STREAM_CODEC)
                 .playToClient(ClientboundOpenFoldAnchorEditorPayload.TYPE, ClientboundOpenFoldAnchorEditorPayload.STREAM_CODEC)
                 .playToClient(ClientboundEditorResultPayload.TYPE, ClientboundEditorResultPayload.STREAM_CODEC)

@@ -38,6 +38,7 @@ public final class SPSCreativeTabs {
                 output.accept(SPSItems.STATION_BLOCK.get());
                 output.accept(SPSItems.PLATFORM_CLAIMER.get());
                 output.accept(SPSItems.ROUTE_EDITOR.get());
+                output.accept(SPSItems.PIPE_TRANSIT_GUIDE.get());
                 output.accept(SPSItems.PROJECTION_LAYOUT_DESIGNER.get());
                 output.accept(SPSItems.STATION_NAME_PROJECTOR.get());
                 output.accept(SPSItems.PLATFORM_PROJECTOR.get());

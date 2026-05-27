@@ -11,6 +11,7 @@ import dev.marblegate.superpipeslide.common.item.pipe.PipeConnectorItem;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeConnectorMode;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeRemoverItem;
 import dev.marblegate.superpipeslide.common.item.projection.ProjectionLayoutDesignerItem;
+import dev.marblegate.superpipeslide.common.item.route.PipeTransitGuideItem;
 import dev.marblegate.superpipeslide.common.item.route.PlatformClaimerItem;
 import dev.marblegate.superpipeslide.common.item.route.RouteEditorItem;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
@@ -163,6 +164,12 @@ public final class SPSItems {
     public static final DeferredItem<Item> ROUTE_EDITOR = ITEMS.registerItem(
             "route_editor",
             RouteEditorItem::new,
+            properties -> properties.stacksTo(1)
+    );
+
+    public static final DeferredItem<Item> PIPE_TRANSIT_GUIDE = ITEMS.registerItem(
+            "pipe_transit_guide",
+            PipeTransitGuideItem::new,
             properties -> properties.stacksTo(1)
     );
 

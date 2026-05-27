@@ -7,6 +7,7 @@ import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideNoticeController;
 import dev.marblegate.superpipeslide.client.core.sync.ClientDataResyncRequests;
+import dev.marblegate.superpipeslide.client.fullmap.screen.FullRouteMapScreen;
 import dev.marblegate.superpipeslide.client.gui.anchor.FoldAnchorEditorScreen;
 import dev.marblegate.superpipeslide.client.gui.base.RouteDataAwareScreen;
 import dev.marblegate.superpipeslide.client.gui.pipe.PipeAppearanceEditorScreen;
@@ -28,6 +29,7 @@ import dev.marblegate.superpipeslide.network.platform.ClientboundOpenPlatformEdi
 import dev.marblegate.superpipeslide.network.platform.ClientboundOpenPlatformProjectorPayload;
 import dev.marblegate.superpipeslide.network.platform.ClientboundPlatformProjectorConfigPayload;
 import dev.marblegate.superpipeslide.network.projection.ClientboundOpenProjectionLayoutDesignerPayload;
+import dev.marblegate.superpipeslide.network.route.ClientboundOpenFullRouteMapPayload;
 import dev.marblegate.superpipeslide.network.route.ClientboundOpenRouteEditorPayload;
 import dev.marblegate.superpipeslide.network.slide.ClientboundSlideNoticePayload;
 import dev.marblegate.superpipeslide.network.slide.ClientboundSlideTeleportCommitPayload;
@@ -80,6 +82,7 @@ public final class ClientNetworkHandlers {
         event.register(ClientboundPlatformProjectorConfigPayload.TYPE, ClientNetworkHandlers::handlePlatformProjectorConfig);
         event.register(ClientboundOpenProjectionLayoutDesignerPayload.TYPE, ClientNetworkHandlers::handleOpenProjectionLayoutDesigner);
         event.register(ClientboundOpenPlatformEditorPayload.TYPE, ClientNetworkHandlers::handleOpenPlatformEditor);
+        event.register(ClientboundOpenFullRouteMapPayload.TYPE, ClientNetworkHandlers::handleOpenFullRouteMap);
         event.register(ClientboundOpenRouteEditorPayload.TYPE, ClientNetworkHandlers::handleOpenRouteEditor);
         event.register(ClientboundOpenFoldAnchorEditorPayload.TYPE, ClientNetworkHandlers::handleOpenFoldAnchorEditor);
         event.register(ClientboundEditorResultPayload.TYPE, ClientNetworkHandlers::handleEditorResult);
@@ -212,6 +215,10 @@ public final class ClientNetworkHandlers {
 
     private static void handleOpenPlatformEditor(ClientboundOpenPlatformEditorPayload payload, IPayloadContext context) {
         Minecraft.getInstance().setScreen(new PlatformStopEditorScreen(payload.platformStopId()));
+    }
+
+    private static void handleOpenFullRouteMap(ClientboundOpenFullRouteMapPayload payload, IPayloadContext context) {
+        Minecraft.getInstance().setScreen(new FullRouteMapScreen());
     }
 
     private static void handleOpenRouteEditor(ClientboundOpenRouteEditorPayload payload, IPayloadContext context) {
