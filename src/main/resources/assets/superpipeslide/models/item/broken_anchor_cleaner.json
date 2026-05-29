@@ -2,7 +2,8 @@
 	"format_version": "1.21.11",
 	"credit": "Made with Blockbench",
 	"textures": {
-		"1": "superpipeslide:item/broken_anchor_cleaner"
+		"1": "superpipeslide:item/broken_anchor_cleaner",
+		"particle": "superpipeslide:item/broken_anchor_cleaner"
 	},
 	"elements": [
 		{

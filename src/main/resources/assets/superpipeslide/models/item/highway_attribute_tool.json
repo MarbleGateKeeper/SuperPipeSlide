@@ -3,7 +3,8 @@
   "credit": "Made with Blockbench",
   "texture_size": [32, 32],
   "textures": {
-    "1": "superpipeslide:item/highway_attribute_tool"
+    "1": "superpipeslide:item/highway_attribute_tool",
+    "particle": "superpipeslide:item/highway_attribute_tool"
   },
   "elements": [
     {

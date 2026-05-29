@@ -3,7 +3,8 @@
   "credit": "Made with Blockbench",
   "texture_size": [32, 32],
   "textures": {
-    "1": "superpipeslide:item/pipe_connector_auto_curve"
+    "1": "superpipeslide:item/pipe_connector_auto_curve",
+    "particle": "superpipeslide:item/pipe_connector_auto_curve"
   },
   "elements": [
     {
