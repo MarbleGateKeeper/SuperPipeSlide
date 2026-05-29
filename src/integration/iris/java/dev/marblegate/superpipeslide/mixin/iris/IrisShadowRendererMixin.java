@@ -24,7 +24,7 @@ public abstract class IrisShadowRendererMixin {
             ),
             require = 0
     )
-    private void superpipeslide$renderPipeExternalShadows(@Coerce Object levelRendererAccessor, Camera camera, CameraRenderState cameraRenderState, CallbackInfo callbackInfo) {
-        ClientPipeRenderer.renderExternalShadowPass(camera);
+    private void superpipeslide$renderPipeExternalShadows(@Coerce Object levelRenderer, Camera playerCamera, CameraRenderState renderState, CallbackInfo callbackInfo) {
+        ClientPipeRenderer.renderExternalShadowPass(playerCamera);
     }
 }

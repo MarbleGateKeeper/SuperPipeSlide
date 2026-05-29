@@ -1,7 +1,7 @@
 package dev.marblegate.superpipeslide.mixin.client;
 
+import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.framegraph.FrameGraphBuilder;
-import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
 import dev.marblegate.superpipeslide.client.renderer.fold.ClientFoldTraversalPostEffectRenderer;
 import dev.marblegate.superpipeslide.client.renderer.pipe.ClientPipeRenderer;
 import net.minecraft.client.Minecraft;
@@ -13,7 +13,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(LevelRenderer.class)
@@ -30,14 +29,14 @@ public abstract class LevelRendererMixin {
     @Final
     LevelRenderState levelRenderState;
 
-    @Redirect(
+    @Inject(
             method = "renderLevel",
             at = @At(
                     value = "INVOKE",
                     target = "Lcom/mojang/blaze3d/framegraph/FrameGraphBuilder;execute(Lcom/mojang/blaze3d/resource/GraphicsResourceAllocator;Lcom/mojang/blaze3d/framegraph/FrameGraphBuilder$Inspector;)V"
             )
     )
-    private void superpipeslide$addFoldTraversalPostEffect(FrameGraphBuilder frame, GraphicsResourceAllocator resourceAllocator, FrameGraphBuilder.Inspector inspector) {
+    private void superpipeslide$addFoldTraversalPostEffect(CallbackInfo callbackInfo, @Local(name = "frame") FrameGraphBuilder frame) {
         ClientFoldTraversalPostEffectRenderer.addToFrame(
                 frame,
                 this.targets,
@@ -45,7 +44,6 @@ public abstract class LevelRendererMixin {
                 this.minecraft.getMainRenderTarget().height,
                 this.levelRenderState.cameraRenderState
         );
-        frame.execute(resourceAllocator, inspector);
     }
 
     @Inject(method = "setSectionDirty(IIIZ)V", at = @At("HEAD"))
