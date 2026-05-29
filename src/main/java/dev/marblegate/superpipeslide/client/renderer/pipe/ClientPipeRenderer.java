@@ -243,6 +243,10 @@ public final class ClientPipeRenderer {
         refreshGpuRenderProfile();
     }
 
+    public static PipeRenderExtension activeRenderExtension() {
+        return renderExtension;
+    }
+
     public static void registerPipelines(RegisterRenderPipelinesEvent event) {
         event.registerPipeline(PIPE_ENTITY_CUTOUT_PIPELINE);
         event.registerPipeline(PIPE_ENTITY_CUTOUT_CULL_PIPELINE);
@@ -354,6 +358,50 @@ public final class ClientPipeRenderer {
         renderGpuSections(event, true, false);
     }
 
+    public static void drawExternalShadowPass(PipeRenderExtension extension, Camera camera) {
+        if (!extension.isRenderingShadowPass()) {
+            return;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        ClientLevel level = minecraft.level;
+        if (level == null) {
+            return;
+        }
+
+        refreshGpuRenderProfile();
+        prepareRenderCache(level);
+        Vec3 cameraPos = camera.position();
+        Vec3 shadowCameraPos = extension.shadowCameraPosition(cameraPos);
+        double renderRadius = extension.shadowRenderRadiusBlocks(pipeRenderRadius());
+        prepareSectionCache(level, shadowCameraPos, renderRadius);
+        refreshSkyLightEpoch(level);
+
+        Frustum shadowFrustum = extension.shadowFrustum();
+        FrameLightSampler lightSampler = new FrameLightSampler(level);
+        Matrix4fStack modelViewStack = RenderSystem.getModelViewStack();
+        modelViewStack.pushMatrix();
+        try (PipeRenderExtension.Scope shadowViewScope = extension.shadowModelView()) {
+            for (PipeSectionState section : SECTION_CACHE.values()) {
+                if (!isPotentiallyVisible(section.bounds(), shadowCameraPos, renderRadius, shadowFrustum)) {
+                    continue;
+                }
+                int lod = lodFor(section.sectionKey(), section.bounds(), shadowCameraPos);
+                PipeSectionLodState lodState = section.ensureLod(lod);
+                if (lodState.isEmpty()) {
+                    continue;
+                }
+                lodState.ensureGpuUploaded(lightSampler);
+                PipeGpuBatches.DrawStats stats = lodState.gpuBatches().drawShadow(shadowCameraPos);
+                if (stats.drew() && !loggedExternalShadowDraw) {
+                    loggedExternalShadowDraw = true;
+                    SuperPipeSlide.LOGGER.info("Drew SuperPipeSlide external-pipeline shadow pipe batches: batches={}, indices={}", stats.batches(), stats.indices());
+                }
+            }
+        } finally {
+            modelViewStack.popMatrix();
+        }
+    }
+
     private static void renderGpuSections(RenderLevelStageEvent event, boolean translucent, boolean setupLevelLighting) {
         refreshGpuRenderProfile();
         RenderData renderData = event.getLevelRenderState().getRenderData(RENDER_DATA);
@@ -384,50 +432,6 @@ public final class ClientPipeRenderer {
                 if (renderExtension.isExternalPipelineActive() && stats.drew() && !loggedExternalGpuDraw) {
                     loggedExternalGpuDraw = true;
                     SuperPipeSlide.LOGGER.info("Drew SuperPipeSlide external-pipeline pipe batches: translucent={}, batches={}, indices={}, gpuSections={}", translucent, stats.batches(), stats.indices(), renderData.gpuSections().size());
-                }
-            }
-        } finally {
-            modelViewStack.popMatrix();
-        }
-    }
-
-    public static void renderExternalShadowPass(Camera camera) {
-        if (!renderExtension.isRenderingShadowPass()) {
-            return;
-        }
-        Minecraft minecraft = Minecraft.getInstance();
-        ClientLevel level = minecraft.level;
-        if (level == null) {
-            return;
-        }
-
-        refreshGpuRenderProfile();
-        prepareRenderCache(level);
-        Vec3 cameraPos = camera.position();
-        Vec3 shadowCameraPos = renderExtension.shadowCameraPosition(cameraPos);
-        double renderRadius = renderExtension.shadowRenderRadiusBlocks(pipeRenderRadius());
-        prepareSectionCache(level, shadowCameraPos, renderRadius);
-        refreshSkyLightEpoch(level);
-
-        Frustum shadowFrustum = renderExtension.shadowFrustum();
-        FrameLightSampler lightSampler = new FrameLightSampler(level);
-        Matrix4fStack modelViewStack = RenderSystem.getModelViewStack();
-        modelViewStack.pushMatrix();
-        try (PipeRenderExtension.Scope shadowViewScope = renderExtension.shadowModelView()) {
-            for (PipeSectionState section : SECTION_CACHE.values()) {
-                if (!isPotentiallyVisible(section.bounds(), shadowCameraPos, renderRadius, shadowFrustum)) {
-                    continue;
-                }
-                int lod = lodFor(section.sectionKey(), section.bounds(), shadowCameraPos);
-                PipeSectionLodState lodState = section.ensureLod(lod);
-                if (lodState.isEmpty()) {
-                    continue;
-                }
-                lodState.ensureGpuUploaded(lightSampler);
-                PipeGpuBatches.DrawStats stats = lodState.gpuBatches().drawShadow(shadowCameraPos);
-                if (stats.drew() && !loggedExternalShadowDraw) {
-                    loggedExternalShadowDraw = true;
-                    SuperPipeSlide.LOGGER.info("Drew SuperPipeSlide external-pipeline shadow pipe batches: batches={}, indices={}", stats.batches(), stats.indices());
                 }
             }
         } finally {
@@ -2102,6 +2106,9 @@ public final class ClientPipeRenderer {
 
         default boolean isRenderingShadowPass() {
             return false;
+        }
+
+        default void renderExternalShadowPass(Camera camera) {
         }
 
         default boolean isExternalPipelineActive() {

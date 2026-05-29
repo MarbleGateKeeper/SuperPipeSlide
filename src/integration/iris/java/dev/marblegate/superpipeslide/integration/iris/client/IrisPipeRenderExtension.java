@@ -14,6 +14,7 @@ import net.irisshaders.iris.shadows.ShadowRenderer;
 import net.irisshaders.iris.shadows.ShadowRenderingState;
 import net.irisshaders.iris.uniforms.CameraUniforms;
 import net.irisshaders.iris.vertices.ImmediateState;
+import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.world.phys.Vec3;
@@ -85,6 +86,11 @@ public final class IrisPipeRenderExtension implements ClientPipeRenderer.PipeRen
             warn("query Iris shadow pass state", exception);
             return false;
         }
+    }
+
+    @Override
+    public void renderExternalShadowPass(Camera camera) {
+        ClientPipeRenderer.drawExternalShadowPass(this, camera);
     }
 
     @Override
