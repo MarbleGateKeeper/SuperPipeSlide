@@ -4,7 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.font.TextRenderable;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.network.chat.Component;
@@ -67,12 +67,12 @@ public final class ProjectionWorldTextRenderer {
         poseStack.pushPose();
         poseStack.translate(x, topY, 0.0F);
         poseStack.scale(scale, -scale, scale);
-        for (Map.Entry<RenderType, List<TextRenderable>> entry : prepared.byType().entrySet()) {
-            List<TextRenderable> typedRenderables = entry.getValue();
+        for (Map.Entry<RenderType, List<GlyphVertex>> entry : prepared.byType().entrySet()) {
+            List<GlyphVertex> typedVertices = entry.getValue();
             ClientRenderCompatibility.submitCustomGeometry(collector, poseStack, ClientRenderCompatibility.text(entry.getKey()), (pose, buffer) -> {
                 ClippedTextVertexConsumer clipped = new ClippedTextVertexConsumer(buffer, pose.pose(), localClip, minX, maxX, canvasClip, worldToCanvas, canvasMinX, canvasMinY, canvasMaxX, canvasMaxY);
-                for (TextRenderable renderable : typedRenderables) {
-                    renderable.render(IDENTITY_POSE, clipped, LightCoordsUtil.FULL_BRIGHT, false);
+                for (GlyphVertex vertex : typedVertices) {
+                    vertex.emitTo(clipped);
                 }
             });
         }
@@ -87,25 +87,11 @@ public final class ProjectionWorldTextRenderer {
                 return cached;
             }
         }
-        List<TextRenderable> renderables = new ArrayList<>();
-        Font.PreparedText prepared = font.prepareText(Component.literal(text).getVisualOrderText(), 0.0F, 0.0F, color, shadow, false, 0);
-        prepared.visit(new Font.GlyphVisitor() {
-            @Override
-            public void acceptGlyph(TextRenderable.Styled glyph) {
-                renderables.add(glyph);
-            }
-
-            @Override
-            public void acceptEffect(TextRenderable effect) {
-                renderables.add(effect);
-            }
-        });
-        Map<RenderType, List<TextRenderable>> byType = new LinkedHashMap<>();
-        for (TextRenderable renderable : renderables) {
-            byType.computeIfAbsent(renderable.renderType(Font.DisplayMode.NORMAL, false), ignored -> new ArrayList<>()).add(renderable);
-        }
-        Map<RenderType, List<TextRenderable>> immutable = new LinkedHashMap<>();
-        for (Map.Entry<RenderType, List<TextRenderable>> entry : byType.entrySet()) {
+        TextCaptureBufferSource bufferSource = new TextCaptureBufferSource();
+        font.drawInBatch(Component.literal(text).getVisualOrderText(), 0.0F, 0.0F, color, shadow, IDENTITY_POSE, bufferSource, Font.DisplayMode.NORMAL, 0, LightCoordsUtil.FULL_BRIGHT);
+        Map<RenderType, List<GlyphVertex>> immutable = new LinkedHashMap<>();
+        Map<RenderType, List<GlyphVertex>> byType = bufferSource.verticesByType();
+        for (Map.Entry<RenderType, List<GlyphVertex>> entry : byType.entrySet()) {
             immutable.put(entry.getKey(), List.copyOf(entry.getValue()));
         }
         PreparedTextBatch batch = new PreparedTextBatch(java.util.Collections.unmodifiableMap(immutable));
@@ -127,44 +113,32 @@ public final class ProjectionWorldTextRenderer {
         }
     }
 
-    private static final class ClippedTextVertexConsumer implements VertexConsumer {
-        private final VertexConsumer delegate;
-        private final Matrix4fc transform;
-        private final boolean localClip;
-        private final float minX;
-        private final float maxX;
-        private final boolean canvasClip;
-        private final Matrix4fc worldToCanvas;
-        private final float canvasMinX;
-        private final float canvasMinY;
-        private final float canvasMaxX;
-        private final float canvasMaxY;
-        private final GlyphVertex[] quad = new GlyphVertex[] {
-                new GlyphVertex(), new GlyphVertex(), new GlyphVertex(), new GlyphVertex()
-        };
-        private final Vector3f transformed = new Vector3f();
-        private final Vector3f canvasPoint = new Vector3f();
-        private GlyphVertex current;
-        private int vertexCount;
+    private static final class TextCaptureBufferSource implements MultiBufferSource {
+        private final Map<RenderType, CapturingTextVertexConsumer> buffers = new LinkedHashMap<>();
 
-        private ClippedTextVertexConsumer(VertexConsumer delegate, Matrix4fc transform, boolean localClip, float minX, float maxX,
-                boolean canvasClip, Matrix4fc worldToCanvas, float canvasMinX, float canvasMinY, float canvasMaxX, float canvasMaxY) {
-            this.delegate = delegate;
-            this.transform = transform;
-            this.localClip = localClip;
-            this.minX = minX;
-            this.maxX = maxX;
-            this.canvasClip = canvasClip;
-            this.worldToCanvas = worldToCanvas;
-            this.canvasMinX = canvasMinX;
-            this.canvasMinY = canvasMinY;
-            this.canvasMaxX = canvasMaxX;
-            this.canvasMaxY = canvasMaxY;
+        @Override
+        public VertexConsumer getBuffer(RenderType renderType) {
+            return this.buffers.computeIfAbsent(renderType, ignored -> new CapturingTextVertexConsumer());
         }
+
+        private Map<RenderType, List<GlyphVertex>> verticesByType() {
+            Map<RenderType, List<GlyphVertex>> result = new LinkedHashMap<>();
+            for (Map.Entry<RenderType, CapturingTextVertexConsumer> entry : this.buffers.entrySet()) {
+                if (!entry.getValue().vertices().isEmpty()) {
+                    result.put(entry.getKey(), entry.getValue().vertices());
+                }
+            }
+            return result;
+        }
+    }
+
+    private static class TextVertexConsumerBase implements VertexConsumer {
+        private final Vector3f transformedPosition = new Vector3f();
+        protected GlyphVertex current;
 
         @Override
         public VertexConsumer addVertex(float x, float y, float z) {
-            this.current = this.quad[this.vertexCount % 4];
+            this.current = new GlyphVertex();
             this.current.x = x;
             this.current.y = y;
             this.current.z = z;
@@ -179,7 +153,16 @@ public final class ProjectionWorldTextRenderer {
 
         @Override
         public VertexConsumer addVertex(Matrix4fc pose, float x, float y, float z) {
-            return this.addVertex(x, y, z);
+            this.addVertex(x, y, z);
+            if (this.current != null) {
+                pose.transformPosition(x, y, z, this.transformedPosition);
+                this.current.x = this.transformedPosition.x();
+                this.current.y = this.transformedPosition.y();
+                this.current.z = this.transformedPosition.z();
+                this.current.clipX = this.transformedPosition.x();
+                this.current.clipY = this.transformedPosition.y();
+            }
+            return this;
         }
 
         @Override
@@ -231,12 +214,83 @@ public final class ProjectionWorldTextRenderer {
             return this;
         }
 
-        private void finishVertex() {
+        protected void finishVertex() {
+            this.current = null;
+        }
+    }
+
+    private static final class CapturingTextVertexConsumer extends TextVertexConsumerBase {
+        private final List<GlyphVertex> vertices = new ArrayList<>();
+
+        private List<GlyphVertex> vertices() {
+            return this.vertices;
+        }
+
+        @Override
+        protected void finishVertex() {
+            if (this.current != null) {
+                this.vertices.add(this.current.copy());
+            }
+            super.finishVertex();
+        }
+    }
+
+    private static final class ClippedTextVertexConsumer extends TextVertexConsumerBase {
+        private final VertexConsumer delegate;
+        private final Matrix4fc transform;
+        private final boolean localClip;
+        private final float minX;
+        private final float maxX;
+        private final boolean canvasClip;
+        private final Matrix4fc worldToCanvas;
+        private final float canvasMinX;
+        private final float canvasMinY;
+        private final float canvasMaxX;
+        private final float canvasMaxY;
+        private final GlyphVertex[] quad = new GlyphVertex[] {
+                new GlyphVertex(), new GlyphVertex(), new GlyphVertex(), new GlyphVertex()
+        };
+        private final Vector3f transformed = new Vector3f();
+        private final Vector3f canvasPoint = new Vector3f();
+        private int vertexCount;
+
+        private ClippedTextVertexConsumer(VertexConsumer delegate, Matrix4fc transform, boolean localClip, float minX, float maxX,
+                boolean canvasClip, Matrix4fc worldToCanvas, float canvasMinX, float canvasMinY, float canvasMaxX, float canvasMaxY) {
+            this.delegate = delegate;
+            this.transform = transform;
+            this.localClip = localClip;
+            this.minX = minX;
+            this.maxX = maxX;
+            this.canvasClip = canvasClip;
+            this.worldToCanvas = worldToCanvas;
+            this.canvasMinX = canvasMinX;
+            this.canvasMinY = canvasMinY;
+            this.canvasMaxX = canvasMaxX;
+            this.canvasMaxY = canvasMaxY;
+        }
+
+        @Override
+        public VertexConsumer addVertex(float x, float y, float z) {
+            this.current = this.quad[this.vertexCount % 4];
+            this.current.x = x;
+            this.current.y = y;
+            this.current.z = z;
+            this.current.clipX = x;
+            this.current.clipY = y;
+            this.current.color = 0xFFFFFFFF;
+            this.current.u = 0.0F;
+            this.current.v = 0.0F;
+            this.current.light = LightCoordsUtil.FULL_BRIGHT;
+            return this;
+        }
+
+        @Override
+        protected void finishVertex() {
             this.vertexCount++;
             if (this.vertexCount % 4 == 0) {
                 this.flushQuad();
             }
-            this.current = null;
+            super.finishVertex();
         }
 
         private void flushQuad() {
@@ -413,7 +467,7 @@ public final class ProjectionWorldTextRenderer {
         }
     }
 
-    private record PreparedTextBatch(Map<RenderType, List<TextRenderable>> byType) {
+    private record PreparedTextBatch(Map<RenderType, List<GlyphVertex>> byType) {
         private boolean empty() {
             return this.byType.isEmpty();
         }
@@ -452,6 +506,13 @@ public final class ProjectionWorldTextRenderer {
             copy.clipX = clipX;
             copy.clipY = clipY;
             return copy;
+        }
+
+        private void emitTo(VertexConsumer consumer) {
+            consumer.addVertex(this.x, this.y, this.z)
+                    .setColor(this.color)
+                    .setUv(this.u, this.v)
+                    .setLight(this.light);
         }
     }
 }
