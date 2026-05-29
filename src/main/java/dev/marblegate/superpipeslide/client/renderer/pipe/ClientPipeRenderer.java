@@ -7,6 +7,7 @@ import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.platform.CompareOp;
 import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -181,6 +182,37 @@ public final class ClientPipeRenderer {
             .withShaderDefine("ALPHA_CUTOUT", 0.1F)
             .withSampler("Sampler1")
             .build();
+    private static final RenderPipeline PIPE_ENTITY_CUTOUT_EMISSIVE_PIPELINE = RenderPipeline.builder(RenderPipelines.ENTITY_EMISSIVE_SNIPPET)
+            .withLocation(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "pipeline/pipe_entity_cutout_emissive"))
+            .withVertexShader(PIPE_ENTITY_SHADER)
+            .withFragmentShader(PIPE_ENTITY_SHADER)
+            .withShaderDefine("ALPHA_CUTOUT", 0.1F)
+            .withShaderDefine("EMISSIVE")
+            .withShaderDefine("NO_CARDINAL_LIGHTING")
+            .withSampler("Sampler1")
+            .withCull(false)
+            .build();
+    private static final RenderPipeline PIPE_ENTITY_CUTOUT_CULL_EMISSIVE_PIPELINE = RenderPipeline.builder(RenderPipelines.ENTITY_EMISSIVE_SNIPPET)
+            .withLocation(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "pipeline/pipe_entity_cutout_cull_emissive"))
+            .withVertexShader(PIPE_ENTITY_SHADER)
+            .withFragmentShader(PIPE_ENTITY_SHADER)
+            .withShaderDefine("ALPHA_CUTOUT", 0.1F)
+            .withShaderDefine("EMISSIVE")
+            .withShaderDefine("NO_CARDINAL_LIGHTING")
+            .withSampler("Sampler1")
+            .build();
+    private static final RenderPipeline PIPE_ENTITY_TRANSLUCENT_EMISSIVE_PIPELINE = RenderPipeline.builder(RenderPipelines.ENTITY_EMISSIVE_SNIPPET)
+            .withLocation(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "pipeline/pipe_entity_translucent_emissive"))
+            .withVertexShader(PIPE_ENTITY_SHADER)
+            .withFragmentShader(PIPE_ENTITY_SHADER)
+            .withShaderDefine("ALPHA_CUTOUT", 0.1F)
+            .withShaderDefine("EMISSIVE")
+            .withShaderDefine("NO_CARDINAL_LIGHTING")
+            .withSampler("Sampler1")
+            .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+            .withCull(false)
+            .withDepthStencilState(new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, false))
+            .build();
     private static final RenderPipeline PIPE_ENTITY_TRANSLUCENT_PIPELINE = RenderPipeline.builder(RenderPipelines.ENTITY_SNIPPET)
             .withLocation(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "pipeline/pipe_entity_translucent"))
             .withVertexShader(PIPE_ENTITY_SHADER)
@@ -194,10 +226,16 @@ public final class ClientPipeRenderer {
             .build();
     private static final RenderType PIPE_ATLAS_CUTOUT = pipeCutout(TextureAtlas.LOCATION_BLOCKS);
     private static final RenderType PIPE_ATLAS_CUTOUT_CULL = pipeCutoutCull(TextureAtlas.LOCATION_BLOCKS);
+    private static final RenderType PIPE_ATLAS_CUTOUT_EMISSIVE = pipeCutoutEmissive(TextureAtlas.LOCATION_BLOCKS);
+    private static final RenderType PIPE_ATLAS_CUTOUT_CULL_EMISSIVE = pipeCutoutCullEmissive(TextureAtlas.LOCATION_BLOCKS);
     private static final RenderType PIPE_ATLAS_TRANSLUCENT = pipeTranslucent(TextureAtlas.LOCATION_BLOCKS);
+    private static final RenderType PIPE_ATLAS_TRANSLUCENT_EMISSIVE = pipeTranslucentEmissive(TextureAtlas.LOCATION_BLOCKS);
     private static final Map<Identifier, RenderType> PIPE_GENERATED_CUTOUT = new LinkedHashMap<>();
     private static final Map<Identifier, RenderType> PIPE_GENERATED_CUTOUT_CULL = new LinkedHashMap<>();
+    private static final Map<Identifier, RenderType> PIPE_GENERATED_CUTOUT_EMISSIVE = new LinkedHashMap<>();
+    private static final Map<Identifier, RenderType> PIPE_GENERATED_CUTOUT_CULL_EMISSIVE = new LinkedHashMap<>();
     private static final Map<Identifier, RenderType> PIPE_GENERATED_TRANSLUCENT = new LinkedHashMap<>();
+    private static final Map<Identifier, RenderType> PIPE_GENERATED_TRANSLUCENT_EMISSIVE = new LinkedHashMap<>();
     private static final PipeRenderExtension.Scope NOOP_SCOPE = () -> {
     };
     private static volatile PipeRenderExtension renderExtension = PipeRenderExtension.NONE;
@@ -250,6 +288,9 @@ public final class ClientPipeRenderer {
     public static void registerPipelines(RegisterRenderPipelinesEvent event) {
         event.registerPipeline(PIPE_ENTITY_CUTOUT_PIPELINE);
         event.registerPipeline(PIPE_ENTITY_CUTOUT_CULL_PIPELINE);
+        event.registerPipeline(PIPE_ENTITY_CUTOUT_EMISSIVE_PIPELINE);
+        event.registerPipeline(PIPE_ENTITY_CUTOUT_CULL_EMISSIVE_PIPELINE);
+        event.registerPipeline(PIPE_ENTITY_TRANSLUCENT_EMISSIVE_PIPELINE);
         event.registerPipeline(PIPE_ENTITY_TRANSLUCENT_PIPELINE);
         renderExtension.registerPipelines(event);
     }
@@ -260,6 +301,18 @@ public final class ClientPipeRenderer {
 
     public static RenderPipeline pipeEntityCutoutCullPipeline() {
         return PIPE_ENTITY_CUTOUT_CULL_PIPELINE;
+    }
+
+    public static RenderPipeline pipeEntityCutoutEmissivePipeline() {
+        return PIPE_ENTITY_CUTOUT_EMISSIVE_PIPELINE;
+    }
+
+    public static RenderPipeline pipeEntityCutoutCullEmissivePipeline() {
+        return PIPE_ENTITY_CUTOUT_CULL_EMISSIVE_PIPELINE;
+    }
+
+    public static RenderPipeline pipeEntityTranslucentEmissivePipeline() {
+        return PIPE_ENTITY_TRANSLUCENT_EMISSIVE_PIPELINE;
     }
 
     public static RenderPipeline pipeEntityTranslucentPipeline() {
@@ -329,20 +382,38 @@ public final class ClientPipeRenderer {
         if (!frame.atlasBatches().isEmpty()) {
             ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, PIPE_ATLAS_CUTOUT, (pose, buffer) -> renderQuadBatches(pose, buffer, frame.atlasBatches(), animationTime, lightSampler));
         }
+        if (!frame.emissiveAtlasBatches().isEmpty()) {
+            ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, PIPE_ATLAS_CUTOUT_EMISSIVE, (pose, buffer) -> renderQuadBatches(pose, buffer, frame.emissiveAtlasBatches(), animationTime, lightSampler));
+        }
         if (!frame.culledAtlasBatches().isEmpty()) {
             ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, PIPE_ATLAS_CUTOUT_CULL, (pose, buffer) -> renderQuadBatches(pose, buffer, frame.culledAtlasBatches(), animationTime, lightSampler));
+        }
+        if (!frame.emissiveCulledAtlasBatches().isEmpty()) {
+            ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, PIPE_ATLAS_CUTOUT_CULL_EMISSIVE, (pose, buffer) -> renderQuadBatches(pose, buffer, frame.emissiveCulledAtlasBatches(), animationTime, lightSampler));
         }
         for (Map.Entry<Identifier, List<List<TexturedQuad>>> entry : frame.generatedBatches().entrySet()) {
             ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, generatedPipeCutout(entry.getKey()), (pose, buffer) -> renderQuadBatches(pose, buffer, entry.getValue(), animationTime, lightSampler));
         }
+        for (Map.Entry<Identifier, List<List<TexturedQuad>>> entry : frame.emissiveGeneratedBatches().entrySet()) {
+            ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, generatedPipeCutoutEmissive(entry.getKey()), (pose, buffer) -> renderQuadBatches(pose, buffer, entry.getValue(), animationTime, lightSampler));
+        }
         for (Map.Entry<Identifier, List<List<TexturedQuad>>> entry : frame.culledGeneratedBatches().entrySet()) {
             ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, generatedPipeCutoutCull(entry.getKey()), (pose, buffer) -> renderQuadBatches(pose, buffer, entry.getValue(), animationTime, lightSampler));
+        }
+        for (Map.Entry<Identifier, List<List<TexturedQuad>>> entry : frame.emissiveCulledGeneratedBatches().entrySet()) {
+            ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, generatedPipeCutoutCullEmissive(entry.getKey()), (pose, buffer) -> renderQuadBatches(pose, buffer, entry.getValue(), animationTime, lightSampler));
         }
         if (!frame.translucentAtlasBatches().isEmpty()) {
             ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, PIPE_ATLAS_TRANSLUCENT, (pose, buffer) -> renderQuadBatches(pose, buffer, frame.translucentAtlasBatches(), animationTime, lightSampler));
         }
+        if (!frame.emissiveTranslucentAtlasBatches().isEmpty()) {
+            ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, PIPE_ATLAS_TRANSLUCENT_EMISSIVE, (pose, buffer) -> renderQuadBatches(pose, buffer, frame.emissiveTranslucentAtlasBatches(), animationTime, lightSampler));
+        }
         for (Map.Entry<Identifier, List<List<TexturedQuad>>> entry : frame.translucentGeneratedBatches().entrySet()) {
             ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, generatedPipeTranslucent(entry.getKey()), (pose, buffer) -> renderQuadBatches(pose, buffer, entry.getValue(), animationTime, lightSampler));
+        }
+        for (Map.Entry<Identifier, List<List<TexturedQuad>>> entry : frame.emissiveTranslucentGeneratedBatches().entrySet()) {
+            ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, generatedPipeTranslucentEmissive(entry.getKey()), (pose, buffer) -> renderQuadBatches(pose, buffer, entry.getValue(), animationTime, lightSampler));
         }
         if (!renderData.lines().isEmpty()) {
             ClientRenderCompatibility.submitCustomGeometry(event.getSubmitNodeCollector(), poseStack, RenderTypes.lines(), (pose, buffer) -> renderLines(pose, buffer, renderData.lines()));
@@ -511,7 +582,7 @@ public final class ClientPipeRenderer {
         boolean photic = ClientSafetyOptions.reducePhotosensitivityRisk();
         for (TexturedQuad quad : quads) {
             int color = animatedMarkerColor(quad.color(), quad.animationKind(), quad.animationPhase(), animationTime, photic);
-            boolean fullBright = quad.fullBright() && !photic;
+            boolean fullBright = (quad.fullBright() || quad.emissive()) && !photic;
             addQuadVertex(pose, buffer, quad.a(), quad.u0(), quad.v0(), color, lightSampler.lightAt(quad.lightA(), fullBright), quad.normal());
             addQuadVertex(pose, buffer, quad.b(), quad.u1(), quad.v0(), color, lightSampler.lightAt(quad.lightB(), fullBright), quad.normal());
             addQuadVertex(pose, buffer, quad.c(), quad.u1(), quad.v1(), color, lightSampler.lightAt(quad.lightC(), fullBright), quad.normal());
@@ -1104,7 +1175,8 @@ public final class ClientPipeRenderer {
         double v0World = vStartWorld / PIPE_TEXTURE_TILE_V_BLOCKS;
         double v1World = vEndWorld / PIPE_TEXTURE_TILE_V_BLOCKS;
         double vBase = Math.floor(v0World);
-        quads.add(texturedQuad(
+        quads.add(glow
+                ? emissiveTexturedQuad(
                 a,
                 b,
                 c,
@@ -1118,7 +1190,25 @@ public final class ClientPipeRenderer {
                 coating.generatedTexture(),
                 coating.textureId(),
                 coating.translucent(),
-                glow,
+                false,
+                MARKER_ANIMATION_NONE,
+                0.0D
+        )
+                : texturedQuad(
+                a,
+                b,
+                c,
+                d,
+                coating.u(SURFACE_TILE_UV_INSET),
+                coating.u(tileFraction(uSpan, 0.0D)),
+                coating.v(tileFraction(v0World, vBase)),
+                coating.v(tileFraction(v1World, vBase)),
+                color,
+                normal,
+                coating.generatedTexture(),
+                coating.textureId(),
+                coating.translucent(),
+                false,
                 false,
                 MARKER_ANIMATION_NONE,
                 0.0D
@@ -1599,7 +1689,9 @@ public final class ClientPipeRenderer {
                 float spriteV0 = coating.v(tileFraction(cursorV, vBase));
                 float spriteV1 = coating.v(tileFraction(nextV, vBase));
                 Vec3 normal = quadNormal(aa, bb, dd);
-                quads.add(texturedQuad(aa, bb, cc, dd, spriteU0, spriteU1, spriteV0, spriteV1, color, normal, coating.generatedTexture(), coating.textureId(), coating.translucent(), fullBright, cullBackFace, MARKER_ANIMATION_NONE, 0.0D));
+                quads.add(fullBright
+                        ? emissiveTexturedQuad(aa, bb, cc, dd, spriteU0, spriteU1, spriteV0, spriteV1, color, normal, coating.generatedTexture(), coating.textureId(), coating.translucent(), cullBackFace, MARKER_ANIMATION_NONE, 0.0D)
+                        : texturedQuad(aa, bb, cc, dd, spriteU0, spriteU1, spriteV0, spriteV1, color, normal, coating.generatedTexture(), coating.textureId(), coating.translucent(), false, cullBackFace, MARKER_ANIMATION_NONE, 0.0D));
                 cursorV = nextV;
             }
             cursorU = nextU;
@@ -2034,6 +2126,15 @@ public final class ClientPipeRenderer {
     }
 
     private static TexturedQuad texturedQuad(Vec3 a, Vec3 b, Vec3 c, Vec3 d, float u0, float u1, float v0, float v1, int color, Vec3 normal, boolean generatedTexture, Identifier textureId, boolean translucent, boolean fullBright, boolean cullBackFace, boolean castsShadow, int animationKind, double animationPhase) {
+        return texturedQuad(a, b, c, d, u0, u1, v0, v1, color, normal, generatedTexture, textureId, translucent, fullBright, false, cullBackFace, castsShadow, animationKind, animationPhase);
+    }
+
+    private static TexturedQuad emissiveTexturedQuad(Vec3 a, Vec3 b, Vec3 c, Vec3 d, float u0, float u1, float v0, float v1, int color, Vec3 normal, boolean generatedTexture, Identifier textureId, boolean translucent, boolean cullBackFace, int animationKind, double animationPhase) {
+        return texturedQuad(a, b, c, d, u0, u1, v0, v1, color, normal, generatedTexture, textureId, translucent, true, true, cullBackFace, true, animationKind, animationPhase);
+    }
+
+    private static TexturedQuad texturedQuad(Vec3 a, Vec3 b, Vec3 c, Vec3 d, float u0, float u1, float v0, float v1, int color, Vec3 normal, boolean generatedTexture, Identifier textureId, boolean translucent, boolean fullBright, boolean emissive, boolean cullBackFace, boolean castsShadow, int animationKind, double animationPhase) {
+        boolean safetyReduced = ClientSafetyOptions.reducePhotosensitivityRisk();
         return new TexturedQuad(
                 a,
                 b,
@@ -2048,7 +2149,8 @@ public final class ClientPipeRenderer {
                 generatedTexture,
                 textureId,
                 translucent,
-                fullBright && !ClientSafetyOptions.reducePhotosensitivityRisk(),
+                fullBright && !safetyReduced,
+                emissive && !safetyReduced,
                 cullBackFace,
                 castsShadow,
                 animationKind,
@@ -2159,7 +2261,7 @@ public final class ClientPipeRenderer {
     private record LineSegment(Vec3 from, Vec3 to, int color, float width) {
     }
 
-    private record TexturedQuad(Vec3 a, Vec3 b, Vec3 c, Vec3 d, float u0, float u1, float v0, float v1, int color, Vec3 normal, boolean generatedTexture, Identifier textureId, boolean translucent, boolean fullBright, boolean cullBackFace, boolean castsShadow, int animationKind, double animationPhase, long lightA, long lightB, long lightC, long lightD) {
+    private record TexturedQuad(Vec3 a, Vec3 b, Vec3 c, Vec3 d, float u0, float u1, float v0, float v1, int color, Vec3 normal, boolean generatedTexture, Identifier textureId, boolean translucent, boolean fullBright, boolean emissive, boolean cullBackFace, boolean castsShadow, int animationKind, double animationPhase, long lightA, long lightB, long lightC, long lightD) {
         boolean persistentGpuEligible() {
             return this.animationKind == MARKER_ANIMATION_NONE;
         }
@@ -2331,9 +2433,15 @@ public final class ClientPipeRenderer {
         private final List<List<TexturedQuad>> atlasBatches = new ArrayList<>();
         private final List<List<TexturedQuad>> culledAtlasBatches = new ArrayList<>();
         private final List<List<TexturedQuad>> translucentAtlasBatches = new ArrayList<>();
+        private final List<List<TexturedQuad>> emissiveAtlasBatches = new ArrayList<>();
+        private final List<List<TexturedQuad>> emissiveCulledAtlasBatches = new ArrayList<>();
+        private final List<List<TexturedQuad>> emissiveTranslucentAtlasBatches = new ArrayList<>();
         private final Map<Identifier, List<List<TexturedQuad>>> generatedBatches = new LinkedHashMap<>();
         private final Map<Identifier, List<List<TexturedQuad>>> culledGeneratedBatches = new LinkedHashMap<>();
         private final Map<Identifier, List<List<TexturedQuad>>> translucentGeneratedBatches = new LinkedHashMap<>();
+        private final Map<Identifier, List<List<TexturedQuad>>> emissiveGeneratedBatches = new LinkedHashMap<>();
+        private final Map<Identifier, List<List<TexturedQuad>>> emissiveCulledGeneratedBatches = new LinkedHashMap<>();
+        private final Map<Identifier, List<List<TexturedQuad>>> emissiveTranslucentGeneratedBatches = new LinkedHashMap<>();
 
         void add(PipeRenderMesh mesh) {
             if (!mesh.dynamicAtlasQuads().isEmpty()) {
@@ -2345,18 +2453,36 @@ public final class ClientPipeRenderer {
             if (!mesh.dynamicTranslucentAtlasQuads().isEmpty()) {
                 this.translucentAtlasBatches.add(mesh.dynamicTranslucentAtlasQuads());
             }
+            if (!mesh.dynamicEmissiveAtlasQuads().isEmpty()) {
+                this.emissiveAtlasBatches.add(mesh.dynamicEmissiveAtlasQuads());
+            }
+            if (!mesh.dynamicEmissiveCulledAtlasQuads().isEmpty()) {
+                this.emissiveCulledAtlasBatches.add(mesh.dynamicEmissiveCulledAtlasQuads());
+            }
+            if (!mesh.dynamicEmissiveTranslucentAtlasQuads().isEmpty()) {
+                this.emissiveTranslucentAtlasBatches.add(mesh.dynamicEmissiveTranslucentAtlasQuads());
+            }
             addGenerated(this.generatedBatches, mesh.dynamicGeneratedQuads());
             addGenerated(this.culledGeneratedBatches, mesh.dynamicCulledGeneratedQuads());
             addGenerated(this.translucentGeneratedBatches, mesh.dynamicTranslucentGeneratedQuads());
+            addGenerated(this.emissiveGeneratedBatches, mesh.dynamicEmissiveGeneratedQuads());
+            addGenerated(this.emissiveCulledGeneratedBatches, mesh.dynamicEmissiveCulledGeneratedQuads());
+            addGenerated(this.emissiveTranslucentGeneratedBatches, mesh.dynamicEmissiveTranslucentGeneratedQuads());
         }
 
         void add(PipeRenderBatches other) {
             this.atlasBatches.addAll(other.atlasBatches);
             this.culledAtlasBatches.addAll(other.culledAtlasBatches);
             this.translucentAtlasBatches.addAll(other.translucentAtlasBatches);
+            this.emissiveAtlasBatches.addAll(other.emissiveAtlasBatches);
+            this.emissiveCulledAtlasBatches.addAll(other.emissiveCulledAtlasBatches);
+            this.emissiveTranslucentAtlasBatches.addAll(other.emissiveTranslucentAtlasBatches);
             addGeneratedBatches(this.generatedBatches, other.generatedBatches);
             addGeneratedBatches(this.culledGeneratedBatches, other.culledGeneratedBatches);
             addGeneratedBatches(this.translucentGeneratedBatches, other.translucentGeneratedBatches);
+            addGeneratedBatches(this.emissiveGeneratedBatches, other.emissiveGeneratedBatches);
+            addGeneratedBatches(this.emissiveCulledGeneratedBatches, other.emissiveCulledGeneratedBatches);
+            addGeneratedBatches(this.emissiveTranslucentGeneratedBatches, other.emissiveTranslucentGeneratedBatches);
         }
 
         private static void addGenerated(Map<Identifier, List<List<TexturedQuad>>> target, Map<Identifier, List<TexturedQuad>> source) {
@@ -2379,9 +2505,15 @@ public final class ClientPipeRenderer {
             return this.atlasBatches.isEmpty()
                     && this.culledAtlasBatches.isEmpty()
                     && this.translucentAtlasBatches.isEmpty()
+                    && this.emissiveAtlasBatches.isEmpty()
+                    && this.emissiveCulledAtlasBatches.isEmpty()
+                    && this.emissiveTranslucentAtlasBatches.isEmpty()
                     && this.generatedBatches.isEmpty()
                     && this.culledGeneratedBatches.isEmpty()
-                    && this.translucentGeneratedBatches.isEmpty();
+                    && this.translucentGeneratedBatches.isEmpty()
+                    && this.emissiveGeneratedBatches.isEmpty()
+                    && this.emissiveCulledGeneratedBatches.isEmpty()
+                    && this.emissiveTranslucentGeneratedBatches.isEmpty();
         }
 
         List<List<TexturedQuad>> atlasBatches() {
@@ -2396,6 +2528,18 @@ public final class ClientPipeRenderer {
             return this.translucentAtlasBatches;
         }
 
+        List<List<TexturedQuad>> emissiveAtlasBatches() {
+            return this.emissiveAtlasBatches;
+        }
+
+        List<List<TexturedQuad>> emissiveCulledAtlasBatches() {
+            return this.emissiveCulledAtlasBatches;
+        }
+
+        List<List<TexturedQuad>> emissiveTranslucentAtlasBatches() {
+            return this.emissiveTranslucentAtlasBatches;
+        }
+
         Map<Identifier, List<List<TexturedQuad>>> generatedBatches() {
             return this.generatedBatches;
         }
@@ -2407,6 +2551,18 @@ public final class ClientPipeRenderer {
         Map<Identifier, List<List<TexturedQuad>>> translucentGeneratedBatches() {
             return this.translucentGeneratedBatches;
         }
+
+        Map<Identifier, List<List<TexturedQuad>>> emissiveGeneratedBatches() {
+            return this.emissiveGeneratedBatches;
+        }
+
+        Map<Identifier, List<List<TexturedQuad>>> emissiveCulledGeneratedBatches() {
+            return this.emissiveCulledGeneratedBatches;
+        }
+
+        Map<Identifier, List<List<TexturedQuad>>> emissiveTranslucentGeneratedBatches() {
+            return this.emissiveTranslucentGeneratedBatches;
+        }
     }
 
     private record PipeRenderMesh(
@@ -2415,25 +2571,55 @@ public final class ClientPipeRenderer {
             List<TexturedQuad> dynamicAtlasQuads,
             List<TexturedQuad> dynamicCulledAtlasQuads,
             List<TexturedQuad> dynamicTranslucentAtlasQuads,
+            List<TexturedQuad> dynamicEmissiveAtlasQuads,
+            List<TexturedQuad> dynamicEmissiveCulledAtlasQuads,
+            List<TexturedQuad> dynamicEmissiveTranslucentAtlasQuads,
             Map<Identifier, List<TexturedQuad>> dynamicGeneratedQuads,
             Map<Identifier, List<TexturedQuad>> dynamicCulledGeneratedQuads,
             Map<Identifier, List<TexturedQuad>> dynamicTranslucentGeneratedQuads,
+            Map<Identifier, List<TexturedQuad>> dynamicEmissiveGeneratedQuads,
+            Map<Identifier, List<TexturedQuad>> dynamicEmissiveCulledGeneratedQuads,
+            Map<Identifier, List<TexturedQuad>> dynamicEmissiveTranslucentGeneratedQuads,
             PipeStaticQuadBatches staticBatches
     ) {
         static PipeRenderMesh from(RenderSectionKey sectionKey, AABB bounds, List<TexturedQuad> quads) {
             List<TexturedQuad> atlasQuads = new ArrayList<>();
             List<TexturedQuad> culledAtlasQuads = new ArrayList<>();
             List<TexturedQuad> translucentAtlasQuads = new ArrayList<>();
+            List<TexturedQuad> emissiveAtlasQuads = new ArrayList<>();
+            List<TexturedQuad> emissiveCulledAtlasQuads = new ArrayList<>();
+            List<TexturedQuad> emissiveTranslucentAtlasQuads = new ArrayList<>();
             Map<Identifier, List<TexturedQuad>> generatedQuads = new LinkedHashMap<>();
             Map<Identifier, List<TexturedQuad>> culledGeneratedQuads = new LinkedHashMap<>();
             Map<Identifier, List<TexturedQuad>> translucentGeneratedQuads = new LinkedHashMap<>();
+            Map<Identifier, List<TexturedQuad>> emissiveGeneratedQuads = new LinkedHashMap<>();
+            Map<Identifier, List<TexturedQuad>> emissiveCulledGeneratedQuads = new LinkedHashMap<>();
+            Map<Identifier, List<TexturedQuad>> emissiveTranslucentGeneratedQuads = new LinkedHashMap<>();
             PipeStaticQuadBatches staticBatches = new PipeStaticQuadBatches();
             for (TexturedQuad quad : quads) {
                 if (quad.persistentGpuEligible()) {
                     staticBatches.add(quad);
                     continue;
                 }
-                if (quad.translucent()) {
+                if (quad.emissive() && quad.translucent()) {
+                    if (quad.generatedTexture()) {
+                        emissiveTranslucentGeneratedQuads.computeIfAbsent(quad.textureId(), ignored -> new ArrayList<>()).add(quad);
+                    } else {
+                        emissiveTranslucentAtlasQuads.add(quad);
+                    }
+                } else if (quad.emissive()) {
+                    if (quad.generatedTexture()) {
+                        if (quad.cullBackFace()) {
+                            emissiveCulledGeneratedQuads.computeIfAbsent(quad.textureId(), ignored -> new ArrayList<>()).add(quad);
+                        } else {
+                            emissiveGeneratedQuads.computeIfAbsent(quad.textureId(), ignored -> new ArrayList<>()).add(quad);
+                        }
+                    } else if (quad.cullBackFace()) {
+                        emissiveCulledAtlasQuads.add(quad);
+                    } else {
+                        emissiveAtlasQuads.add(quad);
+                    }
+                } else if (quad.translucent()) {
                     if (quad.generatedTexture()) {
                         translucentGeneratedQuads.computeIfAbsent(quad.textureId(), ignored -> new ArrayList<>()).add(quad);
                     } else {
@@ -2457,9 +2643,15 @@ public final class ClientPipeRenderer {
                     List.copyOf(atlasQuads),
                     List.copyOf(culledAtlasQuads),
                     List.copyOf(translucentAtlasQuads),
+                    List.copyOf(emissiveAtlasQuads),
+                    List.copyOf(emissiveCulledAtlasQuads),
+                    List.copyOf(emissiveTranslucentAtlasQuads),
                     freezeQuadMap(generatedQuads),
                     freezeQuadMap(culledGeneratedQuads),
                     freezeQuadMap(translucentGeneratedQuads),
+                    freezeQuadMap(emissiveGeneratedQuads),
+                    freezeQuadMap(emissiveCulledGeneratedQuads),
+                    freezeQuadMap(emissiveTranslucentGeneratedQuads),
                     staticBatches.freeze()
             );
         }
@@ -2476,9 +2668,15 @@ public final class ClientPipeRenderer {
             return this.dynamicAtlasQuads.isEmpty()
                     && this.dynamicCulledAtlasQuads.isEmpty()
                     && this.dynamicTranslucentAtlasQuads.isEmpty()
+                    && this.dynamicEmissiveAtlasQuads.isEmpty()
+                    && this.dynamicEmissiveCulledAtlasQuads.isEmpty()
+                    && this.dynamicEmissiveTranslucentAtlasQuads.isEmpty()
                     && this.dynamicGeneratedQuads.isEmpty()
                     && this.dynamicCulledGeneratedQuads.isEmpty()
                     && this.dynamicTranslucentGeneratedQuads.isEmpty()
+                    && this.dynamicEmissiveGeneratedQuads.isEmpty()
+                    && this.dynamicEmissiveCulledGeneratedQuads.isEmpty()
+                    && this.dynamicEmissiveTranslucentGeneratedQuads.isEmpty()
                     && this.staticBatches.isEmpty();
         }
     }
@@ -2694,12 +2892,34 @@ public final class ClientPipeRenderer {
         );
     }
 
+    private static RenderType pipeCutoutEmissive(Identifier texture) {
+        return RenderType.create(
+                "superpipeslide_pipe_cutout_emissive",
+                RenderSetup.builder(PIPE_ENTITY_CUTOUT_EMISSIVE_PIPELINE)
+                        .withTexture("Sampler0", texture)
+                        .useOverlay()
+                        .bufferSize(RenderType.SMALL_BUFFER_SIZE)
+                        .createRenderSetup()
+        );
+    }
+
     private static RenderType pipeCutoutCull(Identifier texture) {
         return RenderType.create(
                 "superpipeslide_pipe_cutout_cull",
                 RenderSetup.builder(PIPE_ENTITY_CUTOUT_CULL_PIPELINE)
                         .withTexture("Sampler0", texture)
                         .useLightmap()
+                        .useOverlay()
+                        .bufferSize(RenderType.SMALL_BUFFER_SIZE)
+                        .createRenderSetup()
+        );
+    }
+
+    private static RenderType pipeCutoutCullEmissive(Identifier texture) {
+        return RenderType.create(
+                "superpipeslide_pipe_cutout_cull_emissive",
+                RenderSetup.builder(PIPE_ENTITY_CUTOUT_CULL_EMISSIVE_PIPELINE)
+                        .withTexture("Sampler0", texture)
                         .useOverlay()
                         .bufferSize(RenderType.SMALL_BUFFER_SIZE)
                         .createRenderSetup()
@@ -2719,28 +2939,76 @@ public final class ClientPipeRenderer {
         );
     }
 
+    private static RenderType pipeTranslucentEmissive(Identifier texture) {
+        return RenderType.create(
+                "superpipeslide_pipe_translucent_emissive",
+                RenderSetup.builder(PIPE_ENTITY_TRANSLUCENT_EMISSIVE_PIPELINE)
+                        .withTexture("Sampler0", texture)
+                        .useOverlay()
+                        .sortOnUpload()
+                        .bufferSize(RenderType.SMALL_BUFFER_SIZE)
+                        .createRenderSetup()
+        );
+    }
+
     private static RenderType generatedPipeCutout(Identifier texture) {
         return PIPE_GENERATED_CUTOUT.computeIfAbsent(texture, ClientPipeRenderer::pipeCutout);
+    }
+
+    private static RenderType generatedPipeCutoutEmissive(Identifier texture) {
+        return PIPE_GENERATED_CUTOUT_EMISSIVE.computeIfAbsent(texture, ClientPipeRenderer::pipeCutoutEmissive);
     }
 
     private static RenderType generatedPipeCutoutCull(Identifier texture) {
         return PIPE_GENERATED_CUTOUT_CULL.computeIfAbsent(texture, ClientPipeRenderer::pipeCutoutCull);
     }
 
+    private static RenderType generatedPipeCutoutCullEmissive(Identifier texture) {
+        return PIPE_GENERATED_CUTOUT_CULL_EMISSIVE.computeIfAbsent(texture, ClientPipeRenderer::pipeCutoutCullEmissive);
+    }
+
     private static RenderType generatedPipeTranslucent(Identifier texture) {
         return PIPE_GENERATED_TRANSLUCENT.computeIfAbsent(texture, ClientPipeRenderer::pipeTranslucent);
+    }
+
+    private static RenderType generatedPipeTranslucentEmissive(Identifier texture) {
+        return PIPE_GENERATED_TRANSLUCENT_EMISSIVE.computeIfAbsent(texture, ClientPipeRenderer::pipeTranslucentEmissive);
     }
 
     private static final class PipeStaticQuadBatches {
         private final List<TexturedQuad> atlasQuads = new ArrayList<>();
         private final List<TexturedQuad> culledAtlasQuads = new ArrayList<>();
         private final List<TexturedQuad> translucentAtlasQuads = new ArrayList<>();
+        private final List<TexturedQuad> emissiveAtlasQuads = new ArrayList<>();
+        private final List<TexturedQuad> emissiveCulledAtlasQuads = new ArrayList<>();
+        private final List<TexturedQuad> emissiveTranslucentAtlasQuads = new ArrayList<>();
         private final Map<Identifier, List<TexturedQuad>> generatedQuads = new LinkedHashMap<>();
         private final Map<Identifier, List<TexturedQuad>> culledGeneratedQuads = new LinkedHashMap<>();
         private final Map<Identifier, List<TexturedQuad>> translucentGeneratedQuads = new LinkedHashMap<>();
+        private final Map<Identifier, List<TexturedQuad>> emissiveGeneratedQuads = new LinkedHashMap<>();
+        private final Map<Identifier, List<TexturedQuad>> emissiveCulledGeneratedQuads = new LinkedHashMap<>();
+        private final Map<Identifier, List<TexturedQuad>> emissiveTranslucentGeneratedQuads = new LinkedHashMap<>();
 
         void add(TexturedQuad quad) {
-            if (quad.translucent()) {
+            if (quad.emissive() && quad.translucent()) {
+                if (quad.generatedTexture()) {
+                    this.emissiveTranslucentGeneratedQuads.computeIfAbsent(quad.textureId(), ignored -> new ArrayList<>()).add(quad);
+                } else {
+                    this.emissiveTranslucentAtlasQuads.add(quad);
+                }
+            } else if (quad.emissive()) {
+                if (quad.generatedTexture()) {
+                    if (quad.cullBackFace()) {
+                        this.emissiveCulledGeneratedQuads.computeIfAbsent(quad.textureId(), ignored -> new ArrayList<>()).add(quad);
+                    } else {
+                        this.emissiveGeneratedQuads.computeIfAbsent(quad.textureId(), ignored -> new ArrayList<>()).add(quad);
+                    }
+                } else if (quad.cullBackFace()) {
+                    this.emissiveCulledAtlasQuads.add(quad);
+                } else {
+                    this.emissiveAtlasQuads.add(quad);
+                }
+            } else if (quad.translucent()) {
                 if (quad.generatedTexture()) {
                     this.translucentGeneratedQuads.computeIfAbsent(quad.textureId(), ignored -> new ArrayList<>()).add(quad);
                 } else {
@@ -2763,9 +3031,15 @@ public final class ClientPipeRenderer {
             this.atlasQuads.addAll(other.atlasQuads);
             this.culledAtlasQuads.addAll(other.culledAtlasQuads);
             this.translucentAtlasQuads.addAll(other.translucentAtlasQuads);
+            this.emissiveAtlasQuads.addAll(other.emissiveAtlasQuads);
+            this.emissiveCulledAtlasQuads.addAll(other.emissiveCulledAtlasQuads);
+            this.emissiveTranslucentAtlasQuads.addAll(other.emissiveTranslucentAtlasQuads);
             addQuadMap(this.generatedQuads, other.generatedQuads);
             addQuadMap(this.culledGeneratedQuads, other.culledGeneratedQuads);
             addQuadMap(this.translucentGeneratedQuads, other.translucentGeneratedQuads);
+            addQuadMap(this.emissiveGeneratedQuads, other.emissiveGeneratedQuads);
+            addQuadMap(this.emissiveCulledGeneratedQuads, other.emissiveCulledGeneratedQuads);
+            addQuadMap(this.emissiveTranslucentGeneratedQuads, other.emissiveTranslucentGeneratedQuads);
         }
 
         private static void addQuadMap(Map<Identifier, List<TexturedQuad>> target, Map<Identifier, List<TexturedQuad>> source) {
@@ -2781,9 +3055,15 @@ public final class ClientPipeRenderer {
             frozen.atlasQuads.addAll(List.copyOf(this.atlasQuads));
             frozen.culledAtlasQuads.addAll(List.copyOf(this.culledAtlasQuads));
             frozen.translucentAtlasQuads.addAll(List.copyOf(this.translucentAtlasQuads));
+            frozen.emissiveAtlasQuads.addAll(List.copyOf(this.emissiveAtlasQuads));
+            frozen.emissiveCulledAtlasQuads.addAll(List.copyOf(this.emissiveCulledAtlasQuads));
+            frozen.emissiveTranslucentAtlasQuads.addAll(List.copyOf(this.emissiveTranslucentAtlasQuads));
             copyFrozen(this.generatedQuads, frozen.generatedQuads);
             copyFrozen(this.culledGeneratedQuads, frozen.culledGeneratedQuads);
             copyFrozen(this.translucentGeneratedQuads, frozen.translucentGeneratedQuads);
+            copyFrozen(this.emissiveGeneratedQuads, frozen.emissiveGeneratedQuads);
+            copyFrozen(this.emissiveCulledGeneratedQuads, frozen.emissiveCulledGeneratedQuads);
+            copyFrozen(this.emissiveTranslucentGeneratedQuads, frozen.emissiveTranslucentGeneratedQuads);
             return frozen;
         }
 
@@ -2797,9 +3077,15 @@ public final class ClientPipeRenderer {
             return this.atlasQuads.isEmpty()
                     && this.culledAtlasQuads.isEmpty()
                     && this.translucentAtlasQuads.isEmpty()
+                    && this.emissiveAtlasQuads.isEmpty()
+                    && this.emissiveCulledAtlasQuads.isEmpty()
+                    && this.emissiveTranslucentAtlasQuads.isEmpty()
                     && this.generatedQuads.isEmpty()
                     && this.culledGeneratedQuads.isEmpty()
-                    && this.translucentGeneratedQuads.isEmpty();
+                    && this.translucentGeneratedQuads.isEmpty()
+                    && this.emissiveGeneratedQuads.isEmpty()
+                    && this.emissiveCulledGeneratedQuads.isEmpty()
+                    && this.emissiveTranslucentGeneratedQuads.isEmpty();
         }
     }
 
@@ -2831,15 +3117,27 @@ public final class ClientPipeRenderer {
             List<PipeGpuBatch> translucent = new ArrayList<>();
             addUploaded(opaque, PIPE_ATLAS_CUTOUT, source.atlasQuads, sectionKey, lightSampler);
             addUploaded(opaque, PIPE_ATLAS_CUTOUT_CULL, source.culledAtlasQuads, sectionKey, lightSampler);
+            addUploaded(opaque, PIPE_ATLAS_CUTOUT_EMISSIVE, source.emissiveAtlasQuads, sectionKey, lightSampler);
+            addUploaded(opaque, PIPE_ATLAS_CUTOUT_CULL_EMISSIVE, source.emissiveCulledAtlasQuads, sectionKey, lightSampler);
             for (Map.Entry<Identifier, List<TexturedQuad>> entry : source.generatedQuads.entrySet()) {
                 addUploaded(opaque, generatedPipeCutout(entry.getKey()), entry.getValue(), sectionKey, lightSampler);
             }
             for (Map.Entry<Identifier, List<TexturedQuad>> entry : source.culledGeneratedQuads.entrySet()) {
                 addUploaded(opaque, generatedPipeCutoutCull(entry.getKey()), entry.getValue(), sectionKey, lightSampler);
             }
+            for (Map.Entry<Identifier, List<TexturedQuad>> entry : source.emissiveGeneratedQuads.entrySet()) {
+                addUploaded(opaque, generatedPipeCutoutEmissive(entry.getKey()), entry.getValue(), sectionKey, lightSampler);
+            }
+            for (Map.Entry<Identifier, List<TexturedQuad>> entry : source.emissiveCulledGeneratedQuads.entrySet()) {
+                addUploaded(opaque, generatedPipeCutoutCullEmissive(entry.getKey()), entry.getValue(), sectionKey, lightSampler);
+            }
             addUploaded(translucent, PIPE_ATLAS_TRANSLUCENT, source.translucentAtlasQuads, sectionKey, lightSampler);
             for (Map.Entry<Identifier, List<TexturedQuad>> entry : source.translucentGeneratedQuads.entrySet()) {
                 addUploaded(translucent, generatedPipeTranslucent(entry.getKey()), entry.getValue(), sectionKey, lightSampler);
+            }
+            addUploaded(translucent, PIPE_ATLAS_TRANSLUCENT_EMISSIVE, source.emissiveTranslucentAtlasQuads, sectionKey, lightSampler);
+            for (Map.Entry<Identifier, List<TexturedQuad>> entry : source.emissiveTranslucentGeneratedQuads.entrySet()) {
+                addUploaded(translucent, generatedPipeTranslucentEmissive(entry.getKey()), entry.getValue(), sectionKey, lightSampler);
             }
             return new PipeGpuBatches(List.copyOf(opaque), List.copyOf(translucent));
         }

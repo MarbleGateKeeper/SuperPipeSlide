@@ -32,17 +32,20 @@ public final class IrisPipeRenderExtension implements ClientPipeRenderer.PipeRen
             return "iris_shaderpack_off";
         }
         try {
-            return "iris_shaderpack:" + Iris.getCurrentPackName() + ":pipeline_" + Iris.getPipelineManager().getVersionCounterForSodiumShaderReload() + ":pipe_entity_v12";
+            return "iris_shaderpack:" + Iris.getCurrentPackName() + ":pipeline_" + Iris.getPipelineManager().getVersionCounterForSodiumShaderReload() + ":pipe_entity_v14";
         } catch (RuntimeException | LinkageError exception) {
             warn("query Iris render state", exception);
-            return "iris_shaderpack:unknown:pipe_entity_v12";
+            return "iris_shaderpack:unknown:pipe_entity_v1";
         }
     }
 
     @Override
     public void refreshPipelineMappings() {
         copyPipelineMapping(RenderPipelines.ENTITY_CUTOUT, ClientPipeRenderer.pipeEntityCutoutPipeline());
+        copyPipelineMapping(RenderPipelines.ENTITY_CUTOUT, ClientPipeRenderer.pipeEntityCutoutEmissivePipeline());
         copyPipelineMapping(RenderPipelines.ENTITY_CUTOUT_CULL, ClientPipeRenderer.pipeEntityCutoutCullPipeline());
+        copyPipelineMapping(RenderPipelines.ENTITY_CUTOUT_CULL, ClientPipeRenderer.pipeEntityCutoutCullEmissivePipeline());
+        copyPipelineMapping(RenderPipelines.ENTITY_TRANSLUCENT_EMISSIVE, ClientPipeRenderer.pipeEntityTranslucentEmissivePipeline());
         copyPipelineMapping(RenderPipelines.ENTITY_TRANSLUCENT, ClientPipeRenderer.pipeEntityTranslucentPipeline());
     }
 

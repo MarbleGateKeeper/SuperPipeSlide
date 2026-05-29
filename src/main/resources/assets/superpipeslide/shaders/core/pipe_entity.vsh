@@ -48,12 +48,12 @@ void main() {
     sphericalVertexDistance = fog_spherical_distance(pos);
     cylindricalVertexDistance = fog_cylindrical_distance(pos);
 
-#ifdef PER_FACE_LIGHTING
+#if defined(NO_CARDINAL_LIGHTING)
+    vertexColor = Color;
+#elif defined(PER_FACE_LIGHTING)
     vec2 light = minecraft_compute_light(Light0_Direction, Light1_Direction, Normal);
     vertexPerFaceColorBack = minecraft_mix_light_separate(-light, Color);
     vertexPerFaceColorFront = minecraft_mix_light_separate(light, Color);
-#elif defined(NO_CARDINAL_LIGHTING)
-    vertexColor = Color;
 #else
     vertexColor = minecraft_mix_light(Light0_Direction, Light1_Direction, Normal, Color);
 #endif
