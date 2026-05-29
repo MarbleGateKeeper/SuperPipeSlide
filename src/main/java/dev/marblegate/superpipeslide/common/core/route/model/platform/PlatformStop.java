@@ -8,6 +8,7 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 
+import java.util.Comparator;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,11 +21,16 @@ public record PlatformStop(
         PipeConnectionRef connectionRef,
         double length
 ) {
+    public static final Comparator<PlatformStop> DISPLAY_ORDER = Comparator
+            .comparingInt(PlatformStop::platformNumberSortKey)
+            .thenComparing(PlatformStop::platformNumber)
+            .thenComparing(PlatformStop::id);
+
     public static final Codec<PlatformStop> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             UUIDUtil.STRING_CODEC.fieldOf("id").forGetter(PlatformStop::id),
             UUIDUtil.STRING_CODEC.fieldOf("station_group_id").forGetter(PlatformStop::stationGroupId),
             UUIDUtil.STRING_CODEC.optionalFieldOf("route_line_id").forGetter(PlatformStop::routeLineId),
-            Codec.STRING.optionalFieldOf("platform_number", "1").forGetter(PlatformStop::platformNumber),
+            Codec.STRING.optionalFieldOf("platform_number", "").forGetter(PlatformStop::platformNumber),
             Codec.STRING.optionalFieldOf("display_name").forGetter(PlatformStop::displayName),
             PipeConnectionRef.CODEC.fieldOf("connection").forGetter(PlatformStop::connectionRef),
             Codec.DOUBLE.optionalFieldOf("length", 0.0D).forGetter(PlatformStop::length)
@@ -49,7 +55,7 @@ public record PlatformStop(
     );
 
     public PlatformStop {
-        platformNumber = platformNumber.isBlank() ? "1" : platformNumber;
+        platformNumber = sanitizePlatformNumber(platformNumber);
         length = Math.max(0.0D, length);
     }
 
@@ -67,6 +73,19 @@ public record PlatformStop(
 
     public PlatformStop withLength(double length) {
         return new PlatformStop(this.id, this.stationGroupId, this.routeLineId, this.platformNumber, this.displayName, this.connectionRef, length);
+    }
+
+    public static String sanitizePlatformNumber(String platformNumber) {
+        return platformNumber == null ? "" : platformNumber.trim();
+    }
+
+    private static int platformNumberSortKey(PlatformStop platformStop) {
+        String number = platformStop.platformNumber();
+        try {
+            return Integer.parseInt(number);
+        } catch (NumberFormatException ignored) {
+            return Integer.MAX_VALUE;
+        }
     }
 }
 

@@ -45,8 +45,14 @@ public record ServerboundPlatformStopEditPayload(UUID requestId, long baseRouteR
             ServerEvents.sendEditorResult(player, payload.requestId(), false, "Route data changed, please refresh", routes.revision());
             return;
         }
-        if (routes.updatePlatformStop(payload.platformStopId(), payload.platformNumber(), payload.displayName()).isEmpty()) {
-            ServerEvents.sendEditorResult(player, payload.requestId(), false, "Platform no longer exists", routes.revision());
+        RouteNetworkSavedData.PlatformStopUpdateResult result = routes.updatePlatformStop(payload.platformStopId(), payload.platformNumber(), payload.displayName());
+        if (!result.updated()) {
+            String message = switch (result.status()) {
+                case DUPLICATE_NUMBER -> "Platform number already exists in this station";
+                case MISSING -> "Platform no longer exists";
+                case UPDATED -> "Platform saved";
+            };
+            ServerEvents.sendEditorResult(player, payload.requestId(), false, message, routes.revision());
             return;
         }
         ServerEvents.broadcastRouteDataDelta(level);

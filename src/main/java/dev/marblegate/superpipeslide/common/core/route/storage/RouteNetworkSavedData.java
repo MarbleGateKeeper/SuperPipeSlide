@@ -115,6 +115,7 @@ public final class RouteNetworkSavedData extends SavedData {
         this.routePathRulesVersion = ROUTE_PATH_RULES_VERSION;
         this.revision = revision;
         this.rebuildIndexes();
+        this.normalizePlatformNumbers();
     }
 
     public static RouteNetworkSavedData get(ServerLevel level) {
@@ -254,6 +255,7 @@ public final class RouteNetworkSavedData extends SavedData {
         return this.index.platformStopIdsByStationGroup(stationGroupId).stream()
                 .map(id -> this.store.platformStop(id).orElse(null))
                 .filter(java.util.Objects::nonNull)
+                .sorted(PlatformStop.DISPLAY_ORDER)
                 .toList();
     }
 
@@ -366,7 +368,7 @@ public final class RouteNetworkSavedData extends SavedData {
         if (existing.isPresent()) {
             return existing.get();
         }
-        String nextNumber = Integer.toString(this.platformStopsInStation(stationGroup.id()).size() + 1);
+        String nextNumber = this.nextAvailablePlatformNumber(stationGroup.id(), Optional.empty());
         PlatformStop platformStop = new PlatformStop(UUID.randomUUID(), stationGroup.id(), Optional.empty(), nextNumber, Optional.empty(), connectionRef, connection.length());
         this.store.put(platformStop);
         this.trackUpdated(platformStop);
@@ -376,16 +378,22 @@ public final class RouteNetworkSavedData extends SavedData {
         return platformStop;
     }
 
-    public Optional<PlatformStop> updatePlatformStop(UUID id, String platformNumber, Optional<String> displayName) {
+    public PlatformStopUpdateResult updatePlatformStop(UUID id, String platformNumber, Optional<String> displayName) {
         PlatformStop existing = this.store.platformStop(id).orElse(null);
         if (existing == null) {
-            return Optional.empty();
+            return PlatformStopUpdateResult.missing();
         }
-        PlatformStop updated = existing.withDisplay(platformNumber, displayName);
+        String sanitized = PlatformStop.sanitizePlatformNumber(platformNumber);
+        if (sanitized.isBlank()) {
+            sanitized = this.nextAvailablePlatformNumber(existing.stationGroupId(), Optional.of(existing.id()));
+        } else if (this.platformNumberExists(existing.stationGroupId(), sanitized, existing.id())) {
+            return PlatformStopUpdateResult.duplicateNumber();
+        }
+        PlatformStop updated = existing.withDisplay(sanitized, displayName);
         this.store.put(updated);
         this.trackUpdated(updated);
         this.bumpRevision();
-        return Optional.of(updated);
+        return PlatformStopUpdateResult.updated(updated);
     }
 
     public Optional<RouteLine> createRouteLine(String displayName, List<String> translatedNames, List<Integer> themeColors) {
@@ -633,6 +641,82 @@ public final class RouteNetworkSavedData extends SavedData {
         }
         SuperPipeSlide.LOGGER.debug("Pruned route data in unavailable dimensions: stations={}, platformStops={}", removedStationGroupIds.size(), removedPlatformStopIds.size());
         return true;
+    }
+
+    private void normalizePlatformNumbers() {
+        List<PlatformStop> stops = List.copyOf(this.store.platformStopValues());
+        Map<UUID, List<PlatformStop>> stopsByStation = new HashMap<>();
+        for (PlatformStop platformStop : stops) {
+            stopsByStation.computeIfAbsent(platformStop.stationGroupId(), ignored -> new ArrayList<>()).add(platformStop);
+        }
+        boolean changed = false;
+        try (Batch ignored = this.beginMutationBatch()) {
+            for (Map.Entry<UUID, List<PlatformStop>> entry : stopsByStation.entrySet()) {
+                UUID stationGroupId = entry.getKey();
+                HashSet<String> used = new HashSet<>();
+                for (PlatformStop platformStop : entry.getValue()) {
+                    String sanitized = PlatformStop.sanitizePlatformNumber(platformStop.platformNumber());
+                    boolean needsRename = sanitized.isBlank() || !used.add(sanitized);
+                    if (needsRename) {
+                        String next = this.nextAvailablePlatformNumber(stationGroupId, Optional.of(platformStop.id()), used);
+                        if (!platformStop.platformNumber().equals(next)) {
+                            PlatformStop updated = platformStop.withDisplay(next, platformStop.displayName());
+                            this.store.put(updated);
+                            this.trackUpdated(updated);
+                            changed = true;
+                        }
+                        used.add(next);
+                        continue;
+                    }
+                    if (!platformStop.platformNumber().equals(sanitized)) {
+                        PlatformStop updated = platformStop.withDisplay(sanitized, platformStop.displayName());
+                        this.store.put(updated);
+                        this.trackUpdated(updated);
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if (changed) {
+            this.bumpRevision();
+        }
+    }
+
+    private String nextAvailablePlatformNumber(UUID stationGroupId, Optional<UUID> excludingPlatformStopId) {
+        return this.nextAvailablePlatformNumber(stationGroupId, excludingPlatformStopId, Set.of());
+    }
+
+    private String nextAvailablePlatformNumber(UUID stationGroupId, Optional<UUID> excludingPlatformStopId, Set<String> reservedNumbers) {
+        HashSet<String> taken = new HashSet<>(reservedNumbers);
+        for (PlatformStop platformStop : this.store.platformStopValues()) {
+            if (!platformStop.stationGroupId().equals(stationGroupId)) {
+                continue;
+            }
+            if (excludingPlatformStopId.isPresent() && excludingPlatformStopId.get().equals(platformStop.id())) {
+                continue;
+            }
+            String sanitized = PlatformStop.sanitizePlatformNumber(platformStop.platformNumber());
+            if (!sanitized.isBlank()) {
+                taken.add(sanitized);
+            }
+        }
+        int next = 1;
+        while (taken.contains(Integer.toString(next))) {
+            next++;
+        }
+        return Integer.toString(next);
+    }
+
+    private boolean platformNumberExists(UUID stationGroupId, String platformNumber, UUID excludingPlatformStopId) {
+        for (PlatformStop platformStop : this.store.platformStopValues()) {
+            if (!platformStop.stationGroupId().equals(stationGroupId) || platformStop.id().equals(excludingPlatformStopId)) {
+                continue;
+            }
+            if (PlatformStop.sanitizePlatformNumber(platformStop.platformNumber()).equals(platformNumber)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public Optional<RouteLayout> setLayoutStops(UUID layoutId, List<UUID> platformStopIds, PipeNetworkView pipeNetwork) {
@@ -1140,6 +1224,34 @@ public final class RouteNetworkSavedData extends SavedData {
 
     private int routePathRulesVersionForCodec() {
         return this.routePathRulesVersion;
+    }
+
+    public enum PlatformStopUpdateStatus {
+        UPDATED,
+        MISSING,
+        DUPLICATE_NUMBER
+    }
+
+    public record PlatformStopUpdateResult(PlatformStopUpdateStatus status, Optional<PlatformStop> platformStop) {
+        public PlatformStopUpdateResult {
+            platformStop = platformStop == null ? Optional.empty() : platformStop;
+        }
+
+        public static PlatformStopUpdateResult updated(PlatformStop platformStop) {
+            return new PlatformStopUpdateResult(PlatformStopUpdateStatus.UPDATED, Optional.of(platformStop));
+        }
+
+        public static PlatformStopUpdateResult missing() {
+            return new PlatformStopUpdateResult(PlatformStopUpdateStatus.MISSING, Optional.empty());
+        }
+
+        public static PlatformStopUpdateResult duplicateNumber() {
+            return new PlatformStopUpdateResult(PlatformStopUpdateStatus.DUPLICATE_NUMBER, Optional.empty());
+        }
+
+        public boolean updated() {
+            return this.status == PlatformStopUpdateStatus.UPDATED;
+        }
     }
 
 }

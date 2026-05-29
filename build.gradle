@@ -167,7 +167,6 @@ repositories {
     }
 }
 
-
 dependencies {
     jarJar(implementation("me.fallenbreath:conditional-mixin-neoforge")) {
         version {
@@ -176,7 +175,7 @@ dependencies {
         }
     }
 
-    // Compatibility Check
+    // Compatibility Integration
     localImplementation("net.caffeinemc:sodium-neoforge:${sodium_version}")
     if (hasIntegration("iris")) {
         irisCompileOnly("net.caffeinemc:sodium-neoforge-mod:${sodium_version}")

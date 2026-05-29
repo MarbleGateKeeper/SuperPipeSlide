@@ -135,10 +135,13 @@ public class PlatformStopEditorScreen extends RouteEditorScreenBase implements R
     }
 
     private boolean duplicateNumber(PlatformStop current) {
-        String number = this.platformNumber == null ? current.platformNumber() : this.platformNumber.getValue();
+        String number = PlatformStop.sanitizePlatformNumber(this.platformNumber == null ? current.platformNumber() : this.platformNumber.getValue());
+        if (number.isBlank()) {
+            return false;
+        }
         return ClientRouteDataCache.platformStops().stream()
                 .filter(platformStop -> !platformStop.id().equals(current.id()))
-                .anyMatch(platformStop -> platformStop.stationGroupId().equals(current.stationGroupId()) && platformStop.platformNumber().equals(number));
+                .anyMatch(platformStop -> platformStop.stationGroupId().equals(current.stationGroupId()) && PlatformStop.sanitizePlatformNumber(platformStop.platformNumber()).equals(number));
     }
 
     private void save() {
@@ -152,7 +155,7 @@ public class PlatformStopEditorScreen extends RouteEditorScreenBase implements R
         }
         String display = this.displayName.getValue().trim();
         Optional<String> displayValue = display.isEmpty() ? Optional.empty() : Optional.of(display);
-        return !stop.platformNumber().equals(this.platformNumber.getValue()) || !stop.displayName().equals(displayValue);
+        return !stop.platformNumber().equals(PlatformStop.sanitizePlatformNumber(this.platformNumber.getValue())) || !stop.displayName().equals(displayValue);
     }
 
     private void deletePlatform() {

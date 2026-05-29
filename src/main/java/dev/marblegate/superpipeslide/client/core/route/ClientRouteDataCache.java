@@ -376,7 +376,7 @@ public final class ClientRouteDataCache {
 
     public static List<PlatformStop> platformStopsInStation(UUID stationGroupId) {
         return PLATFORM_STOPS_BY_STATION.getOrDefault(stationGroupId, List.of()).stream()
-                .sorted(Comparator.comparing(PlatformStop::platformNumber))
+                .sorted(PlatformStop.DISPLAY_ORDER)
                 .toList();
     }
 

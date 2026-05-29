@@ -18,7 +18,6 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -113,9 +112,7 @@ public class StationEditorScreen extends RouteEditorScreenBase implements RouteD
     }
 
     private void renderPlatformCards(GuiGraphicsExtractor graphics, SPSGui.Rect area, int mouseX, int mouseY) {
-        List<PlatformStop> stops = ClientRouteDataCache.platformStopsInStation(this.stationGroupId).stream()
-                .sorted(Comparator.comparing(PlatformStop::platformNumber))
-                .toList();
+        List<PlatformStop> stops = ClientRouteDataCache.platformStopsInStation(this.stationGroupId);
         if (stops.isEmpty()) {
             SPSGui.text(graphics, this.font, Component.translatable("screen.superpipeslide.station.no_platforms"), area.x() + 8, area.y() + 28, SPSGui.TEXT_MUTED);
             return;
