@@ -500,7 +500,7 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
             this.upsertBranchPipeNode(this.withAddedBranchConnection(branchNode, branchAnchor, connection));
             this.recomputeAutoCurvesAround(Set.of(fromAnchor, toAnchor));
             this.setDirty();
-            return Optional.of(connection);
+            return this.connection(connection.id()).or(() -> Optional.of(connection));
         }
     }
 
@@ -651,7 +651,7 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
             this.trackConnectionUpsert(connection);
             this.recomputeAutoCurvesAround(Set.of(fromAnchor, toAnchor));
             this.setDirty();
-            return Optional.of(connection);
+            return this.connection(connection.id()).or(() -> Optional.of(connection));
         }
     }
 

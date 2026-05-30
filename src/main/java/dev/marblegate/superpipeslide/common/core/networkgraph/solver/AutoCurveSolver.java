@@ -54,8 +54,8 @@ public final class AutoCurveSolver {
     public static CurveSpec autoCurveSpecFor(PipeNetworkView view, PipeConnection current) {
         Vec3 startTangent = autoTangentAt(view, current, current.fromAnchor(), true);
         Vec3 endTangent = autoTangentAt(view, current, current.toAnchor(), false);
-        boolean startOvershoots = hasNonAutoSameSideTurn(view, current, current.fromAnchor());
-        boolean endOvershoots = hasNonAutoSameSideTurn(view, current, current.toAnchor());
+        boolean startOvershoots = endpointOvershoots(current, current.fromAnchor(), true, startTangent);
+        boolean endOvershoots = endpointOvershoots(current, current.toAnchor(), false, endTangent);
         if (!startOvershoots && !endOvershoots) {
             return CurveSpec.autoCurve(startTangent, endTangent);
         }
@@ -144,17 +144,20 @@ public final class AutoCurveSolver {
     }
 
     private static Vec3 chainTangentFor(PipeConnection current, PipeConnection other, PipeAnchorId anchor, boolean awayFromAnchor) {
-        Optional<PipeAnchorId> previousAnchor = PipeConnectionUtils.targetFor(other, anchor);
-        Optional<PipeAnchorId> nextAnchor = PipeConnectionUtils.targetFor(current, anchor);
-        if (previousAnchor.isEmpty() || nextAnchor.isEmpty()) {
+        Optional<PipeAnchorId> currentTarget = PipeConnectionUtils.targetFor(current, anchor);
+        Optional<PipeAnchorId> otherTarget = PipeConnectionUtils.targetFor(other, anchor);
+        if (currentTarget.isEmpty() || otherTarget.isEmpty()) {
             return Vec3.ZERO;
         }
 
-        Vec3 chainTangent = surfacePosition(nextAnchor.get()).subtract(surfacePosition(previousAnchor.get()));
-        if (chainTangent.lengthSqr() < 1.0E-6D) {
+        Vec3 currentOutward = surfacePosition(currentTarget.get()).subtract(surfacePosition(anchor));
+        Vec3 otherOutward = surfacePosition(otherTarget.get()).subtract(surfacePosition(anchor));
+        Vec3 tangentAwayFromAnchor = currentOutward.subtract(otherOutward);
+        if (tangentAwayFromAnchor.lengthSqr() < 1.0E-6D) {
             return Vec3.ZERO;
         }
-        return orientTangent(chainTangent.normalize(), current, anchor, awayFromAnchor);
+        Vec3 normalized = tangentAwayFromAnchor.normalize();
+        return awayFromAnchor ? normalized : normalized.scale(-1.0D);
     }
 
     private static boolean isSameSideTurn(PipeConnection current, PipeConnection other, PipeAnchorId anchor) {
@@ -172,14 +175,16 @@ public final class AutoCurveSolver {
         return currentOutward.normalize().dot(otherOutward.normalize()) > SAME_SIDE_TURN_DOT;
     }
 
-    private static boolean hasNonAutoSameSideTurn(PipeNetworkView view, PipeConnection current, PipeAnchorId anchor) {
-        List<PipeConnection> touching = view.connectionsTouching(anchor);
-        if (touching.size() != 2) {
+    private static boolean endpointOvershoots(PipeConnection current, PipeAnchorId anchor, boolean awayFromAnchor, Vec3 tangent) {
+        if (tangent.lengthSqr() < 1.0E-6D) {
             return false;
         }
 
-        PipeConnection other = touching.get(0).id().equals(current.id()) ? touching.get(1) : touching.get(0);
-        return other.curveSpec().type() != CurveType.AUTO_CURVE && isSameSideTurn(current, other, anchor);
+        Vec3 direct = chordTangent(current, anchor, awayFromAnchor);
+        if (direct.lengthSqr() < 1.0E-6D) {
+            return false;
+        }
+        return tangent.normalize().dot(direct.normalize()) < 0.0D;
     }
 
     private static Vec3 extensionTangentFromOther(PipeConnection other, PipeAnchorId anchor, boolean awayFromAnchor) {
@@ -216,21 +221,6 @@ public final class AutoCurveSolver {
         Vec3 desired = awayFromAnchor ? outwardToOther.normalize().scale(-1.0D) : outwardToOther.normalize();
         Vec3 normalizedTangent = tangent.normalize();
         return normalizedTangent.dot(desired) < 0.0D ? normalizedTangent.scale(-1.0D) : normalizedTangent;
-    }
-
-    private static Vec3 orientTangent(Vec3 tangent, PipeConnection current, PipeAnchorId anchor, boolean awayFromAnchor) {
-        Optional<PipeAnchorId> target = PipeConnectionUtils.targetFor(current, anchor);
-        if (target.isEmpty()) {
-            return tangent;
-        }
-
-        Vec3 outward = surfacePosition(target.get()).subtract(surfacePosition(anchor));
-        if (outward.lengthSqr() < 1.0E-6D) {
-            return tangent;
-        }
-
-        boolean pointsAway = tangent.dot(outward) >= 0.0D;
-        return pointsAway == awayFromAnchor ? tangent : tangent.scale(-1.0D);
     }
 
     private static Vec3 endpointTangentAt(PipeConnection connection, PipeAnchorId anchorId) {
