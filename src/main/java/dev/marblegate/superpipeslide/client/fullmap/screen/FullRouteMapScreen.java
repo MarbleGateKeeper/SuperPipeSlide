@@ -3677,17 +3677,6 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 .orElse(FullMapTheme.BORDER_SELECTED);
     }
 
-    private static String edgeTitle(List<UUID> routeLineIds) {
-        if (routeLineIds.size() == 1) {
-            return routeLineIds.stream()
-                    .findFirst()
-                    .flatMap(ClientRouteDataCache::routeLine)
-                    .map(FullMapText::displayName)
-                    .orElse(Component.translatable("screen.superpipeslide.route").getString());
-        }
-        return Component.translatable("screen.superpipeslide.full_map.tooltip_card.shared_routes").getString();
-    }
-
     private static DisplayNameStack edgeTitleStack(List<UUID> routeLineIds) {
         if (routeLineIds.size() == 1) {
             return routeLineIds.stream()
@@ -3724,11 +3713,6 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     private Optional<MapDimensionGraph> graphForCard(MapCard card) {
         return card.levelKey().isPresent() ? FullRouteMapCache.graph(card.levelKey().get()) : this.currentGraph();
-    }
-
-    private Optional<PhysicalRouteMapGraph> physicalGraphForCard(MapCard card) {
-        ResourceKey<Level> levelKey = card.levelKey().orElse(this.activeDimension);
-        return levelKey == null ? Optional.empty() : FullRouteMapCache.physicalGraph(levelKey);
     }
 
     private ViewportState viewportFor(MapDimensionGraph graph) {

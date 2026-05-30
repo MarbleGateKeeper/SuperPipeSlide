@@ -220,14 +220,6 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
         return best == null ? new Vec2(origin.x() + preferredDirection.x() * profile.boundarySpacing(), origin.y() + preferredDirection.y() * profile.boundarySpacing()) : best;
     }
 
-    private Map<NodeId, Vec2> layoutComponents(MetroTopology topology, LayoutProfile profile) {
-        List<ComponentLayout> localLayouts = new ArrayList<>();
-        for (MetroComponent component : topology.components()) {
-            localLayouts.add(this.layoutComponent(topology, component, profile));
-        }
-        return this.packComponents(localLayouts, profile);
-    }
-
     private ComponentLayout layoutComponent(MetroTopology topology, MetroComponent component, LayoutProfile profile) {
         Map<NodeId, Vec2> positions;
         Optional<RouteRun> primary = this.primaryRun(component);
@@ -464,54 +456,6 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
                 break;
             }
         }
-    }
-
-    private ConstraintStats repairGlobalConstraints(MetroTopology topology, Map<NodeId, Vec2> positions, LayoutProfile profile) {
-        int nodeOverlaps = 0;
-        int edgeNodeConflicts = 0;
-        for (int iteration = 0; iteration < 32; iteration++) {
-            boolean moved = false;
-            List<NodeId> ids = positions.keySet().stream().sorted(NodeId::compareTo).toList();
-            for (int i = 0; i < ids.size(); i++) {
-                NodeId first = ids.get(i);
-                for (int j = i + 1; j < ids.size(); j++) {
-                    NodeId second = ids.get(j);
-                    double min = minNodeDistance(topology.node(first), topology.node(second), profile, topology.connected(first, second));
-                    Vec2 a = positions.get(first);
-                    Vec2 b = positions.get(second);
-                    double distance = a.distanceTo(b);
-                    if (distance >= min) {
-                        continue;
-                    }
-                    nodeOverlaps++;
-                    Vec2 dir = distance < EPSILON ? hashDirection(first, second) : new Vec2((b.x() - a.x()) / distance, (b.y() - a.y()) / distance);
-                    double push = (min - distance) * 0.5D;
-                    positions.put(first, new Vec2(a.x() - dir.x() * push, a.y() - dir.y() * push));
-                    positions.put(second, new Vec2(b.x() + dir.x() * push, b.y() + dir.y() * push));
-                    moved = true;
-                }
-            }
-            if (!moved) {
-                break;
-            }
-        }
-        for (SchematicEdge edge : topology.edges()) {
-            Vec2 a = positions.get(edge.from());
-            Vec2 b = positions.get(edge.to());
-            if (a == null || b == null || edge.kind() == SemanticEdgeKind.STATION_INTERNAL) {
-                continue;
-            }
-            for (Map.Entry<NodeId, Vec2> entry : positions.entrySet()) {
-                if (entry.getKey().equals(edge.from()) || entry.getKey().equals(edge.to())) {
-                    continue;
-                }
-                double clearance = nodeObstacleRadius(topology.node(entry.getKey())) + 4.0D;
-                if (distanceToSegment(entry.getValue(), a, b) < clearance) {
-                    edgeNodeConflicts++;
-                }
-            }
-        }
-        return new ConstraintStats(nodeOverlaps, edgeNodeConflicts);
     }
 
     private ConstraintStats measureGlobalConstraints(MetroTopology topology, Map<NodeId, Vec2> positions, LayoutProfile profile) {

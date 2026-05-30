@@ -55,6 +55,9 @@ public final class SlideTraversalStepper {
                 double consumed = Math.abs(stationCheckpoint.get().distanceOnConnection() - distance);
                 return new TraversalResult(cursor, Math.max(0.0D, remaining - consumed), events, Optional.of(event));
             }
+            if (current.platformStopId().isPresent() && atStationEntry(current, distance, direction)) {
+                events.add(TraversalEvent.atCursor(TraversalEventType.STATION_PASS_THROUGH, new TraversalCursor(current.id(), direction, distance)));
+            }
 
             if (remaining < distanceToEnd || distanceToEnd <= 1.0E-6D && remaining <= 1.0E-6D) {
                 double nextDistance = direction > 0 ? distance + remaining : distance - remaining;
@@ -96,6 +99,11 @@ public final class SlideTraversalStepper {
     private static int maxTopologySteps() {
         int derived = (int) Math.ceil(Config.MAX_STEP_DISTANCE.getAsDouble() / MIN_TRAVERSAL_CONNECTION_LENGTH) + 8;
         return Math.max(8, Math.min(ABSOLUTE_MAX_TOPOLOGY_STEPS, derived));
+    }
+
+    private static boolean atStationEntry(PipeConnection connection, double distance, int direction) {
+        double entry = direction > 0 ? 0.0D : connection.length();
+        return Math.abs(distance - entry) <= 1.0E-6D;
     }
 
     @FunctionalInterface

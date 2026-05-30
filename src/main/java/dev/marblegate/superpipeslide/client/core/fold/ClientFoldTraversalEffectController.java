@@ -505,10 +505,6 @@ public final class ClientFoldTraversalEffectController {
             return kind == FoldAnchorKind.DIMENSION ? TUNNEL_MS_DIMENSION : TUNNEL_MS_SPACE;
         }
 
-        private static long exitMs(FoldAnchorKind kind) {
-            return kind == FoldAnchorKind.DIMENSION ? EXIT_MS_DIMENSION : EXIT_MS_SPACE;
-        }
-
         private static long decayMs(FoldAnchorKind kind) {
             return kind == FoldAnchorKind.DIMENSION ? DECAY_MS_DIMENSION : DECAY_MS_SPACE;
         }

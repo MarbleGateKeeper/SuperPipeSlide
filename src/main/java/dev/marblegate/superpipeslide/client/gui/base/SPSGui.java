@@ -539,20 +539,6 @@ public final class SPSGui {
         }
     }
 
-    private static void drawContinuation(GuiGraphicsExtractor graphics, int x1, int x2, int y, List<Integer> colors, int width, boolean left) {
-        if (x2 <= x1) {
-            return;
-        }
-        int segments = Math.max(1, Math.min(5, (x2 - x1) / 5));
-        for (int i = 0; i < segments; i++) {
-            int a = left ? i + 1 : segments - i;
-            int alpha = 0x22 + a * (0xAA / segments);
-            int sx1 = x1 + (x2 - x1) * i / segments;
-            int sx2 = x1 + (x2 - x1) * (i + 1) / segments;
-            drawRail(graphics, sx1, sx2, y, colors.stream().map(color -> withAlpha(color, alpha)).toList(), width);
-        }
-    }
-
     private static void drawBreakSlash(GuiGraphicsExtractor graphics, int x, int y, int width) {
         int top = y - width / 2 - 1;
         for (int i = 0; i < width + 2; i++) {
@@ -862,15 +848,6 @@ public final class SPSGui {
         return ClientRouteViewModelCache.loopStatus(layout);
     }
 
-    private static String shortLineName(String name) {
-        String trimmed = name.trim();
-        return trimmed.length() <= 12 ? trimmed : trimmed.substring(0, 12);
-    }
-
-    public static List<StationNode> representativeNodes(RouteLine line) {
-        return ClientRouteViewModelCache.representativeNodes(line);
-    }
-
     public static Optional<RouteLayout> representativeLayout(RouteLine line) {
         return ClientRouteViewModelCache.representativeLayout(line);
     }
@@ -885,18 +862,6 @@ public final class SPSGui {
 
     public static String layoutStatus(RouteLayout layout) {
         return ClientRouteViewModelCache.layoutStatus(layout);
-    }
-
-    public static int statusColor(String status) {
-        return switch (status) {
-            case "Broken" -> DANGER;
-            case "Ambiguous" -> ORANGE;
-            case "Incomplete" -> WARNING;
-            case "Stale" -> WARNING;
-            case "Disabled" -> TEXT_DISABLED;
-            case "Valid" -> SUCCESS;
-            default -> TEXT_MUTED;
-        };
     }
 
     public static String layoutName(RouteLayout layout) {

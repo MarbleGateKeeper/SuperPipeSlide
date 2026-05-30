@@ -2876,14 +2876,6 @@ public final class ProjectionLayoutCanvasScreen extends RouteEditorScreenBase {
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
-    private boolean focusedTextBoxInFloatingPanel() {
-        return activeFloatingTextBox() != null;
-    }
-
-    private EditBox focusedFloatingTextBox() {
-        return activeFloatingTextBox();
-    }
-
     private EditBox activeFloatingTextBox() {
         if (this.activeFloatingTextBox != null && this.activeFloatingTextBox.visible && this.activeFloatingTextBox.active) {
             if (!this.activeFloatingTextBox.isFocused()) {

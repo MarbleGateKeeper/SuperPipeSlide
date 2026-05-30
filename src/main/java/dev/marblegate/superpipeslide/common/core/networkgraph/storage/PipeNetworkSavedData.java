@@ -2,47 +2,30 @@ package dev.marblegate.superpipeslide.common.core.networkgraph.storage;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import dev.marblegate.superpipeslide.common.core.geometry.CurveSpec;
-import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
-import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
-import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionAttributes;
-import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionUtils;
+import dev.marblegate.superpipeslide.common.SuperPipeSlide;
+import dev.marblegate.superpipeslide.common.core.geometry.*;
 import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchConnectionSlot;
 import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
-import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorDirectory;
-import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorKind;
-import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorMode;
-import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
-import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorRef;
+import dev.marblegate.superpipeslide.common.core.networkgraph.fold.*;
 import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNetworkChangeSet;
 import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNode;
 import dev.marblegate.superpipeslide.common.core.networkgraph.solver.AutoCurveSolver;
 import dev.marblegate.superpipeslide.common.core.networkgraph.sync.PipeSyncTracker;
 import dev.marblegate.superpipeslide.common.registry.SPSBlocks;
-import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.network.sync.pipe.PipeNetworkDeltaPayload;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.*;
 
 public final class PipeNetworkSavedData extends SavedData implements PipeNetworkView {
     private static final int SERVER_RUNTIME_REBUILD_BUDGET_PER_QUERY = 16;
@@ -934,10 +917,6 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
         return this.branchNodeManagingConnection(connection.id()).isPresent();
     }
 
-    private boolean touchesBranchNode(PipeConnection connection) {
-        return this.branchNodeAt(connection.fromAnchor()).isPresent() || this.branchNodeAt(connection.toAnchor()).isPresent();
-    }
-
     private boolean touchesSpecialNode(PipeConnection connection) {
         return this.isSpecialAnchorNode(connection.fromAnchor()) || this.isSpecialAnchorNode(connection.toAnchor());
     }
@@ -1022,10 +1001,6 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
             }
         }
         return touching;
-    }
-
-    private List<UUID> orderedManagedConnectionIds(BranchNode branchNode) {
-        return branchNode.managedConnectionIdsInOrder();
     }
 
     private BranchNode withAddedBranchConnection(BranchNode branchNode, PipeAnchorId branchAnchor, PipeConnection connection) {

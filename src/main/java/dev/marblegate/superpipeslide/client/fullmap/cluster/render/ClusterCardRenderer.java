@@ -773,17 +773,6 @@ public final class ClusterCardRenderer {
                 .orElse(FullMapTheme.BORDER_SELECTED);
     }
 
-    private static String edgeTitle(List<UUID> routeLineIds) {
-        if (routeLineIds.size() == 1) {
-            return routeLineIds.stream()
-                    .findFirst()
-                    .flatMap(ClientRouteDataCache::routeLine)
-                    .map(FullMapText::displayName)
-                    .orElse(Component.translatable("screen.superpipeslide.route").getString());
-        }
-        return Component.translatable("screen.superpipeslide.full_map.tooltip_card.shared_routes").getString();
-    }
-
     private static DisplayNameStack edgeTitleStack(List<UUID> routeLineIds) {
         if (routeLineIds.size() == 1) {
             return routeLineIds.stream()

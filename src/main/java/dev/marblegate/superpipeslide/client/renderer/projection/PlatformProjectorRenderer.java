@@ -1680,15 +1680,6 @@ public final class PlatformProjectorRenderer {
         }
     }
 
-    private static void addArrowSurface(PoseStack.Pose pose, VertexConsumer buffer, ComponentTransform transform, float x, float y, int direction, float size, float z, int color, SurfacePass pass) {
-        float s = Math.max(0.01F, size);
-        if (direction >= 0) {
-            addTransformedQuad(pose, buffer, transform, x + s, y, x - s, y + s * 0.7F, x - s * 0.45F, y, x - s, y - s * 0.7F, z, color, pass);
-        } else {
-            addTransformedQuad(pose, buffer, transform, x - s, y, x + s, y - s * 0.7F, x + s * 0.45F, y, x + s, y + s * 0.7F, z, color, pass);
-        }
-    }
-
     private static void addLineSegment(PoseStack.Pose pose, VertexConsumer buffer, ComponentTransform transform, float x1, float y1, float x2, float y2, float width, float z, int color, SurfacePass pass) {
         if (!pass.accepts(color)) {
             return;
@@ -1952,13 +1943,6 @@ public final class PlatformProjectorRenderer {
 
     private static int withAlpha(int color, int alpha) {
         return (Math.max(0, Math.min(255, alpha)) << 24) | (color & 0x00FFFFFF);
-    }
-
-    private static int contrast(int color) {
-        int r = (color >>> 16) & 0xFF;
-        int g = (color >>> 8) & 0xFF;
-        int b = color & 0xFF;
-        return r * 299 + g * 587 + b * 114 > 150000 ? 0xFF111820 : 0xFFFFFFFF;
     }
 
     private enum SurfacePass {

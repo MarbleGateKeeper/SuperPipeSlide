@@ -330,8 +330,4 @@ public class RouteLineScreen extends RouteEditorScreenBase implements RouteDataA
     private static int defaultNewColor() {
         return 0xE03366FF;
     }
-
-    private static int directionGroupCount(RouteLine line) {
-        return SPSGui.lineSummary(line).layoutCount();
-    }
 }

@@ -63,9 +63,11 @@ public final class FullRouteMapBuilder {
     private final Map<ResourceKey<Level>, Map<NodeId, MapNode>> nodesByLevel = new LinkedHashMap<>();
     private final Map<ResourceKey<Level>, Map<NodeId, MapCluster>> clustersByLevel = new LinkedHashMap<>();
     private final Map<ResourceKey<Level>, Map<EdgeKey, EdgeAccumulator>> edgesByLevel = new LinkedHashMap<>();
-    private final Map<ResourceKey<Level>, List<MissingCrossDimensionPathHint>> missingCrossDimensionHintsByLevel = new LinkedHashMap<>();    public FullRouteMapBuilder(FullRouteMapSourceSnapshot source) {
+    private final Map<ResourceKey<Level>, List<MissingCrossDimensionPathHint>> missingCrossDimensionHintsByLevel = new LinkedHashMap<>();
+    public FullRouteMapBuilder(FullRouteMapSourceSnapshot source) {
         this.source = source;
-    }    public Map<ResourceKey<Level>, MapDimensionGraph> build() {
+    }
+    public Map<ResourceKey<Level>, MapDimensionGraph> build() {
         this.indexSource();
         this.computeStationLineRefs();
         this.buildClusters();
@@ -668,23 +670,6 @@ public final class FullRouteMapBuilder {
             return;
         }
         this.diagnosticsByLevel.computeIfAbsent(levelKey, ignored -> new ArrayList<>()).add(new MapBuildDiagnostic(type, message));
-    }
-
-    private static NodeId topCollapsedId(Map<NodeId, MapNode> nodeMap, MapNode node) {
-        if (node == null) {
-            return null;
-        }
-        NodeId current = node.id();
-        Optional<NodeId> parent = node.clusterId();
-        while (parent.isPresent()) {
-            current = parent.get();
-            MapNode parentNode = nodeMap.get(current);
-            if (parentNode == null) {
-                break;
-            }
-            parent = parentNode.clusterId();
-        }
-        return current;
     }
 
     private static Map<UUID, List<StationGroup>> stationComponents(List<StationGroup> stations, double threshold) {

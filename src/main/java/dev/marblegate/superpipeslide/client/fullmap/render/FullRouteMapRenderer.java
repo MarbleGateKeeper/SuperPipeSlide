@@ -52,8 +52,10 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 
-public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
-    }    public void renderPhysical(GuiGraphicsExtractor graphics, Font font, PhysicalRouteMapGraph graph, ViewportState viewport, SPSGui.Rect mapRect, HitTarget hover, int mouseX, int mouseY) {
+public final class FullRouteMapRenderer {
+    public FullRouteMapRenderer() {
+    }
+    public void renderPhysical(GuiGraphicsExtractor graphics, Font font, PhysicalRouteMapGraph graph, ViewportState viewport, SPSGui.Rect mapRect, HitTarget hover, int mouseX, int mouseY) {
         drawMapBackground(graphics, mapRect, viewport, FullRouteMapCache.layoutMode());
         Aabb2 worldView = screenWorldBounds(viewport, mapRect).inflate(96.0D / scale(viewport));
         this.drawPhysicalStationFrames(graphics, graph, viewport, mapRect, worldView, hover);
@@ -64,7 +66,8 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
         if (graph.nodes().isEmpty() && graph.edges().isEmpty()) {
             SPSGui.centeredText(graphics, font, Component.translatable("screen.superpipeslide.full_map.empty_dimension"), mapRect.x() + mapRect.width() / 2, mapRect.y() + mapRect.height() / 2, FullRouteMapConfig.MAP_LABEL_MUTED);
         }
-    }    public HitTarget hitTestPhysical(PhysicalRouteMapGraph graph, ViewportState viewport, SPSGui.Rect mapRect, double mouseX, double mouseY) {
+    }
+    public HitTarget hitTestPhysical(PhysicalRouteMapGraph graph, ViewportState viewport, SPSGui.Rect mapRect, double mouseX, double mouseY) {
         if (!mapRect.contains(mouseX, mouseY)) {
             return HitTarget.none();
         }
@@ -131,9 +134,11 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
             }
         }
         return bestEdge == null ? HitTarget.none() : HitTarget.physicalEdge(bestEdge);
-    }    public void render(GuiGraphicsExtractor graphics, Font font, MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport, SPSGui.Rect mapRect, HitTarget hover, int mouseX, int mouseY) {
+    }
+    public void render(GuiGraphicsExtractor graphics, Font font, MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport, SPSGui.Rect mapRect, HitTarget hover, int mouseX, int mouseY) {
         this.render(graphics, font, graph, visualGraph, viewport, mapRect, hover, mouseX, mouseY, Optional.empty());
-    }    public void render(GuiGraphicsExtractor graphics, Font font, MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport, SPSGui.Rect mapRect, HitTarget hover, int mouseX, int mouseY, Optional<UUID> highlightedRouteLineId) {
+    }
+    public void render(GuiGraphicsExtractor graphics, Font font, MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport, SPSGui.Rect mapRect, HitTarget hover, int mouseX, int mouseY, Optional<UUID> highlightedRouteLineId) {
         if (visualGraph == null) {
             this.render(graphics, font, graph, viewport, mapRect, hover, mouseX, mouseY);
             return;
@@ -153,7 +158,8 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
         if (graph.nodes().isEmpty()) {
             SPSGui.centeredText(graphics, font, Component.translatable("screen.superpipeslide.full_map.empty_dimension"), mapRect.x() + mapRect.width() / 2, mapRect.y() + mapRect.height() / 2, FullRouteMapConfig.MAP_LABEL_MUTED);
         }
-    }    public HitTarget hitTest(MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport, SPSGui.Rect mapRect, double mouseX, double mouseY) {
+    }
+    public HitTarget hitTest(MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport, SPSGui.Rect mapRect, double mouseX, double mouseY) {
         if (visualGraph == null) {
             return this.hitTest(graph, viewport, mapRect, mouseX, mouseY);
         }
@@ -288,7 +294,8 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
             return HitTarget.edge(bestEdge);
         }
         return HitTarget.none();
-    }    public void render(GuiGraphicsExtractor graphics, Font font, MapDimensionGraph graph, ViewportState viewport, SPSGui.Rect mapRect, HitTarget hover, int mouseX, int mouseY) {
+    }
+    public void render(GuiGraphicsExtractor graphics, Font font, MapDimensionGraph graph, ViewportState viewport, SPSGui.Rect mapRect, HitTarget hover, int mouseX, int mouseY) {
         drawMapBackground(graphics, mapRect, viewport, FullRouteMapCache.layoutMode());
         Aabb2 worldView = screenWorldBounds(viewport, mapRect).inflate(96.0D / scale(viewport));
         this.drawTransferHints(graphics, graph, viewport, mapRect, worldView, hover);
@@ -300,7 +307,8 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
         if (graph.nodes().isEmpty()) {
             SPSGui.centeredText(graphics, font, Component.translatable("screen.superpipeslide.full_map.empty_dimension"), mapRect.x() + mapRect.width() / 2, mapRect.y() + mapRect.height() / 2, FullRouteMapConfig.MAP_LABEL_MUTED);
         }
-    }    public HitTarget hitTest(MapDimensionGraph graph, ViewportState viewport, SPSGui.Rect mapRect, double mouseX, double mouseY) {
+    }
+    public HitTarget hitTest(MapDimensionGraph graph, ViewportState viewport, SPSGui.Rect mapRect, double mouseX, double mouseY) {
         if (!mapRect.contains(mouseX, mouseY)) {
             return HitTarget.none();
         }
@@ -367,7 +375,8 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
             }
         }
         return bestEdge == null ? HitTarget.none() : HitTarget.edge(bestEdge.id());
-    }    public static Vec2 worldToScreen(double worldX, double worldZ, ViewportState viewport, SPSGui.Rect mapRect) {
+    }
+    public static Vec2 worldToScreen(double worldX, double worldZ, ViewportState viewport, SPSGui.Rect mapRect) {
         double s = scale(viewport);
         if (cameraActive(viewport)) {
             double dx = worldX - viewport.centerWorldX();
@@ -382,7 +391,8 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
         }
         return new Vec2(mapRect.x() + mapRect.width() * 0.5D + (worldX - viewport.centerWorldX()) * s,
                 mapRect.y() + mapRect.height() * 0.5D + (worldZ - viewport.centerWorldZ()) * s);
-    }    public static Vec2 screenToWorld(double screenX, double screenY, ViewportState viewport, SPSGui.Rect mapRect) {
+    }
+    public static Vec2 screenToWorld(double screenX, double screenY, ViewportState viewport, SPSGui.Rect mapRect) {
         double s = scale(viewport);
         if (cameraActive(viewport)) {
             double rotatedX = (screenX - (mapRect.x() + mapRect.width() * 0.5D)) / s;
@@ -870,7 +880,8 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
                 || first.start().distanceTo(second.end()) <= tolerance
                 || first.end().distanceTo(second.start()) <= tolerance
                 || first.end().distanceTo(second.end()) <= tolerance;
-    }    public static List<UUID> physicalRouteLineIdsForEdge(PhysicalRouteMapGraph graph, String edgeId) {
+    }
+    public static List<UUID> physicalRouteLineIdsForEdge(PhysicalRouteMapGraph graph, String edgeId) {
         return physicalEdgeGroupForEdge(graph, edgeId).stream()
                 .map(FullRouteMapRenderer::physicalRouteLanes)
                 .findFirst()
@@ -878,7 +889,8 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
                 .stream()
                 .map(PhysicalRouteLane::routeLineId)
                 .toList();
-    }    public static Optional<PhysicalMapEdge> physicalRepresentativeEdgeForRouteLine(PhysicalRouteMapGraph graph, String edgeId, UUID routeLineId) {
+    }
+    public static Optional<PhysicalMapEdge> physicalRepresentativeEdgeForRouteLine(PhysicalRouteMapGraph graph, String edgeId, UUID routeLineId) {
         return physicalEdgeGroupForEdge(graph, edgeId).stream()
                 .flatMap(List::stream)
                 .filter(edge -> edge.metadata().routeLineId().equals(routeLineId))
@@ -1730,7 +1742,8 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
 
     private static double projection(Vec2 point, Vec2 origin, double ux, double uy) {
         return (point.x() - origin.x()) * ux + (point.y() - origin.y()) * uy;
-    }    public static NodeId displayNodeId(MapDimensionGraph graph, NodeId nodeId, double zoom) {
+    }
+    public static NodeId displayNodeId(MapDimensionGraph graph, NodeId nodeId, double zoom) {
         MapNode node = graph.nodesById().get(nodeId);
         if (node == null) {
             return nodeId;
@@ -1756,7 +1769,8 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
             parent = parentNode.clusterId();
         }
         return current;
-    }    public static NodeId aggregatedDisplayNodeId(MapDimensionGraph graph, NodeId nodeId) {
+    }
+    public static NodeId aggregatedDisplayNodeId(MapDimensionGraph graph, NodeId nodeId) {
         MapNode node = graph.nodesById().get(nodeId);
         return node == null ? nodeId : topDisplayNodeId(graph, node);
     }
@@ -1874,10 +1888,6 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
         double scale = Math.max(0.48D, Math.min(1.45D, 0.62D + zoom * 0.12D));
         double base = kind == PhysicalNodeKind.FOLD_ANCHOR ? FullRouteMapConfig.NODE_RADIUS_PX + 1.0D : FullRouteMapConfig.NODE_RADIUS_PX - 1.0D;
         return Math.max(3.0D, base * scale);
-    }
-
-    private static double physicalNodeHitRadius(PhysicalMapNode node, double zoom) {
-        return physicalNodeRadius(node.kind(), zoom) + 4.0D;
     }
 
     private static double physicalEdgeHitRadius(double zoom) {
@@ -2514,10 +2524,6 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
         }
     }
 
-    private static void drawColorLane(GuiGraphicsExtractor graphics, Vec2 a, Vec2 b, double totalWidth, List<Integer> colors) {
-        drawColorLanePath(graphics, List.of(a, b), totalWidth, colors);
-    }
-
     private static double routeBundleWidth(List<EdgeLane> lanes, double laneWidth) {
         return lanes.isEmpty() ? laneWidth : lanes.size() * laneWidth + Math.max(0, lanes.size() - 1);
     }
@@ -2747,27 +2753,6 @@ public final class FullRouteMapRenderer {    public FullRouteMapRenderer() {
         for (int i = 0; i + 1 < points.size(); i++) {
             drawDashedLine(graphics, points.get(i), points.get(i + 1), width, color, dash, gap);
         }
-    }
-
-    private static void drawDashedRect(GuiGraphicsExtractor graphics, Vec2 min, Vec2 max, double width, int color, double dash, double gap) {
-        Vec2 topLeft = new Vec2(min.x(), min.y());
-        Vec2 topRight = new Vec2(max.x(), min.y());
-        Vec2 bottomRight = new Vec2(max.x(), max.y());
-        Vec2 bottomLeft = new Vec2(min.x(), max.y());
-        drawDashedLine(graphics, topLeft, topRight, width, color, dash, gap);
-        drawDashedLine(graphics, topRight, bottomRight, width, color, dash, gap);
-        drawDashedLine(graphics, bottomRight, bottomLeft, width, color, dash, gap);
-        drawDashedLine(graphics, bottomLeft, topLeft, width, color, dash, gap);
-    }
-
-    private static void drawDashedEllipse(GuiGraphicsExtractor graphics, Vec2 center, double radiusX, double radiusY, double width, int color, double dash, double gap) {
-        int segments = Math.max(24, (int) Math.ceil(Math.max(radiusX, radiusY) * 0.8D));
-        List<Vec2> points = new ArrayList<>(segments + 1);
-        for (int i = 0; i <= segments; i++) {
-            double angle = Math.PI * 2.0D * i / segments;
-            points.add(new Vec2(center.x() + Math.cos(angle) * radiusX, center.y() + Math.sin(angle) * radiusY));
-        }
-        drawDashedPolyline(graphics, points, width, color, dash, gap);
     }
 
     private static void drawPedestrianIcon(GuiGraphicsExtractor graphics, Vec2 center, int size, int color) {

@@ -1202,11 +1202,6 @@ public final class RouteLineCardRenderer {
         SmoothGuiPrimitives.circle(graphics, center, radius, fill);
     }
 
-    private static void drawCapsule(GuiGraphicsExtractor graphics, Vec2 center, int width, int height, int fill, int outline) {
-        SmoothGuiPrimitives.capsule(graphics, center, width + 2.0D, height + 2.0D, outline);
-        SmoothGuiPrimitives.capsule(graphics, center, width, height, fill);
-    }
-
     private static void drawDiamond(GuiGraphicsExtractor graphics, Vec2 center, int radius, int fill, int outline) {
         SmoothGuiPrimitives.diamond(graphics, center, radius + 1.0D, outline);
         SmoothGuiPrimitives.diamond(graphics, center, Math.max(1.0D, radius - 1.0D), fill);
@@ -1348,17 +1343,6 @@ public final class RouteLineCardRenderer {
             phase += length;
             previous = current;
         }
-    }
-
-    private static void drawDashedRect(GuiGraphicsExtractor graphics, Aabb2 bounds, double width, int color, double dash, double gap) {
-        Vec2 a = new Vec2(bounds.minX(), bounds.minY());
-        Vec2 b = new Vec2(bounds.maxX(), bounds.minY());
-        Vec2 c = new Vec2(bounds.maxX(), bounds.maxY());
-        Vec2 d = new Vec2(bounds.minX(), bounds.maxY());
-        drawDashedLine(graphics, a, b, width, color, dash, gap);
-        drawDashedLine(graphics, b, c, width, color, dash, gap);
-        drawDashedLine(graphics, c, d, width, color, dash, gap);
-        drawDashedLine(graphics, d, a, width, color, dash, gap);
     }
 
     private static List<Vec2> offsetPath(List<Vec2> points, double offset) {

@@ -330,18 +330,6 @@ public final class StationNameProjectorRenderer {
         };
     }
 
-    private static String stationTextValue(ProjectionComponent component, StationRenderInfo info, StationNameProjectorConfig config) {
-        return switch (component.type()) {
-            case STATION_NAME_TEXT -> info.primaryName();
-            case TRANSLATION_TEXT -> info.translation();
-            case CUSTOM_TEXT -> component.text();
-            case EXIT_BADGE -> config.showExit() && !config.exitLabel().isBlank()
-                    ? Component.translatable("screen.superpipeslide.station_projector.exit", config.exitLabel()).getString()
-                    : "";
-            default -> "";
-        };
-    }
-
     private static List<NetworkImageStateKey> networkImageStates(AppliedProjectionLayout layout, boolean staticOnly) {
         if (layout.invalid()) {
             return List.of();

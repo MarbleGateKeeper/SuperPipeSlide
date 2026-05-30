@@ -930,60 +930,6 @@ public final class ProjectionLayoutPreviewPainter {
         return new SPSGui.Rect(r.x() + safe, r.y() + safe, Math.max(1, r.width() - safe * 2), Math.max(1, r.height() - safe * 2));
     }
 
-    private static void drawFilledCircle(GuiGraphicsExtractor graphics, SPSGui.Rect r, int color) {
-        double cx = r.x() + r.width() * 0.5D;
-        double cy = r.y() + r.height() * 0.5D;
-        double rx = Math.max(0.5D, r.width() * 0.5D);
-        double ry = Math.max(0.5D, r.height() * 0.5D);
-        for (int y = r.y(); y < r.bottom(); y++) {
-            double dy = ((y + 0.5D) - cy) / ry;
-            double half = Math.sqrt(Math.max(0.0D, 1.0D - dy * dy)) * rx;
-            int x0 = (int) Math.ceil(cx - half);
-            int x1 = (int) Math.floor(cx + half);
-            if (x1 >= x0) {
-                graphics.fill(Math.max(r.x(), x0), y, Math.min(r.right(), x1 + 1), y + 1, color);
-            }
-        }
-    }
-
-    private static void drawCircleRing(GuiGraphicsExtractor graphics, SPSGui.Rect r, int thickness, int color) {
-        int t = Math.max(1, Math.min(thickness, Math.max(1, Math.min(r.width(), r.height()) / 2)));
-        SPSGui.Rect inner = inset(r, t);
-        double cx = r.x() + r.width() * 0.5D;
-        double cy = r.y() + r.height() * 0.5D;
-        double rx = Math.max(0.5D, r.width() * 0.5D);
-        double ry = Math.max(0.5D, r.height() * 0.5D);
-        double innerRx = Math.max(0.0D, inner.width() * 0.5D);
-        double innerRy = Math.max(0.0D, inner.height() * 0.5D);
-        for (int y = r.y(); y < r.bottom(); y++) {
-            double outerDy = ((y + 0.5D) - cy) / ry;
-            double outerHalf = Math.sqrt(Math.max(0.0D, 1.0D - outerDy * outerDy)) * rx;
-            int outerX0 = (int) Math.ceil(cx - outerHalf);
-            int outerX1 = (int) Math.floor(cx + outerHalf);
-            if (outerX1 < outerX0) {
-                continue;
-            }
-            double innerDy = innerRy <= 0.0D ? 2.0D : ((y + 0.5D) - cy) / innerRy;
-            if (Math.abs(innerDy) >= 1.0D || innerRx <= 0.0D) {
-                graphics.fill(Math.max(r.x(), outerX0), y, Math.min(r.right(), outerX1 + 1), y + 1, color);
-                continue;
-            }
-            double innerHalf = Math.sqrt(Math.max(0.0D, 1.0D - innerDy * innerDy)) * innerRx;
-            int innerX0 = (int) Math.floor(cx - innerHalf);
-            int innerX1 = (int) Math.ceil(cx + innerHalf);
-            int left0 = Math.max(r.x(), outerX0);
-            int left1 = Math.min(r.right(), innerX0);
-            int right0 = Math.max(r.x(), innerX1);
-            int right1 = Math.min(r.right(), outerX1 + 1);
-            if (left1 > left0) {
-                graphics.fill(left0, y, left1, y + 1, color);
-            }
-            if (right1 > right0) {
-                graphics.fill(right0, y, right1, y + 1, color);
-            }
-        }
-    }
-
     private static void drawRouteBands(GuiGraphicsExtractor graphics, SPSGui.Rect r, List<ProjectionPreviewScenario.RoutePreview> routes, ProjectionComponentSettings.ColorPolicy colorPolicy, boolean horizontal) {
         drawRouteBands(graphics, r, routes, colorPolicy, horizontal, 1.0F);
     }

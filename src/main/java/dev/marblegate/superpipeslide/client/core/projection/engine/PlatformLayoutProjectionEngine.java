@@ -585,13 +585,6 @@ public final class PlatformLayoutProjectionEngine {
         };
     }
 
-    private static int contrast(int color) {
-        int r = (color >>> 16) & 0xFF;
-        int g = (color >>> 8) & 0xFF;
-        int b = color & 0xFF;
-        return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? DARK_TEXT : LIGHT_TEXT;
-    }
-
     private static int withAlpha(int color, int alpha) {
         return (Math.max(0, Math.min(255, alpha)) << 24) | (color & 0x00FFFFFF);
     }

@@ -636,12 +636,26 @@ public final class ClientSlideController {
                 return true;
             }
         }
+        List<TraversalEvent> stationPassEvents = new ArrayList<>();
+        List<TraversalCursor> handoffCursors = new ArrayList<>();
         for (TraversalEvent event : result.events()) {
-            if (event.type() == TraversalEventType.CONNECTION_HANDOFF && reconcileToCursor(player, state, event.cursor())) {
+            if (event.type() == TraversalEventType.STATION_PASS_THROUGH) {
+                stationPassEvents.add(event);
+                continue;
+            }
+            if (event.type() == TraversalEventType.CONNECTION_HANDOFF) {
+                handoffCursors.add(event.cursor());
+            }
+        }
+        for (TraversalCursor cursor : handoffCursors) {
+            if (reconcileToCursor(player, state, cursor)) {
+                handleStationPassThroughEvents(state, stationPassEvents);
                 return true;
             }
         }
-        return !result.cursor().connectionId().equals(state.connectionId()) && reconcileToCursor(player, state, result.cursor());
+        boolean reconciled = !result.cursor().connectionId().equals(state.connectionId()) && reconcileToCursor(player, state, result.cursor());
+        handleStationPassThroughEvents(state, stationPassEvents);
+        return reconciled;
     }
 
     private static boolean reconcileToCursor(LocalPlayer player, ClientSlideState state, TraversalCursor cursor) {
@@ -719,6 +733,7 @@ public final class ClientSlideController {
             clearPassedStateForConnection(state.connectionId());
             clearOpenChoicesAfterHandoff();
         }
+        handleStationPassThroughEvents(active, result.events());
     }
 
     private static void processStationCheckpoint(LocalPlayer player, PipeConnection current, ClientSlideState state, TraversalEventType checkpointType) {
@@ -732,6 +747,39 @@ public final class ClientSlideController {
         }
         ClientSlideMotion.apply(player, current, state.distanceOnConnection(), state.direction(), state.speed());
         active = state;
+    }
+
+    private static void handleStationPassThroughEvents(ClientSlideState state, List<TraversalEvent> events) {
+        for (TraversalEvent event : events) {
+            if (event.type() == TraversalEventType.STATION_PASS_THROUGH) {
+                handleStationPassThroughEvent(state, event);
+            }
+        }
+    }
+
+    private static void handleStationPassThroughEvent(ClientSlideState state, TraversalEvent event) {
+        if (activeRouteLayoutId == null) {
+            return;
+        }
+        Optional<PipeConnection> connection = ClientPipeNetworkCache.globalConnection(event.cursor().connectionId());
+        Optional<PlatformStop> platformStop = connection.flatMap(PipeConnection::platformStopId).flatMap(ClientRouteDataCache::platformStop);
+        if (platformStop.isEmpty()) {
+            return;
+        }
+        Optional<RouteLayout> layout = ClientRouteDataCache.routeLayout(activeRouteLayoutId);
+        if (layout.isEmpty()) {
+            return;
+        }
+        if (platformStop.get().id().equals(activeRoutePlatformStopId)) {
+            return;
+        }
+        if (!layout.get().orderedPlatformStops().contains(platformStop.get().id())) {
+            sendPassStationNotice(state, platformStop.get(), layout.get(), true);
+            return;
+        }
+        if (!isArrivalTargetStation(layout.get(), platformStop.get().id())) {
+            sendPassStationNotice(state, platformStop.get(), layout.get(), false);
+        }
     }
 
     private static void processStationEntryCheckpoint(LocalPlayer player, PipeConnection current, ClientSlideState state) {
@@ -769,6 +817,7 @@ public final class ClientSlideController {
         ClientNavigationController.StationNavigationAction navigationAction = ClientNavigationController.stationAction(platformStop.get().id());
         if (navigationAction == ClientNavigationController.StationNavigationAction.PASS_THROUGH) {
             ClientNavigationController.onPassThroughStation(platformStop.get().id());
+            sendPassStationNotice(state, platformStop.get(), layout.get(), false);
             Optional<RouteStep> next = nextStep(layout.get(), platformStop.get().id(), activeRouteDirection)
                     .filter(step -> step.section().statusForDirection(activeRouteDirection) == RouteSectionStatus.VALID);
             if (next.isPresent()) {
