@@ -33,6 +33,7 @@ public final class ClientPipeNetworkCache {
     private static final long RESYNC_COOLDOWN_MILLIS = 1000L;
     private static final int CLIENT_QUERY_RUNTIME_REBUILD_BUDGET = 12;
     private static final int CLIENT_RENDER_RUNTIME_REBUILD_BUDGET = 24;
+    private static final int CLIENT_FAR_LOD_RUNTIME_REBUILD_BUDGET = 256;
 
     private static final Map<ResourceKey<Level>, DimensionCache> BY_LEVEL = new LinkedHashMap<>();
     private static final Map<UUID, PipeConnection> CONNECTIONS_BY_ID = new LinkedHashMap<>();
@@ -360,6 +361,12 @@ public final class ClientPipeNetworkCache {
     public static Collection<RuntimePipeConnection> runtimeConnections(ResourceKey<Level> requestedLevel) {
         return dimension(requestedLevel)
                 .map(cache -> List.copyOf(cache.index().runtimeConnections(requestedLevel, CLIENT_RENDER_RUNTIME_REBUILD_BUDGET)))
+                .orElse(List.of());
+    }
+
+    public static Collection<RuntimePipeConnection> runtimeConnectionsForFarLod(ResourceKey<Level> requestedLevel) {
+        return dimension(requestedLevel)
+                .map(cache -> List.copyOf(cache.index().runtimeConnections(requestedLevel, CLIENT_FAR_LOD_RUNTIME_REBUILD_BUDGET)))
                 .orElse(List.of());
     }
 

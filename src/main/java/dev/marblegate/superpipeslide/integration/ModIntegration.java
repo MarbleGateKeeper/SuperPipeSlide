@@ -3,7 +3,8 @@ package dev.marblegate.superpipeslide.integration;
 import net.neoforged.fml.ModList;
 
 public enum ModIntegration {
-    IRIS(Constants.IRIS);
+    IRIS(Constants.IRIS),
+    DISTANT_HORIZONS(Constants.DISTANT_HORIZONS);
 
     private final String id;
 
@@ -21,5 +22,6 @@ public enum ModIntegration {
 
     public static class Constants {
         public static final String IRIS = "iris";
+        public static final String DISTANT_HORIZONS = "distanthorizons";
     }
 }

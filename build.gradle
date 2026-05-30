@@ -19,6 +19,7 @@ sourceSets.main.resources {
 
 def allIntegrationSourceSets = [
         "iris",
+        "distanthorizons",
 ]
 
 def isIntegrationEnabled = { name ->
@@ -181,6 +182,10 @@ dependencies {
         irisCompileOnly("net.caffeinemc:sodium-neoforge-mod:${sodium_version}")
         irisLocalImplementation("maven.modrinth:iris:${iris_version}")
     }
+
+    if (hasIntegration("distanthorizons")) {
+        distanthorizonsLocalImplementation("maven.modrinth:distanthorizons:${distant_horizons_version}")
+    }
 }
 
 def integrationMixinConfigs = [
@@ -214,6 +219,17 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
 
 sourceSets.main.resources.srcDir generateModMetadata
 neoForge.ideSyncTask generateModMetadata
+
+spotless {
+    java {
+        endWithNewline()
+        leadingTabsToSpaces()
+        removeUnusedImports()
+        toggleOffOn()
+        importOrder()
+        eclipse().configFile "codeformat/formatter-config.xml"
+    }
+}
 
 publishing {
     publications {
