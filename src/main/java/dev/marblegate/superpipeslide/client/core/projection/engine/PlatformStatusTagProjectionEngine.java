@@ -3,7 +3,6 @@ package dev.marblegate.superpipeslide.client.core.projection.engine;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponentSettings;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionOverflowMode;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionTextAlign;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,8 +10,7 @@ public final class PlatformStatusTagProjectionEngine {
     private static final int LAYER_SURFACE = 10;
     private static final int LAYER_TEXT = 100;
 
-    private PlatformStatusTagProjectionEngine() {
-    }
+    private PlatformStatusTagProjectionEngine() {}
 
     public static Layout build(List<String> tags, ProjectionComponentSettings.PlatformStatusTags settings) {
         return build(tags, settings, 1.0F, 1.0F);
@@ -60,18 +58,15 @@ public final class PlatformStatusTagProjectionEngine {
         return value == null ? 0 : value.codePointCount(0, value.length());
     }
 
-    public record Layout(List<Primitive> primitives) {
-    }
+    public record Layout(List<Primitive> primitives) {}
 
     public sealed interface Primitive permits Capsule, Text {
         int layer();
     }
 
-    public record Capsule(float x, float y, float width, float height, int color, int layer) implements Primitive {
-    }
+    public record Capsule(float x, float y, float width, float height, int color, int layer) implements Primitive {}
 
-    public record Text(float x, float y, float width, float height, String value, int color, float fontSize, ProjectionTextAlign align, ProjectionOverflowMode overflow, int layer) implements Primitive {
-    }
+    public record Text(float x, float y, float width, float height, String value, int color, float fontSize, ProjectionTextAlign align, ProjectionOverflowMode overflow, int layer) implements Primitive {}
 
     private static final class LayoutBuilder {
         private final List<Primitive> primitives = new ArrayList<>();

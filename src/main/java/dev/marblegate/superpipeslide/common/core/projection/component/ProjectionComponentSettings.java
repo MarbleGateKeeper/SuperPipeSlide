@@ -2,10 +2,9 @@ package dev.marblegate.superpipeslide.common.core.projection.component;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import java.util.Locale;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
-
-import java.util.Locale;
 
 public sealed interface ProjectionComponentSettings permits
         ProjectionComponentSettings.Panel,
@@ -318,13 +317,12 @@ public sealed interface ProjectionComponentSettings permits
     }
 
     record Panel(int fillColor, int borderColor, float borderWidth, float opacity) implements ProjectionComponentSettings {
+
         public static final Codec<Panel> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.INT.optionalFieldOf("fill", 0xFF182126).forGetter(Panel::fillColor),
                 Codec.INT.optionalFieldOf("border", 0xFF4B5C62).forGetter(Panel::borderColor),
                 Codec.FLOAT.optionalFieldOf("border_width", 0.018F).forGetter(Panel::borderWidth),
-                Codec.FLOAT.optionalFieldOf("opacity", 1.0F).forGetter(Panel::opacity)
-        ).apply(instance, Panel::new));
-
+                Codec.FLOAT.optionalFieldOf("opacity", 1.0F).forGetter(Panel::opacity)).apply(instance, Panel::new));
         public Panel {
             borderWidth = clamp(borderWidth, 0.0F, 0.50F, 0.018F);
             opacity = clamp(opacity, 0.0F, 1.0F, 1.0F);
@@ -363,8 +361,8 @@ public sealed interface ProjectionComponentSettings permits
             ProjectionOverflowMode translationOverflow,
             TextOrientation orientation,
             MissingTranslationMode missingTranslationMode,
-            float missingPrimaryScale
-    ) implements ProjectionComponentSettings {
+            float missingPrimaryScale) implements ProjectionComponentSettings {
+
         public static final Codec<StationTitleGroup> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.INT.optionalFieldOf("primary_color", 0xFFFFFFFF).forGetter(StationTitleGroup::primaryColor),
                 Codec.INT.optionalFieldOf("translation_color", 0xFFBFD4DC).forGetter(StationTitleGroup::translationColor),
@@ -376,9 +374,7 @@ public sealed interface ProjectionComponentSettings permits
                 ProjectionOverflowMode.CODEC.optionalFieldOf("translation_overflow", ProjectionOverflowMode.MARQUEE).forGetter(StationTitleGroup::translationOverflow),
                 TextOrientation.CODEC.optionalFieldOf("orientation", TextOrientation.HORIZONTAL).forGetter(StationTitleGroup::orientation),
                 MissingTranslationMode.CODEC.optionalFieldOf("missing_translation", MissingTranslationMode.EXPAND_PRIMARY).forGetter(StationTitleGroup::missingTranslationMode),
-                Codec.FLOAT.optionalFieldOf("missing_primary_scale", 1.26F).forGetter(StationTitleGroup::missingPrimaryScale)
-        ).apply(instance, StationTitleGroup::new));
-
+                Codec.FLOAT.optionalFieldOf("missing_primary_scale", 1.26F).forGetter(StationTitleGroup::missingPrimaryScale)).apply(instance, StationTitleGroup::new));
         public StationTitleGroup {
             primaryFontSize = clamp(primaryFontSize, 0.01F, 2.0F, 0.23F);
             translationFontSize = clamp(translationFontSize, 0.01F, 2.0F, 0.085F);
@@ -471,8 +467,7 @@ public sealed interface ProjectionComponentSettings permits
                     ProjectionOverflowMode.STREAM_CODEC.decode(buffer),
                     buffer.readEnum(TextOrientation.class),
                     buffer.readEnum(MissingTranslationMode.class),
-                    buffer.readFloat()
-            );
+                    buffer.readFloat());
         }
     }
 
@@ -487,8 +482,7 @@ public sealed interface ProjectionComponentSettings permits
                     ProjectionOverflowMode.CODEC.optionalFieldOf("overflow", ProjectionOverflowMode.SCALE).forGetter(Text::overflow),
                     TextOrientation.CODEC.optionalFieldOf("orientation", TextOrientation.HORIZONTAL).forGetter(Text::orientation),
                     Codec.FLOAT.optionalFieldOf("line_spacing", 0.02F).forGetter(Text::lineSpacing),
-                    Codec.INT.optionalFieldOf("max_lines", 1).forGetter(Text::maxLines)
-            ).apply(instance, (binding, text, textColor, fontSize, align, overflow, orientation, lineSpacing, maxLines) -> new Text(type, binding, text, textColor, fontSize, align, overflow, orientation, lineSpacing, maxLines)));
+                    Codec.INT.optionalFieldOf("max_lines", 1).forGetter(Text::maxLines)).apply(instance, (binding, text, textColor, fontSize, align, overflow, orientation, lineSpacing, maxLines) -> new Text(type, binding, text, textColor, fontSize, align, overflow, orientation, lineSpacing, maxLines)));
         }
 
         public Text(ProjectionComponentType type, String binding, String text, int textColor, float fontSize, ProjectionTextAlign align, ProjectionOverflowMode overflow, float lineSpacing, int maxLines) {
@@ -578,15 +572,14 @@ public sealed interface ProjectionComponentSettings permits
     }
 
     record ExitBadge(boolean fillEnabled, boolean borderEnabled, int fillColor, int borderColor, int textColor, float fontSize) implements ProjectionComponentSettings {
+
         public static final Codec<ExitBadge> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.BOOL.optionalFieldOf("fill_enabled", true).forGetter(ExitBadge::fillEnabled),
                 Codec.BOOL.optionalFieldOf("border_enabled", true).forGetter(ExitBadge::borderEnabled),
                 Codec.INT.optionalFieldOf("fill", 0xFFFFCF4A).forGetter(ExitBadge::fillColor),
                 Codec.INT.optionalFieldOf("border", 0xFFE5AA18).forGetter(ExitBadge::borderColor),
                 Codec.INT.optionalFieldOf("text", 0xFF152026).forGetter(ExitBadge::textColor),
-                Codec.FLOAT.optionalFieldOf("font_size", 0.14F).forGetter(ExitBadge::fontSize)
-        ).apply(instance, ExitBadge::new));
-
+                Codec.FLOAT.optionalFieldOf("font_size", 0.14F).forGetter(ExitBadge::fontSize)).apply(instance, ExitBadge::new));
         public ExitBadge {
             fontSize = clamp(fontSize, 0.02F, 1.0F, 0.14F);
         }
@@ -616,12 +609,11 @@ public sealed interface ProjectionComponentSettings permits
     }
 
     record Divider(int color, float thickness, boolean dashed) implements ProjectionComponentSettings {
+
         public static final Codec<Divider> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.INT.optionalFieldOf("color", 0xFF34F0B8).forGetter(Divider::color),
                 Codec.FLOAT.optionalFieldOf("thickness", 0.025F).forGetter(Divider::thickness),
-                Codec.BOOL.optionalFieldOf("dashed", false).forGetter(Divider::dashed)
-        ).apply(instance, Divider::new));
-
+                Codec.BOOL.optionalFieldOf("dashed", false).forGetter(Divider::dashed)).apply(instance, Divider::new));
         public Divider {
             thickness = clamp(thickness, 0.005F, 0.50F, 0.025F);
         }
@@ -648,6 +640,7 @@ public sealed interface ProjectionComponentSettings permits
     }
 
     record RouteList(float rowHeight, float gap, float stripeWidth, float fontSize, int maxVisible, RouteOverflowMode overflow, ProjectionOverflowMode labelOverflow, int textColor, int plusTextColor, int rotateIntervalTicks) implements ProjectionComponentSettings {
+
         public static final Codec<RouteList> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.FLOAT.optionalFieldOf("row_height", 0.10F).forGetter(RouteList::rowHeight),
                 Codec.FLOAT.optionalFieldOf("gap", 0.012F).forGetter(RouteList::gap),
@@ -658,9 +651,7 @@ public sealed interface ProjectionComponentSettings permits
                 ProjectionOverflowMode.CODEC.optionalFieldOf("label_overflow", ProjectionOverflowMode.MARQUEE).forGetter(RouteList::labelOverflow),
                 Codec.INT.optionalFieldOf("text_color", 0xFFFFFFFF).forGetter(RouteList::textColor),
                 Codec.INT.optionalFieldOf("plus_text_color", 0xFFFFFFFF).forGetter(RouteList::plusTextColor),
-                Codec.INT.optionalFieldOf("rotate_interval", 35).forGetter(RouteList::rotateIntervalTicks)
-        ).apply(instance, RouteList::new));
-
+                Codec.INT.optionalFieldOf("rotate_interval", 35).forGetter(RouteList::rotateIntervalTicks)).apply(instance, RouteList::new));
         public RouteList {
             rowHeight = clamp(rowHeight, 0.025F, 1.5F, 0.10F);
             gap = clamp(gap, 0.0F, 0.50F, 0.012F);
@@ -718,8 +709,7 @@ public sealed interface ProjectionComponentSettings permits
                     Codec.INT.optionalFieldOf("plus_text_color", 0xFFFFFFFF).forGetter(RouteIcon::plusTextColor),
                     Codec.INT.optionalFieldOf("rotate_interval", 35).forGetter(RouteIcon::rotateIntervalTicks),
                     Codec.BOOL.optionalFieldOf("wrap_enabled", false).forGetter(RouteIcon::wrapEnabled),
-                    Codec.INT.optionalFieldOf("wrap_tracks", 1).forGetter(RouteIcon::wrapTracks)
-            ).apply(instance, (shape, iconSize, gap, fontSize, maxVisible, flow, overflow, showLabel, textColor, borderColor, borderWidth, ringThicknessRatio, plusTextColor, rotateIntervalTicks, wrapEnabled, wrapTracks) -> new RouteIcon(type, shape, iconSize, gap, fontSize, maxVisible, flow, overflow, showLabel, textColor, borderColor, borderWidth, ringThicknessRatio, plusTextColor, rotateIntervalTicks, wrapEnabled, wrapTracks)));
+                    Codec.INT.optionalFieldOf("wrap_tracks", 1).forGetter(RouteIcon::wrapTracks)).apply(instance, (shape, iconSize, gap, fontSize, maxVisible, flow, overflow, showLabel, textColor, borderColor, borderWidth, ringThicknessRatio, plusTextColor, rotateIntervalTicks, wrapEnabled, wrapTracks) -> new RouteIcon(type, shape, iconSize, gap, fontSize, maxVisible, flow, overflow, showLabel, textColor, borderColor, borderWidth, ringThicknessRatio, plusTextColor, rotateIntervalTicks, wrapEnabled, wrapTracks)));
         }
 
         public RouteIcon(ProjectionComponentType type, IconShape shape, float iconSize, float gap, float fontSize, int maxVisible, FlowDirection flow, RouteOverflowMode overflow, boolean showLabel, int textColor, int borderColor, float borderWidth, float ringThicknessRatio, int plusTextColor, int rotateIntervalTicks) {
@@ -839,6 +829,7 @@ public sealed interface ProjectionComponentSettings permits
     }
 
     record RouteCapsules(float capsuleWidth, float capsuleHeight, float gap, float fontSize, int maxVisible, FlowDirection flow, CapsuleContentOrientation contentOrientation, RouteOverflowMode overflow, ProjectionOverflowMode labelOverflow, boolean showShortName, int textColor, int fillColor, int plusTextColor, int rotateIntervalTicks) implements ProjectionComponentSettings {
+
         public static final Codec<RouteCapsules> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.FLOAT.optionalFieldOf("capsule_width", 0.36F).forGetter(RouteCapsules::capsuleWidth),
                 Codec.FLOAT.optionalFieldOf("capsule_height", 0.11F).forGetter(RouteCapsules::capsuleHeight),
@@ -853,9 +844,7 @@ public sealed interface ProjectionComponentSettings permits
                 Codec.INT.optionalFieldOf("text_color", 0xFFFFFFFF).forGetter(RouteCapsules::textColor),
                 Codec.INT.optionalFieldOf("fill", 0x55333333).forGetter(RouteCapsules::fillColor),
                 Codec.INT.optionalFieldOf("plus_text_color", 0xFFFFFFFF).forGetter(RouteCapsules::plusTextColor),
-                Codec.INT.optionalFieldOf("rotate_interval", 35).forGetter(RouteCapsules::rotateIntervalTicks)
-        ).apply(instance, RouteCapsules::new));
-
+                Codec.INT.optionalFieldOf("rotate_interval", 35).forGetter(RouteCapsules::rotateIntervalTicks)).apply(instance, RouteCapsules::new));
         public RouteCapsules {
             capsuleWidth = clamp(capsuleWidth, 0.06F, 4.0F, 0.36F);
             capsuleHeight = clamp(capsuleHeight, 0.025F, 1.5F, 0.11F);
@@ -902,6 +891,7 @@ public sealed interface ProjectionComponentSettings permits
     }
 
     record RouteBackplate(StripeDirection direction, ColorPolicy colorPolicy, int maxVisible, float opacity, RouteOverflowMode overflow, int plusTextColor, int rotateIntervalTicks) implements ProjectionComponentSettings {
+
         public static final Codec<RouteBackplate> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 StripeDirection.CODEC.optionalFieldOf("direction", StripeDirection.HORIZONTAL).forGetter(RouteBackplate::direction),
                 ColorPolicy.CODEC.optionalFieldOf("color_policy", ColorPolicy.ROUTE_ORDER).forGetter(RouteBackplate::colorPolicy),
@@ -909,9 +899,7 @@ public sealed interface ProjectionComponentSettings permits
                 Codec.FLOAT.optionalFieldOf("opacity", 1.0F).forGetter(RouteBackplate::opacity),
                 RouteOverflowMode.CODEC.optionalFieldOf("overflow", RouteOverflowMode.ROTATE).forGetter(RouteBackplate::overflow),
                 Codec.INT.optionalFieldOf("plus_text_color", 0xFFFFFFFF).forGetter(RouteBackplate::plusTextColor),
-                Codec.INT.optionalFieldOf("rotate_interval", 35).forGetter(RouteBackplate::rotateIntervalTicks)
-        ).apply(instance, RouteBackplate::new));
-
+                Codec.INT.optionalFieldOf("rotate_interval", 35).forGetter(RouteBackplate::rotateIntervalTicks)).apply(instance, RouteBackplate::new));
         public RouteBackplate {
             direction = direction == null ? StripeDirection.HORIZONTAL : direction;
             colorPolicy = colorPolicy == null ? ColorPolicy.ROUTE_ORDER : colorPolicy;
@@ -947,6 +935,7 @@ public sealed interface ProjectionComponentSettings permits
     }
 
     record RouteText(float fontSize, RouteOverflowMode overflow, boolean shortName, int textColor, int plusTextColor, ProjectionTextAlign align, int rotateIntervalTicks) implements ProjectionComponentSettings {
+
         public static final Codec<RouteText> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.FLOAT.optionalFieldOf("font_size", 0.12F).forGetter(RouteText::fontSize),
                 RouteOverflowMode.CODEC.optionalFieldOf("overflow", RouteOverflowMode.ROTATE).forGetter(RouteText::overflow),
@@ -954,9 +943,7 @@ public sealed interface ProjectionComponentSettings permits
                 Codec.INT.optionalFieldOf("text_color", 0xFFFFFFFF).forGetter(RouteText::textColor),
                 Codec.INT.optionalFieldOf("plus_text_color", 0xFFFFFFFF).forGetter(RouteText::plusTextColor),
                 ProjectionTextAlign.CODEC.optionalFieldOf("align", ProjectionTextAlign.CENTER).forGetter(RouteText::align),
-                Codec.INT.optionalFieldOf("rotate_interval", 35).forGetter(RouteText::rotateIntervalTicks)
-        ).apply(instance, RouteText::new));
-
+                Codec.INT.optionalFieldOf("rotate_interval", 35).forGetter(RouteText::rotateIntervalTicks)).apply(instance, RouteText::new));
         public RouteText {
             fontSize = clamp(fontSize, 0.01F, 1.0F, 0.12F);
             overflow = overflow == null ? RouteOverflowMode.ROTATE : overflow;
@@ -1001,8 +988,8 @@ public sealed interface ProjectionComponentSettings permits
             ProjectionOverflowMode secondaryOverflow,
             TextOrientation orientation,
             MissingTranslationMode missingSecondaryMode,
-            float missingPrimaryScale
-    ) implements ProjectionComponentSettings {
+            float missingPrimaryScale) implements ProjectionComponentSettings {
+
         public static final Codec<PlatformTitleGroup> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 PlatformTitleContent.CODEC.optionalFieldOf("content", PlatformTitleContent.STATION_AND_PLATFORM).forGetter(PlatformTitleGroup::content),
                 Codec.INT.optionalFieldOf("primary_color", 0xFFFFFFFF).forGetter(PlatformTitleGroup::primaryColor),
@@ -1015,9 +1002,7 @@ public sealed interface ProjectionComponentSettings permits
                 ProjectionOverflowMode.CODEC.optionalFieldOf("secondary_overflow", ProjectionOverflowMode.MARQUEE).forGetter(PlatformTitleGroup::secondaryOverflow),
                 TextOrientation.CODEC.optionalFieldOf("orientation", TextOrientation.HORIZONTAL).forGetter(PlatformTitleGroup::orientation),
                 MissingTranslationMode.CODEC.optionalFieldOf("missing_secondary", MissingTranslationMode.EXPAND_PRIMARY).forGetter(PlatformTitleGroup::missingSecondaryMode),
-                Codec.FLOAT.optionalFieldOf("missing_primary_scale", 1.18F).forGetter(PlatformTitleGroup::missingPrimaryScale)
-        ).apply(instance, PlatformTitleGroup::new));
-
+                Codec.FLOAT.optionalFieldOf("missing_primary_scale", 1.18F).forGetter(PlatformTitleGroup::missingPrimaryScale)).apply(instance, PlatformTitleGroup::new));
         public PlatformTitleGroup {
             content = content == null ? PlatformTitleContent.STATION_AND_PLATFORM : content;
             primaryFontSize = clamp(primaryFontSize, 0.01F, 2.0F, 0.18F);
@@ -1062,6 +1047,7 @@ public sealed interface ProjectionComponentSettings permits
     }
 
     record PlatformBadge(PlatformBadgeStyle style, boolean useLineColor, int fillColor, int borderColor, int textColor, float fontSize, float borderWidth, String prefix, String suffix) implements ProjectionComponentSettings {
+
         public static final Codec<PlatformBadge> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 PlatformBadgeStyle.CODEC.optionalFieldOf("style", PlatformBadgeStyle.SOLID).forGetter(PlatformBadge::style),
                 Codec.BOOL.optionalFieldOf("use_line_color", true).forGetter(PlatformBadge::useLineColor),
@@ -1071,9 +1057,7 @@ public sealed interface ProjectionComponentSettings permits
                 Codec.FLOAT.optionalFieldOf("font_size", 0.10F).forGetter(PlatformBadge::fontSize),
                 Codec.FLOAT.optionalFieldOf("border_width", 0.010F).forGetter(PlatformBadge::borderWidth),
                 Codec.STRING.optionalFieldOf("prefix", "").forGetter(PlatformBadge::prefix),
-                Codec.STRING.optionalFieldOf("suffix", "").forGetter(PlatformBadge::suffix)
-        ).apply(instance, PlatformBadge::new));
-
+                Codec.STRING.optionalFieldOf("suffix", "").forGetter(PlatformBadge::suffix)).apply(instance, PlatformBadge::new));
         public PlatformBadge {
             style = style == null ? PlatformBadgeStyle.SOLID : style;
             fontSize = clamp(fontSize, 0.01F, 1.0F, 0.10F);
@@ -1110,6 +1094,7 @@ public sealed interface ProjectionComponentSettings permits
     }
 
     record PlatformDirection(PlatformDirectionSource source, PlatformDirectionPrefix prefix, ArrowDirection arrow, ArrowPlacement arrowPlacement, int textColor, int arrowColor, float fontSize, ProjectionTextAlign align, ProjectionOverflowMode overflow) implements ProjectionComponentSettings {
+
         public static final Codec<PlatformDirection> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 PlatformDirectionSource.CODEC.optionalFieldOf("source", PlatformDirectionSource.TERMINAL).forGetter(PlatformDirection::source),
                 PlatformDirectionPrefix.CODEC.optionalFieldOf("prefix", PlatformDirectionPrefix.TOWARDS).forGetter(PlatformDirection::prefix),
@@ -1119,9 +1104,7 @@ public sealed interface ProjectionComponentSettings permits
                 Codec.INT.optionalFieldOf("arrow_color", 0xFFFFFFFF).forGetter(PlatformDirection::arrowColor),
                 Codec.FLOAT.optionalFieldOf("font_size", 0.115F).forGetter(PlatformDirection::fontSize),
                 ProjectionTextAlign.CODEC.optionalFieldOf("align", ProjectionTextAlign.CENTER).forGetter(PlatformDirection::align),
-                ProjectionOverflowMode.CODEC.optionalFieldOf("overflow", ProjectionOverflowMode.MARQUEE).forGetter(PlatformDirection::overflow)
-        ).apply(instance, PlatformDirection::new));
-
+                ProjectionOverflowMode.CODEC.optionalFieldOf("overflow", ProjectionOverflowMode.MARQUEE).forGetter(PlatformDirection::overflow)).apply(instance, PlatformDirection::new));
         public PlatformDirection {
             source = source == null ? PlatformDirectionSource.TERMINAL : source;
             prefix = prefix == null ? PlatformDirectionPrefix.TOWARDS : prefix;
@@ -1160,6 +1143,7 @@ public sealed interface ProjectionComponentSettings permits
     }
 
     record PlatformStatusTags(boolean showTerminal, boolean showLoop, boolean showBidirectional, boolean showTransfer, boolean showMissingLine, PlatformStatusScope scope, ProjectionTextAlign align, int fillColor, int textColor, float fontSize, float gap) implements ProjectionComponentSettings {
+
         public static final Codec<PlatformStatusTags> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.BOOL.optionalFieldOf("terminal", true).forGetter(PlatformStatusTags::showTerminal),
                 Codec.BOOL.optionalFieldOf("loop", true).forGetter(PlatformStatusTags::showLoop),
@@ -1171,9 +1155,7 @@ public sealed interface ProjectionComponentSettings permits
                 Codec.INT.optionalFieldOf("fill", 0xAA111820).forGetter(PlatformStatusTags::fillColor),
                 Codec.INT.optionalFieldOf("text", 0xFFFFFFFF).forGetter(PlatformStatusTags::textColor),
                 Codec.FLOAT.optionalFieldOf("font_size", 0.060F).forGetter(PlatformStatusTags::fontSize),
-                Codec.FLOAT.optionalFieldOf("gap", 0.020F).forGetter(PlatformStatusTags::gap)
-        ).apply(instance, PlatformStatusTags::new));
-
+                Codec.FLOAT.optionalFieldOf("gap", 0.020F).forGetter(PlatformStatusTags::gap)).apply(instance, PlatformStatusTags::new));
         public PlatformStatusTags {
             scope = scope == null ? PlatformStatusScope.PLATFORM_SERVICE : scope;
             align = align == null ? ProjectionTextAlign.CENTER : align;
@@ -1225,8 +1207,7 @@ public sealed interface ProjectionComponentSettings permits
                     Codec.BOOL.optionalFieldOf("show_label", true).forGetter(PlatformLine::showLabel),
                     Codec.INT.optionalFieldOf("text_color", 0xFFFFFFFF).forGetter(PlatformLine::textColor),
                     Codec.FLOAT.optionalFieldOf("font_size", 0.070F).forGetter(PlatformLine::fontSize),
-                    ProjectionOverflowMode.CODEC.optionalFieldOf("overflow", ProjectionOverflowMode.MARQUEE).forGetter(PlatformLine::overflow)
-            ).apply(instance, (style, direction, lineWidth, nodeSize, nodeStyle, showLabel, textColor, fontSize, overflow) -> new PlatformLine(type, style, direction, lineWidth, nodeSize, nodeStyle, showLabel, textColor, fontSize, overflow)));
+                    ProjectionOverflowMode.CODEC.optionalFieldOf("overflow", ProjectionOverflowMode.MARQUEE).forGetter(PlatformLine::overflow)).apply(instance, (style, direction, lineWidth, nodeSize, nodeStyle, showLabel, textColor, fontSize, overflow) -> new PlatformLine(type, style, direction, lineWidth, nodeSize, nodeStyle, showLabel, textColor, fontSize, overflow)));
         }
 
         public PlatformLine {
@@ -1286,6 +1267,7 @@ public sealed interface ProjectionComponentSettings permits
     }
 
     record PlatformLineIcon(IconShape shape, boolean outline, boolean useLineColor, int fillColor, int borderColor, int textColor, float iconSize, float fontSize, float borderWidth, float ringThicknessRatio, boolean showLabel) implements ProjectionComponentSettings {
+
         public static final Codec<PlatformLineIcon> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 IconShape.CODEC.optionalFieldOf("shape", IconShape.CIRCLE).forGetter(PlatformLineIcon::shape),
                 Codec.BOOL.optionalFieldOf("outline", false).forGetter(PlatformLineIcon::outline),
@@ -1297,9 +1279,7 @@ public sealed interface ProjectionComponentSettings permits
                 Codec.FLOAT.optionalFieldOf("font_size", 0.060F).forGetter(PlatformLineIcon::fontSize),
                 Codec.FLOAT.optionalFieldOf("border_width", 0.0F).forGetter(PlatformLineIcon::borderWidth),
                 Codec.FLOAT.optionalFieldOf("ring_thickness", 0.22F).forGetter(PlatformLineIcon::ringThicknessRatio),
-                Codec.BOOL.optionalFieldOf("show_label", true).forGetter(PlatformLineIcon::showLabel)
-        ).apply(instance, PlatformLineIcon::new));
-
+                Codec.BOOL.optionalFieldOf("show_label", true).forGetter(PlatformLineIcon::showLabel)).apply(instance, PlatformLineIcon::new));
         public PlatformLineIcon {
             shape = shape == null ? IconShape.CIRCLE : shape;
             iconSize = clamp(iconSize, 0.025F, 1.5F, 0.16F);
@@ -1338,6 +1318,7 @@ public sealed interface ProjectionComponentSettings permits
     }
 
     record PlatformTransferList(int maxVisible, FlowDirection flow, RouteOverflowMode overflow, boolean includeOutStation, boolean showStation, boolean showPlatform, int textColor, int plusTextColor, int fillColor, float fontSize, float gap, int rotateIntervalTicks) implements ProjectionComponentSettings {
+
         public static final Codec<PlatformTransferList> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.INT.optionalFieldOf("max_visible", 4).forGetter(PlatformTransferList::maxVisible),
                 FlowDirection.CODEC.optionalFieldOf("flow", FlowDirection.HORIZONTAL).forGetter(PlatformTransferList::flow),
@@ -1350,9 +1331,7 @@ public sealed interface ProjectionComponentSettings permits
                 Codec.INT.optionalFieldOf("fill_color", 0xAA101820).forGetter(PlatformTransferList::fillColor),
                 Codec.FLOAT.optionalFieldOf("font_size", 0.058F).forGetter(PlatformTransferList::fontSize),
                 Codec.FLOAT.optionalFieldOf("gap", 0.020F).forGetter(PlatformTransferList::gap),
-                Codec.INT.optionalFieldOf("rotate_interval", 45).forGetter(PlatformTransferList::rotateIntervalTicks)
-        ).apply(instance, PlatformTransferList::new));
-
+                Codec.INT.optionalFieldOf("rotate_interval", 45).forGetter(PlatformTransferList::rotateIntervalTicks)).apply(instance, PlatformTransferList::new));
         public PlatformTransferList {
             maxVisible = clampInt(maxVisible, 1, 16);
             flow = flow == null ? FlowDirection.HORIZONTAL : flow;
@@ -1393,6 +1372,7 @@ public sealed interface ProjectionComponentSettings permits
     }
 
     record PlatformTransferMatrix(int columns, int maxVisible, RouteOverflowMode overflow, boolean includeOutStation, boolean showStation, boolean showPlatform, int textColor, int plusTextColor, int fillColor, float fontSize, float gap, int rotateIntervalTicks) implements ProjectionComponentSettings {
+
         public static final Codec<PlatformTransferMatrix> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.INT.optionalFieldOf("columns", 2).forGetter(PlatformTransferMatrix::columns),
                 Codec.INT.optionalFieldOf("max_visible", 6).forGetter(PlatformTransferMatrix::maxVisible),
@@ -1405,9 +1385,7 @@ public sealed interface ProjectionComponentSettings permits
                 Codec.INT.optionalFieldOf("fill_color", 0xAA101820).forGetter(PlatformTransferMatrix::fillColor),
                 Codec.FLOAT.optionalFieldOf("font_size", 0.050F).forGetter(PlatformTransferMatrix::fontSize),
                 Codec.FLOAT.optionalFieldOf("gap", 0.016F).forGetter(PlatformTransferMatrix::gap),
-                Codec.INT.optionalFieldOf("rotate_interval", 45).forGetter(PlatformTransferMatrix::rotateIntervalTicks)
-        ).apply(instance, PlatformTransferMatrix::new));
-
+                Codec.INT.optionalFieldOf("rotate_interval", 45).forGetter(PlatformTransferMatrix::rotateIntervalTicks)).apply(instance, PlatformTransferMatrix::new));
         public PlatformTransferMatrix {
             columns = clampInt(columns, 1, 6);
             maxVisible = clampInt(maxVisible, 1, 24);
@@ -1460,8 +1438,7 @@ public sealed interface ProjectionComponentSettings permits
             float fontSize,
             float lineWidth,
             float nodeSize,
-            ProjectionOverflowMode labelOverflow
-    ) implements ProjectionComponentSettings {
+            ProjectionOverflowMode labelOverflow) implements ProjectionComponentSettings {
         public static Codec<PlatformLayoutMap> codec(ProjectionComponentType type) {
             return RecordCodecBuilder.create(instance -> instance.group(
                     PlatformLayoutMapStyle.CODEC.optionalFieldOf("style", styleFor(type)).forGetter(PlatformLayoutMap::style),
@@ -1475,8 +1452,7 @@ public sealed interface ProjectionComponentSettings permits
                     Codec.FLOAT.optionalFieldOf("font_size", fontSizeFor(type)).forGetter(PlatformLayoutMap::fontSize),
                     Codec.FLOAT.optionalFieldOf("line_width", lineWidthFor(type)).forGetter(PlatformLayoutMap::lineWidth),
                     Codec.FLOAT.optionalFieldOf("node_size", nodeSizeFor(type)).forGetter(PlatformLayoutMap::nodeSize),
-                    ProjectionOverflowMode.CODEC.optionalFieldOf("label_overflow", ProjectionOverflowMode.MARQUEE).forGetter(PlatformLayoutMap::labelOverflow)
-            ).apply(instance, (style, showStopNames, showTransferMarks, showTerminalLabels, followProjectionDirection, nodeStyle, textColor, lineColor, fontSize, lineWidth, nodeSize, labelOverflow) -> new PlatformLayoutMap(type, style, showStopNames, showTransferMarks, showTerminalLabels, followProjectionDirection, nodeStyle, textColor, lineColor, fontSize, lineWidth, nodeSize, labelOverflow)));
+                    ProjectionOverflowMode.CODEC.optionalFieldOf("label_overflow", ProjectionOverflowMode.MARQUEE).forGetter(PlatformLayoutMap::labelOverflow)).apply(instance, (style, showStopNames, showTransferMarks, showTerminalLabels, followProjectionDirection, nodeStyle, textColor, lineColor, fontSize, lineWidth, nodeSize, labelOverflow) -> new PlatformLayoutMap(type, style, showStopNames, showTransferMarks, showTerminalLabels, followProjectionDirection, nodeStyle, textColor, lineColor, fontSize, lineWidth, nodeSize, labelOverflow)));
         }
 
         public PlatformLayoutMap {
@@ -1650,8 +1626,8 @@ public sealed interface ProjectionComponentSettings permits
             int backgroundColor,
             boolean borderEnabled,
             int borderColor,
-            float borderWidth
-    ) implements ProjectionComponentSettings {
+            float borderWidth) implements ProjectionComponentSettings {
+
         public static final Codec<BuiltinIcon> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.STRING.optionalFieldOf("icon", "pipe.platform").forGetter(BuiltinIcon::iconId),
                 IconTintMode.CODEC.optionalFieldOf("tint_mode", IconTintMode.ORIGINAL).forGetter(BuiltinIcon::tintMode),
@@ -1667,9 +1643,7 @@ public sealed interface ProjectionComponentSettings permits
                 Codec.INT.optionalFieldOf("background", 0x66000000).forGetter(BuiltinIcon::backgroundColor),
                 Codec.BOOL.optionalFieldOf("border_enabled", false).forGetter(BuiltinIcon::borderEnabled),
                 Codec.INT.optionalFieldOf("border", 0xFFFFFFFF).forGetter(BuiltinIcon::borderColor),
-                Codec.FLOAT.optionalFieldOf("border_width", 0.01F).forGetter(BuiltinIcon::borderWidth)
-        ).apply(instance, BuiltinIcon::new));
-
+                Codec.FLOAT.optionalFieldOf("border_width", 0.01F).forGetter(BuiltinIcon::borderWidth)).apply(instance, BuiltinIcon::new));
         public BuiltinIcon {
             iconId = trim(iconId, MAX_ICON_ID_LENGTH);
             if (iconId.isBlank()) {
@@ -1796,8 +1770,8 @@ public sealed interface ProjectionComponentSettings permits
             int borderColor,
             float borderWidth,
             ImageFallbackMode fallbackMode,
-            ImageLoadingMode loadingMode
-    ) implements ProjectionComponentSettings {
+            ImageLoadingMode loadingMode) implements ProjectionComponentSettings {
+
         public static final Codec<NetworkImage> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.STRING.optionalFieldOf("url", "").forGetter(NetworkImage::url),
                 ImageFitMode.CODEC.optionalFieldOf("fit", ImageFitMode.COVER).forGetter(NetworkImage::fitMode),
@@ -1813,9 +1787,7 @@ public sealed interface ProjectionComponentSettings permits
                 Codec.INT.optionalFieldOf("border", 0xFFFFFFFF).forGetter(NetworkImage::borderColor),
                 Codec.FLOAT.optionalFieldOf("border_width", 0.01F).forGetter(NetworkImage::borderWidth),
                 ImageFallbackMode.CODEC.optionalFieldOf("fallback", ImageFallbackMode.PLACEHOLDER).forGetter(NetworkImage::fallbackMode),
-                ImageLoadingMode.CODEC.optionalFieldOf("loading", ImageLoadingMode.SUBTLE).forGetter(NetworkImage::loadingMode)
-        ).apply(instance, NetworkImage::new));
-
+                ImageLoadingMode.CODEC.optionalFieldOf("loading", ImageLoadingMode.SUBTLE).forGetter(NetworkImage::loadingMode)).apply(instance, NetworkImage::new));
         public NetworkImage {
             url = trim(url, MAX_URL_LENGTH);
             fitMode = fitMode == null ? ImageFitMode.COVER : fitMode;
@@ -1910,5 +1882,4 @@ public sealed interface ProjectionComponentSettings permits
             return new NetworkImage(this.url, this.fitMode, this.anchor, this.cropX, this.cropY, this.cropW, this.cropH, this.opacity, this.backgroundEnabled, this.backgroundColor, this.borderEnabled, this.borderColor, this.borderWidth, this.fallbackMode, loadingMode);
         }
     }
-
 }

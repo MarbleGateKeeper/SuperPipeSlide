@@ -38,8 +38,7 @@ public final class DistantHorizonsPipeLodBridge {
     private static boolean initialized;
     private static int nullClientLevelTicks;
 
-    private DistantHorizonsPipeLodBridge() {
-    }
+    private DistantHorizonsPipeLodBridge() {}
 
     public static void initialize() {
         if (initialized) {
@@ -144,8 +143,7 @@ public final class DistantHorizonsPipeLodBridge {
                     new DhApiVec3d(box.minX(), box.minY(), box.minZ()),
                     new DhApiVec3d(box.maxX(), box.maxY(), box.maxZ()),
                     color(box.argb()),
-                    material(group.key().material())
-            ));
+                    material(group.key().material())));
         }
 
         IDhApiRenderableBoxGroup dhGroup = factory.createAbsolutePositionedGroup(resourceLocation(state, group.key()), boxes);
@@ -182,8 +180,7 @@ public final class DistantHorizonsPipeLodBridge {
                 argb >> 16 & 0xFF,
                 argb >> 8 & 0xFF,
                 argb & 0xFF,
-                argb >>> 24
-        );
+                argb >>> 24);
     }
 
     private static EDhApiBlockMaterial material(PipeFarLodMaterial material) {
@@ -272,8 +269,7 @@ public final class DistantHorizonsPipeLodBridge {
         }
     }
 
-    private record RegisteredGroup(IDhApiRenderableBoxGroup group, int contentHash) {
-    }
+    private record RegisteredGroup(IDhApiRenderableBoxGroup group, int contentHash) {}
 
     private static final class LevelLoadHandler extends DhApiLevelLoadEvent {
         @Override

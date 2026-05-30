@@ -18,11 +18,12 @@ import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeAppearanceCache;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.client.core.pipe.PipeCoatingRenderResolver;
-import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
+import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.appearance.coating.PipeCoatingSelection;
 import dev.marblegate.superpipeslide.common.core.appearance.model.PipeAppearanceProfile;
 import dev.marblegate.superpipeslide.common.core.appearance.storage.PipeAppearanceDefinitions;
@@ -36,7 +37,6 @@ import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionAttributes;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRaycast;
 import dev.marblegate.superpipeslide.common.core.geometry.RuntimePipeConnection;
-import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
 import dev.marblegate.superpipeslide.common.core.networkgraph.solver.PipeConnectionPlacementPlan;
 import dev.marblegate.superpipeslide.common.core.networkgraph.solver.PipeConnectionPlacementPlanner;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeAppearanceToolItem;
@@ -47,14 +47,12 @@ import dev.marblegate.superpipeslide.common.item.pipe.PipeRemoverItem;
 import dev.marblegate.superpipeslide.common.item.route.PlatformClaimerItem;
 import dev.marblegate.superpipeslide.common.registry.SPSBlocks;
 import dev.marblegate.superpipeslide.common.registry.SPSDataComponents;
-import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.config.Config;
 import dev.marblegate.superpipeslide.mixin.client.RenderSetupAccessor;
 import dev.marblegate.superpipeslide.mixin.client.RenderTypeAccessor;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.function.Consumer;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -62,48 +60,45 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import javax.annotation.Nullable;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.culling.Frustum;
-import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.rendertype.TextureTransform;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.data.AtlasIds;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.util.context.ContextKey;
 import net.minecraft.util.LightCoordsUtil;
+import net.minecraft.util.context.ContextKey;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.client.IRenderableSection;
 import net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent;
 import net.neoforged.neoforge.client.event.RegisterRenderPipelinesEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent;
-import net.neoforged.neoforge.client.IRenderableSection;
-import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
@@ -234,8 +229,7 @@ public final class ClientPipeRenderer {
     private static final Map<Identifier, RenderType> PIPE_GENERATED_CUTOUT_CULL_EMISSIVE = new LinkedHashMap<>();
     private static final Map<Identifier, RenderType> PIPE_GENERATED_TRANSLUCENT = new LinkedHashMap<>();
     private static final Map<Identifier, RenderType> PIPE_GENERATED_TRANSLUCENT_EMISSIVE = new LinkedHashMap<>();
-    private static final PipeRenderExtension.Scope NOOP_SCOPE = () -> {
-    };
+    private static final PipeRenderExtension.Scope NOOP_SCOPE = () -> {};
     private static volatile PipeRenderExtension renderExtension = PipeRenderExtension.NONE;
     private static final Map<MeshCacheKey, List<PipeRenderMesh>> MESH_CACHE = new LinkedHashMap<>(256, 0.75F, true) {
         @Override
@@ -271,8 +265,7 @@ public final class ClientPipeRenderer {
     private static boolean loggedExternalGpuDraw;
     private static boolean loggedExternalShadowDraw;
 
-    private ClientPipeRenderer() {
-    }
+    private ClientPipeRenderer() {}
 
     public static void registerRenderExtension(PipeRenderExtension extension) {
         renderExtension = Objects.requireNonNull(extension, "extension");
@@ -1055,8 +1048,7 @@ public final class ClientPipeRenderer {
                     previousSurface.vStart() + (currentSurface.vStart() - previousSurface.vStart()) * t,
                     previousSurface.vEnd() + (currentSurface.vEnd() - previousSurface.vEnd()) * t,
                     previousSurface.render() && currentSurface.render(),
-                    previousSurface.visibility()
-            ));
+                    previousSurface.visibility()));
         }
         return new Section(center, List.copyOf(surfaces), previous.perimeter() + (current.perimeter() - previous.perimeter()) * t, right, up, tangent, distance, slideContactY);
     }
@@ -1175,42 +1167,40 @@ public final class ClientPipeRenderer {
         double vBase = Math.floor(v0World);
         quads.add(glow
                 ? emissiveTexturedQuad(
-                a,
-                b,
-                c,
-                d,
-                coating.u(SURFACE_TILE_UV_INSET),
-                coating.u(tileFraction(uSpan, 0.0D)),
-                coating.v(tileFraction(v0World, vBase)),
-                coating.v(tileFraction(v1World, vBase)),
-                color,
-                normal,
-                coating.generatedTexture(),
-                coating.textureId(),
-                coating.translucent(),
-                false,
-                MARKER_ANIMATION_NONE,
-                0.0D
-        )
+                        a,
+                        b,
+                        c,
+                        d,
+                        coating.u(SURFACE_TILE_UV_INSET),
+                        coating.u(tileFraction(uSpan, 0.0D)),
+                        coating.v(tileFraction(v0World, vBase)),
+                        coating.v(tileFraction(v1World, vBase)),
+                        color,
+                        normal,
+                        coating.generatedTexture(),
+                        coating.textureId(),
+                        coating.translucent(),
+                        false,
+                        MARKER_ANIMATION_NONE,
+                        0.0D)
                 : texturedQuad(
-                a,
-                b,
-                c,
-                d,
-                coating.u(SURFACE_TILE_UV_INSET),
-                coating.u(tileFraction(uSpan, 0.0D)),
-                coating.v(tileFraction(v0World, vBase)),
-                coating.v(tileFraction(v1World, vBase)),
-                color,
-                normal,
-                coating.generatedTexture(),
-                coating.textureId(),
-                coating.translucent(),
-                false,
-                false,
-                MARKER_ANIMATION_NONE,
-                0.0D
-        ));
+                        a,
+                        b,
+                        c,
+                        d,
+                        coating.u(SURFACE_TILE_UV_INSET),
+                        coating.u(tileFraction(uSpan, 0.0D)),
+                        coating.v(tileFraction(v0World, vBase)),
+                        coating.v(tileFraction(v1World, vBase)),
+                        color,
+                        normal,
+                        coating.generatedTexture(),
+                        coating.textureId(),
+                        coating.translucent(),
+                        false,
+                        false,
+                        MARKER_ANIMATION_NONE,
+                        0.0D));
     }
 
     private static AABB quadBounds(Collection<TexturedQuad> quads) {
@@ -1232,8 +1222,7 @@ public final class ClientPipeRenderer {
                 Math.min(bounds.minZ, point.z),
                 Math.max(bounds.maxX, point.x),
                 Math.max(bounds.maxY, point.y),
-                Math.max(bounds.maxZ, point.z)
-        );
+                Math.max(bounds.maxZ, point.z));
     }
 
     private static AABB union(AABB first, AABB second) {
@@ -1243,8 +1232,7 @@ public final class ClientPipeRenderer {
                 Math.min(first.minZ, second.minZ),
                 Math.max(first.maxX, second.maxX),
                 Math.max(first.maxY, second.maxY),
-                Math.max(first.maxZ, second.maxZ)
-        );
+                Math.max(first.maxZ, second.maxZ));
     }
 
     private static TextureAtlasSprite markerSprite() {
@@ -1404,8 +1392,7 @@ public final class ClientPipeRenderer {
                 sprite,
                 layer,
                 animationKind,
-                animationPhase
-        );
+                animationPhase);
     }
 
     private static void addMarkerTaperedRange(List<TexturedQuad> quads, Section previous, Section current, double uStart, double uEnd, double vStart0, double vEnd0, double vStart1, double vEnd1, int color, TextureAtlasSprite sprite, int layer, int animationKind, double animationPhase) {
@@ -1506,8 +1493,7 @@ public final class ClientPipeRenderer {
         Vec3 quadCenter = new Vec3(
                 (a.x + b.x + d.x) / 3.0D,
                 (a.y + b.y + d.y) / 3.0D,
-                (a.z + b.z + d.z) / 3.0D
-        );
+                (a.z + b.z + d.z) / 3.0D);
         Vec3 center = center0.add(center1).scale(0.5D);
         Vec3 outward = quadCenter.subtract(center);
         if (outward.lengthSqr() > 1.0E-8D && normal.dot(outward) < 0.0D) {
@@ -1549,8 +1535,7 @@ public final class ClientPipeRenderer {
                 false,
                 false,
                 animationKind,
-                animationPhase
-        ));
+                animationPhase));
     }
 
     private static double clamp(double value, double min, double max) {
@@ -1582,8 +1567,7 @@ public final class ClientPipeRenderer {
                     glow,
                     coating,
                     shouldCullSurface(coating, previousSurface),
-                    lod
-            );
+                    lod);
         }
     }
 
@@ -1734,8 +1718,7 @@ public final class ClientPipeRenderer {
         return new Vec3(
                 a.x + (b.x - a.x) * t,
                 a.y + (b.y - a.y) * t,
-                a.z + (b.z - a.z) * t
-        );
+                a.z + (b.z - a.z) * t);
     }
 
     private static Vec3 quadNormal(Vec3 a, Vec3 b, Vec3 d) {
@@ -1994,8 +1977,7 @@ public final class ClientPipeRenderer {
                 player.getEyePosition(),
                 player.getLookAngle(),
                 8.0D,
-                0.55D
-        ).map(PipeConnectionRaycast.Hit::connection).orElse(null);
+                0.55D).map(PipeConnectionRaycast.Hit::connection).orElse(null);
     }
 
     private static ItemStack heldPipeOperationTool(LocalPlayer player) {
@@ -2130,8 +2112,7 @@ public final class ClientPipeRenderer {
                 lightSampleKey(a, normal),
                 lightSampleKey(b, normal),
                 lightSampleKey(c, normal),
-                lightSampleKey(d, normal)
-        );
+                lightSampleKey(d, normal));
     }
 
     private static long lightSampleKey(Vec3 point, Vec3 normal) {
@@ -2157,18 +2138,15 @@ public final class ClientPipeRenderer {
     }
 
     public interface PipeRenderExtension {
-        PipeRenderExtension NONE = new PipeRenderExtension() {
-        };
+        PipeRenderExtension NONE = new PipeRenderExtension() {};
 
         default String renderStateKey() {
             return "base";
         }
 
-        default void registerPipelines(RegisterRenderPipelinesEvent event) {
-        }
+        default void registerPipelines(RegisterRenderPipelinesEvent event) {}
 
-        default void refreshPipelineMappings() {
-        }
+        default void refreshPipelineMappings() {}
 
         default Scope entityPhase() {
             return NOOP_SCOPE;
@@ -2182,8 +2160,7 @@ public final class ClientPipeRenderer {
             return false;
         }
 
-        default void renderExternalShadowPass(Camera camera) {
-        }
+        default void renderExternalShadowPass(Camera camera) {}
 
         default boolean isExternalPipelineActive() {
             return false;
@@ -2218,11 +2195,9 @@ public final class ClientPipeRenderer {
         INVALID
     }
 
-    private record Target(BlockPos pos, boolean existingAnchor, Vec3 controlPoint) {
-    }
+    private record Target(BlockPos pos, boolean existingAnchor, Vec3 controlPoint) {}
 
-    private record Preview(@Nullable PipeConnection connection, Validity validity, List<Vec3> controlPath) {
-    }
+    private record Preview(@Nullable PipeConnection connection, Validity validity, List<Vec3> controlPath) {}
 
     private record RenderData(PipeRenderFrame frame, List<LineSegment> lines, List<VisiblePipeSection> gpuSections, Vec3 camera) {
         boolean isEmpty() {
@@ -2230,8 +2205,7 @@ public final class ClientPipeRenderer {
         }
     }
 
-    private record LineSegment(Vec3 from, Vec3 to, int color, float width) {
-    }
+    private record LineSegment(Vec3 from, Vec3 to, int color, float width) {}
 
     private record TexturedQuad(Vec3 a, Vec3 b, Vec3 c, Vec3 d, float u0, float u1, float v0, float v1, int color, Vec3 normal, boolean generatedTexture, Identifier textureId, boolean translucent, boolean fullBright, boolean emissive, boolean cullBackFace, boolean castsShadow, int animationKind, double animationPhase, long lightA, long lightB, long lightC, long lightD) {
         boolean persistentGpuEligible() {
@@ -2239,14 +2213,11 @@ public final class ClientPipeRenderer {
         }
     }
 
-    private record Section(Vec3 center, List<SectionSurface> surfaces, double perimeter, Vec3 right, Vec3 up, Vec3 tangent, double distance, double slideContactY) {
-    }
+    private record Section(Vec3 center, List<SectionSurface> surfaces, double perimeter, Vec3 right, Vec3 up, Vec3 tangent, double distance, double slideContactY) {}
 
-    private record SectionSurface(String slotId, Vec3 a, Vec3 b, double vStart, double vEnd, boolean render, PipeSurfaceModel.FaceVisibility visibility) {
-    }
+    private record SectionSurface(String slotId, Vec3 a, Vec3 b, double vStart, double vEnd, boolean render, PipeSurfaceModel.FaceVisibility visibility) {}
 
-    private record MeshCacheKey(UUID connectionId, int connectionKey, int connectionHash, PipeAppearanceProfile profile, int lod) {
-    }
+    private record MeshCacheKey(UUID connectionId, int connectionKey, int connectionHash, PipeAppearanceProfile profile, int lod) {}
 
     private static final class FrameLightSampler {
         @Nullable
@@ -2284,8 +2255,7 @@ public final class ClientPipeRenderer {
         }
     }
 
-    private record LightSample(int packedLight, boolean provisional) {
-    }
+    private record LightSample(int packedLight, boolean provisional) {}
 
     private static final class LightBakeStats {
         private int sampled;
@@ -2552,8 +2522,7 @@ public final class ClientPipeRenderer {
             Map<Identifier, List<TexturedQuad>> dynamicEmissiveGeneratedQuads,
             Map<Identifier, List<TexturedQuad>> dynamicEmissiveCulledGeneratedQuads,
             Map<Identifier, List<TexturedQuad>> dynamicEmissiveTranslucentGeneratedQuads,
-            PipeStaticQuadBatches staticBatches
-    ) {
+            PipeStaticQuadBatches staticBatches) {
         static PipeRenderMesh from(RenderSectionKey sectionKey, AABB bounds, List<TexturedQuad> quads) {
             List<TexturedQuad> atlasQuads = new ArrayList<>();
             List<TexturedQuad> culledAtlasQuads = new ArrayList<>();
@@ -2624,8 +2593,7 @@ public final class ClientPipeRenderer {
                     freezeQuadMap(emissiveGeneratedQuads),
                     freezeQuadMap(emissiveCulledGeneratedQuads),
                     freezeQuadMap(emissiveTranslucentGeneratedQuads),
-                    staticBatches.freeze()
-            );
+                    staticBatches.freeze());
         }
 
         private static Map<Identifier, List<TexturedQuad>> freezeQuadMap(Map<Identifier, List<TexturedQuad>> source) {
@@ -2653,8 +2621,7 @@ public final class ClientPipeRenderer {
         }
     }
 
-    private record VisiblePipeSection(PipeSectionState section, int lod) {
-    }
+    private record VisiblePipeSection(PipeSectionState section, int lod) {}
 
     private record PipeSectionConnectionEntry(RuntimePipeConnection runtime, PipeAppearanceProfile profile, Set<RenderSectionKey> sectionKeys) {
         private PipeSectionConnectionEntry {
@@ -2860,8 +2827,7 @@ public final class ClientPipeRenderer {
                         .useLightmap()
                         .useOverlay()
                         .bufferSize(RenderType.SMALL_BUFFER_SIZE)
-                        .createRenderSetup()
-        );
+                        .createRenderSetup());
     }
 
     private static RenderType pipeCutoutEmissive(Identifier texture) {
@@ -2871,8 +2837,7 @@ public final class ClientPipeRenderer {
                         .withTexture("Sampler0", texture)
                         .useOverlay()
                         .bufferSize(RenderType.SMALL_BUFFER_SIZE)
-                        .createRenderSetup()
-        );
+                        .createRenderSetup());
     }
 
     private static RenderType pipeCutoutCull(Identifier texture) {
@@ -2883,8 +2848,7 @@ public final class ClientPipeRenderer {
                         .useLightmap()
                         .useOverlay()
                         .bufferSize(RenderType.SMALL_BUFFER_SIZE)
-                        .createRenderSetup()
-        );
+                        .createRenderSetup());
     }
 
     private static RenderType pipeCutoutCullEmissive(Identifier texture) {
@@ -2894,8 +2858,7 @@ public final class ClientPipeRenderer {
                         .withTexture("Sampler0", texture)
                         .useOverlay()
                         .bufferSize(RenderType.SMALL_BUFFER_SIZE)
-                        .createRenderSetup()
-        );
+                        .createRenderSetup());
     }
 
     private static RenderType pipeTranslucent(Identifier texture) {
@@ -2907,8 +2870,7 @@ public final class ClientPipeRenderer {
                         .useOverlay()
                         .sortOnUpload()
                         .bufferSize(RenderType.SMALL_BUFFER_SIZE)
-                        .createRenderSetup()
-        );
+                        .createRenderSetup());
     }
 
     private static RenderType pipeTranslucentEmissive(Identifier texture) {
@@ -2919,8 +2881,7 @@ public final class ClientPipeRenderer {
                         .useOverlay()
                         .sortOnUpload()
                         .bufferSize(RenderType.SMALL_BUFFER_SIZE)
-                        .createRenderSetup()
-        );
+                        .createRenderSetup());
     }
 
     private static RenderType generatedPipeCutout(Identifier texture) {
@@ -3206,7 +3167,7 @@ public final class ClientPipeRenderer {
             int shadowQuadCount = shadowQuadCount(quads);
             List<TexturedQuad> uploadQuads = orderShadowCastersFirst(quads, shadowQuadCount);
             try (PipeRenderExtension.Scope bufferBuildScope = renderExtension.entityBufferBuild();
-                 ByteBufferBuilder byteBuffer = new ByteBufferBuilder(estimatedBytes)) {
+                    ByteBufferBuilder byteBuffer = new ByteBufferBuilder(estimatedBytes)) {
                 BufferBuilder builder = new BufferBuilder(byteBuffer, renderType.mode(), renderType.format());
                 for (TexturedQuad quad : uploadQuads) {
                     addGpuVertex(builder, quad.a(), sectionOrigin, quad.u0(), quad.v0(), quad.color(), lightSampler.lightAt(quad.lightA(), quad.fullBright(), lightStats), quad.normal());
@@ -3223,8 +3184,7 @@ public final class ClientPipeRenderer {
                     GpuBuffer vertexBuffer = RenderSystem.getDevice().createBuffer(
                             () -> "SuperPipeSlide pipe section " + renderType,
                             GpuBuffer.USAGE_COPY_DST | GpuBuffer.USAGE_VERTEX,
-                            vertices
-                    );
+                            vertices);
                     int indexCount = mesh.drawState().indexCount();
                     int shadowIndexCount = shadowQuadCount == quads.size() ? indexCount : shadowQuadCount * 6;
                     return new PipeGpuBatch(renderType, sectionOrigin, vertexBuffer, indexCount, shadowIndexCount, lightStats.needsRetry());
@@ -3299,8 +3259,7 @@ public final class ClientPipeRenderer {
                         RenderSystem.getModelViewMatrix(),
                         new Vector4f(1.0F, 1.0F, 1.0F, 1.0F),
                         new Vector3f((float) (this.sectionOrigin.x - camera.x), (float) (this.sectionOrigin.y - camera.y), (float) (this.sectionOrigin.z - camera.z)),
-                        textureTransform.getMatrix()
-                );
+                        textureTransform.getMatrix());
                 RenderTarget target = this.renderType.outputTarget().getRenderTarget();
                 var colorTexture = RenderSystem.outputColorTextureOverride != null ? RenderSystem.outputColorTextureOverride : target.getColorTextureView();
                 var depthTexture = target.useDepth
@@ -3308,13 +3267,12 @@ public final class ClientPipeRenderer {
                         : null;
                 CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
                 try (PipeRenderExtension.Scope phaseScope = renderExtension.entityPhase();
-                     RenderPass renderPass = encoder.createRenderPass(
-                        () -> "SuperPipeSlide pipe section " + this.renderType,
-                        colorTexture,
-                        OptionalInt.empty(),
-                        depthTexture,
-                        OptionalDouble.empty()
-                )) {
+                        RenderPass renderPass = encoder.createRenderPass(
+                                () -> "SuperPipeSlide pipe section " + this.renderType,
+                                colorTexture,
+                                OptionalInt.empty(),
+                                depthTexture,
+                                OptionalDouble.empty())) {
                     ScissorState scissorState = RenderSystem.getScissorStateForRenderTypeDraws();
                     if (scissorState.enabled()) {
                         renderPass.enableScissor(scissorState.x(), scissorState.y(), scissorState.width(), scissorState.height());
@@ -3348,5 +3306,4 @@ public final class ClientPipeRenderer {
             return this.needsLightRetry;
         }
     }
-
 }

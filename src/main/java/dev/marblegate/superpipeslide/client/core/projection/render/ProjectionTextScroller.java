@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.client.core.projection.render;
 
-
 import dev.marblegate.superpipeslide.client.core.projection.cache.ProjectionTextMeasureCache;
 import net.minecraft.client.gui.Font;
 
@@ -9,8 +8,7 @@ public final class ProjectionTextScroller {
     private static final long END_PAUSE_MS = 950L;
     private static final double PIXELS_PER_SECOND = 24.0D;
 
-    private ProjectionTextScroller() {
-    }
+    private ProjectionTextScroller() {}
 
     public static float offset(Font font, String text, float viewportWidth, int seed) {
         return offset(font, text, viewportWidth, seed, System.currentTimeMillis());
@@ -77,6 +75,5 @@ public final class ProjectionTextScroller {
         return new TextWindow(value.substring(start, end), leadingOffset);
     }
 
-    public record TextWindow(String text, float leadingOffset) {
-    }
+    public record TextWindow(String text, float leadingOffset) {}
 }

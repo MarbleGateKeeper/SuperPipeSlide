@@ -7,6 +7,7 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 
 public record PipeConnectionAttributes(boolean acceleration, boolean highway, boolean hiddenCandidate, int directionLimit, int reservedFlags) {
+
     private static final int ACCELERATION_FLAG = 1;
     private static final int HIGHWAY_FLAG = 1 << 1;
     private static final int HIDDEN_CANDIDATE_FLAG = 1 << 2;
@@ -20,13 +21,11 @@ public record PipeConnectionAttributes(boolean acceleration, boolean highway, bo
             Codec.BOOL.optionalFieldOf("highway", false).forGetter(PipeConnectionAttributes::highway),
             Codec.BOOL.optionalFieldOf("hidden_candidate", false).forGetter(PipeConnectionAttributes::hiddenCandidate),
             Codec.INT.optionalFieldOf("direction_limit", 0).forGetter(PipeConnectionAttributes::directionLimit),
-            Codec.INT.optionalFieldOf("reserved_flags", 0).forGetter(PipeConnectionAttributes::reservedFlags)
-    ).apply(instance, PipeConnectionAttributes::new));
+            Codec.INT.optionalFieldOf("reserved_flags", 0).forGetter(PipeConnectionAttributes::reservedFlags)).apply(instance, PipeConnectionAttributes::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, PipeConnectionAttributes> STREAM_CODEC = ByteBufCodecs.VAR_INT
             .map(PipeConnectionAttributes::fromFlags, PipeConnectionAttributes::flags)
             .cast();
-
     public boolean isEmpty() {
         return !this.acceleration && !this.highway && !this.hiddenCandidate && this.directionLimit == 0 && this.reservedFlags == 0;
     }
@@ -106,8 +105,7 @@ public record PipeConnectionAttributes(boolean acceleration, boolean highway, bo
                 (flags & HIGHWAY_FLAG) != 0,
                 (flags & HIDDEN_CANDIDATE_FLAG) != 0,
                 directionLimit,
-                flags & ~knownFlags()
-        ).normalized();
+                flags & ~knownFlags()).normalized();
     }
 
     private static int knownFlags() {

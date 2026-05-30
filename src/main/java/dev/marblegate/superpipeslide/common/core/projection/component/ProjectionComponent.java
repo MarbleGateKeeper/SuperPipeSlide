@@ -1,14 +1,12 @@
 package dev.marblegate.superpipeslide.common.core.projection.component;
 
-
-import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionRect;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionRect;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
-
-import java.util.UUID;
 
 public record ProjectionComponent(
         UUID id,
@@ -17,8 +15,8 @@ public record ProjectionComponent(
         float rotationDegrees,
         int layer,
         ProjectionVisibleCondition visibleCondition,
-        ProjectionComponentSettings settings
-) {
+        ProjectionComponentSettings settings) {
+
     public static final int MAX_TEXT_LENGTH = ProjectionComponentSettings.MAX_TEXT_LENGTH;
     public static final int MAX_COMPONENTS = 48;
 
@@ -29,14 +27,11 @@ public record ProjectionComponent(
             Codec.FLOAT.optionalFieldOf("rotation", 0.0F).forGetter(ProjectionComponent::rotationDegrees),
             Codec.INT.optionalFieldOf("layer", 0).forGetter(ProjectionComponent::layer),
             ProjectionVisibleCondition.CODEC.optionalFieldOf("visible", ProjectionVisibleCondition.ALWAYS).forGetter(ProjectionComponent::visibleCondition),
-            ProjectionComponentSettings.CODEC.optionalFieldOf("settings", ProjectionComponentSettings.Text.customText()).forGetter(ProjectionComponent::settings)
-    ).apply(instance, ProjectionComponent::new));
+            ProjectionComponentSettings.CODEC.optionalFieldOf("settings", ProjectionComponentSettings.Text.customText()).forGetter(ProjectionComponent::settings)).apply(instance, ProjectionComponent::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ProjectionComponent> STREAM_CODEC = StreamCodec.of(
             ProjectionComponent::encode,
-            ProjectionComponent::decode
-    );
-
+            ProjectionComponent::decode);
     public ProjectionComponent {
         id = id == null ? UUID.randomUUID() : id;
         type = type == null ? ProjectionComponentType.CUSTOM_TEXT : type;

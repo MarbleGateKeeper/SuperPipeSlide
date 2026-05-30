@@ -4,6 +4,8 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import dev.marblegate.superpipeslide.client.core.gaze.ClientGazeChoiceController;
 import dev.marblegate.superpipeslide.client.renderer.SubmitTextRenderer;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
@@ -14,14 +16,10 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent;
 import net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public final class ClientGazeChoiceRenderer {
     private static final ContextKey<RenderData> RENDER_DATA = new ContextKey<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "gaze_choice_render_data"));
 
-    private ClientGazeChoiceRenderer() {
-    }
+    private ClientGazeChoiceRenderer() {}
 
     public static void extract(ExtractLevelRenderStateEvent event) {
         Vec3 camera = event.getCamera().position();
@@ -74,8 +72,7 @@ public final class ClientGazeChoiceRenderer {
                     LightCoordsUtil.FULL_BRIGHT,
                     primaryColor,
                     background,
-                    0
-            );
+                    0);
             if (hasSecondary) {
                 poseStack.pushPose();
                 poseStack.scale(0.84F, 0.84F, 0.84F);
@@ -91,8 +88,7 @@ public final class ClientGazeChoiceRenderer {
                         LightCoordsUtil.FULL_BRIGHT,
                         secondaryColor,
                         background,
-                        0
-                );
+                        0);
                 poseStack.popPose();
             }
             poseStack.popPose();
@@ -156,12 +152,9 @@ public final class ClientGazeChoiceRenderer {
         return vector.lengthSqr() < 1.0E-6D ? fallback : vector.normalize();
     }
 
-    private record RenderData(List<GazeLabel> labels) {
-    }
+    private record RenderData(List<GazeLabel> labels) {}
 
-    private record GazeLabel(Vec3 position, Component primary, Component secondary, ClientGazeChoiceController.ChoiceVisualState visualState, boolean recommended) {
-    }
+    private record GazeLabel(Vec3 position, Component primary, Component secondary, ClientGazeChoiceController.ChoiceVisualState visualState, boolean recommended) {}
 
-    private record BillboardFrame(Vec3 right, Vec3 up, Vec3 normal) {
-    }
+    private record BillboardFrame(Vec3 right, Vec3 up, Vec3 normal) {}
 }

@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.client.fullmap.routecard.hit;
 
-
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardNode;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardNodeId;
 import java.util.Optional;

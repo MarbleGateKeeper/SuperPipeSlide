@@ -7,7 +7,6 @@ import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionLengthPo
 import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchConnectionSlot;
 import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkView;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -19,8 +18,7 @@ import java.util.UUID;
 import net.minecraft.world.phys.Vec3;
 
 public final class PipeConnectionPlacementPlanner {
-    private PipeConnectionPlacementPlanner() {
-    }
+    private PipeConnectionPlacementPlanner() {}
 
     public static PipeConnectionPlacementPlan plan(PipeNetworkView network, PipeConnection candidate, double maxLength) {
         OverlayPipeNetworkView overlay = OverlayPipeNetworkView.withUpsert(network, candidate, branchOverlays(network, candidate));

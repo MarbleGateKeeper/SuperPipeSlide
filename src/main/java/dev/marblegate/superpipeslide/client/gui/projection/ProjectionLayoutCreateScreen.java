@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.client.gui.projection;
 
-
 import dev.marblegate.superpipeslide.client.core.projection.preview.ProjectionLayoutPreviewPainter;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
 import dev.marblegate.superpipeslide.client.gui.route.RouteEditorGui;
@@ -15,9 +14,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 
 public final class ProjectionLayoutCreateScreen extends RouteEditorScreenBase {

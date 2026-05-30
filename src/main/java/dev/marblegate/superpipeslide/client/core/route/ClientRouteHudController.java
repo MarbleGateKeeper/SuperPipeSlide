@@ -15,9 +15,9 @@ import java.util.Optional;
 import java.util.UUID;
 import javax.annotation.Nullable;
 import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
 public final class ClientRouteHudController {
@@ -65,8 +65,7 @@ public final class ClientRouteHudController {
     private static double departureStretchSegmentStart = Double.NaN;
     private static double departureStretchCarryAmount;
 
-    private ClientRouteHudController() {
-    }
+    private ClientRouteHudController() {}
 
     public static void clear() {
         currentSnapshot = null;
@@ -175,9 +174,9 @@ public final class ClientRouteHudController {
                 departureStretchCarryAmount = Math.max(departureStretchCarryAmount, segmentStretchCap(snapshot));
             } else if (departureStretchHandoff
                     && (!sameSegment(segmentStart, departureStretchSegmentStart)
-                    || snapshot.sectionProgress() >= MOVING_STRETCH_FULL_PROGRESS)) {
-                clearDepartureStretchHandoff();
-            }
+                            || snapshot.sectionProgress() >= MOVING_STRETCH_FULL_PROGRESS)) {
+                                clearDepartureStretchHandoff();
+                            }
         } else {
             clearDepartureStretchHandoff();
         }
@@ -503,8 +502,8 @@ public final class ClientRouteHudController {
                 && lapActive
                 && snapshot.status() != ClientRouteHudSnapshot.Status.BLOCKED
                 && snapshot.status() != ClientRouteHudSnapshot.Status.TERMINAL
-                ? Component.translatable("hud.superpipeslide.route.next_lap").getString()
-                : statusLabel(snapshot);
+                        ? Component.translatable("hud.superpipeslide.route.next_lap").getString()
+                        : statusLabel(snapshot);
         List<LabelRect> focusRects = new ArrayList<>();
         addRect(focusRects, drawCenteredLabelForced(graphics, font, state, focusX, railY + 8.6D, left, right, color(statusColor(snapshot), alpha * focus.fade() * 0.88D), 0.60F));
         String primary = SPSGui.ellipsize(font, focus.station().primaryName(), (int) Math.round((right - left - 40.0D) / 0.92D));
@@ -777,8 +776,7 @@ public final class ClientRouteHudController {
             double t = Math.PI * 2.0D * i / samples;
             points.add(new Vec2(
                     x + Math.sin(t) * 4.2D,
-                    y + Math.sin(t * 2.0D) * 2.05D
-            ));
+                    y + Math.sin(t * 2.0D) * 2.05D));
         }
         SmoothGuiPrimitives.polyline(graphics, points, 2.7D, color(NODE_OUTLINE, alpha * 0.20D));
         SmoothGuiPrimitives.polyline(graphics, points, 1.45D, color(routeColor, alpha * 0.96D));
@@ -1016,8 +1014,7 @@ public final class ClientRouteHudController {
         }
     }
 
-    private record StationDraw(ClientRouteHudSnapshot.Station station, double travelIndex, int relativeIndex, boolean focus, double x, double fade) {
-    }
+    private record StationDraw(ClientRouteHudSnapshot.Station station, double travelIndex, int relativeIndex, boolean focus, double x, double fade) {}
 
     private record LabelRect(double left, double top, double right, double bottom) {
         boolean overlaps(LabelRect other) {

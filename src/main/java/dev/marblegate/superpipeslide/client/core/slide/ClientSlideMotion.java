@@ -6,8 +6,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
 final class ClientSlideMotion {
-    private ClientSlideMotion() {
-    }
+    private ClientSlideMotion() {}
 
     static void freeze(LocalPlayer player) {
         player.noPhysics = true;

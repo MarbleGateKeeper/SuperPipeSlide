@@ -1,17 +1,15 @@
 package dev.marblegate.superpipeslide.common.core.projection.layout;
 
-
-import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponent;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponent;
+import java.util.Comparator;
+import java.util.List;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
-
-import java.util.Comparator;
-import java.util.List;
-import java.util.UUID;
 
 public record ProjectionLayoutDefinition(
         UUID id,
@@ -20,8 +18,8 @@ public record ProjectionLayoutDefinition(
         ProjectionLayoutTarget target,
         ProjectionCanvas canvas,
         List<ProjectionComponent> components,
-        long updatedAt
-) {
+        long updatedAt) {
+
     public static final int CURRENT_SCHEMA_VERSION = 1;
     public static final int MAX_NAME_LENGTH = 48;
 
@@ -32,24 +30,22 @@ public record ProjectionLayoutDefinition(
             ProjectionLayoutTarget.CODEC.optionalFieldOf("target", ProjectionLayoutTarget.STATION_NAME).forGetter(ProjectionLayoutDefinition::target),
             ProjectionCanvas.CODEC.optionalFieldOf("canvas", ProjectionCanvas.standardHorizontal()).forGetter(ProjectionLayoutDefinition::canvas),
             ProjectionComponent.CODEC.listOf().optionalFieldOf("components", List.of()).forGetter(ProjectionLayoutDefinition::components),
-            Codec.LONG.optionalFieldOf("updated_at", 0L).forGetter(ProjectionLayoutDefinition::updatedAt)
-    ).apply(instance, ProjectionLayoutDefinition::new));
+            Codec.LONG.optionalFieldOf("updated_at", 0L).forGetter(ProjectionLayoutDefinition::updatedAt)).apply(instance, ProjectionLayoutDefinition::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ProjectionLayoutDefinition> STREAM_CODEC = StreamCodec.of(
             ProjectionLayoutDefinition::encode,
-            ProjectionLayoutDefinition::decode
-    );
-
+            ProjectionLayoutDefinition::decode);
     public ProjectionLayoutDefinition {
         id = id == null ? UUID.randomUUID() : id;
         name = normalizeName(name);
         schemaVersion = Math.max(0, schemaVersion);
         target = target == null ? ProjectionLayoutTarget.STATION_NAME : target;
         canvas = canvas == null ? ProjectionCanvas.standardHorizontal() : canvas;
-        components = components == null ? List.of() : components.stream()
-                .sorted(Comparator.comparingInt(ProjectionComponent::layer))
-                .limit(ProjectionComponent.MAX_COMPONENTS)
-                .toList();
+        components = components == null ? List.of()
+                : components.stream()
+                        .sorted(Comparator.comparingInt(ProjectionComponent::layer))
+                        .limit(ProjectionComponent.MAX_COMPONENTS)
+                        .toList();
         updatedAt = Math.max(0L, updatedAt);
     }
 
@@ -95,8 +91,7 @@ public record ProjectionLayoutDefinition(
                 ProjectionLayoutTarget.STREAM_CODEC.decode(buffer),
                 ProjectionCanvas.STREAM_CODEC.decode(buffer),
                 ProjectionComponent.STREAM_CODEC.apply(ByteBufCodecs.list(ProjectionComponent.MAX_COMPONENTS)).decode(buffer),
-                buffer.readLong()
-        );
+                buffer.readLong());
     }
 
     private static String normalizeName(String name) {

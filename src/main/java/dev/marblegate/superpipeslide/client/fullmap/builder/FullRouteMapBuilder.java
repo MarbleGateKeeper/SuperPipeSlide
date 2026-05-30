@@ -6,8 +6,6 @@ import dev.marblegate.superpipeslide.client.fullmap.diagnostic.DiagnosticType;
 import dev.marblegate.superpipeslide.client.fullmap.diagnostic.MapBuildDiagnostic;
 import dev.marblegate.superpipeslide.client.fullmap.diagnostic.MissingCrossDimensionPathHint;
 import dev.marblegate.superpipeslide.client.fullmap.model.FullRouteMapSourceSnapshot;
-import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
-import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapCluster;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapDimensionGraph;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapEdge;
@@ -16,6 +14,8 @@ import dev.marblegate.superpipeslide.client.fullmap.model.MapNode;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapTransferHint;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeKind;
+import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
+import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
@@ -64,9 +64,11 @@ public final class FullRouteMapBuilder {
     private final Map<ResourceKey<Level>, Map<NodeId, MapCluster>> clustersByLevel = new LinkedHashMap<>();
     private final Map<ResourceKey<Level>, Map<EdgeKey, EdgeAccumulator>> edgesByLevel = new LinkedHashMap<>();
     private final Map<ResourceKey<Level>, List<MissingCrossDimensionPathHint>> missingCrossDimensionHintsByLevel = new LinkedHashMap<>();
+
     public FullRouteMapBuilder(FullRouteMapSourceSnapshot source) {
         this.source = source;
     }
+
     public Map<ResourceKey<Level>, MapDimensionGraph> build() {
         this.indexSource();
         this.computeStationLineRefs();
@@ -206,8 +208,7 @@ public final class FullRouteMapBuilder {
                     lineIds,
                     Optional.empty(),
                     Optional.empty(),
-                    Optional.ofNullable(this.clusterByStationId.get(station.id()))
-            );
+                    Optional.ofNullable(this.clusterByStationId.get(station.id())));
             this.addNode(node);
         }
         for (Map<NodeId, MapCluster> clusters : this.clustersByLevel.values()) {
@@ -225,8 +226,7 @@ public final class FullRouteMapBuilder {
                         cluster.routeLineIds(),
                         Optional.empty(),
                         Optional.empty(),
-                        Optional.ofNullable(this.parentClusterByNodeId.get(cluster.nodeId()))
-                );
+                        Optional.ofNullable(this.parentClusterByNodeId.get(cluster.nodeId())));
                 this.addNode(node);
             }
         }
@@ -250,8 +250,7 @@ public final class FullRouteMapBuilder {
                     List.of(),
                     Optional.of(id),
                     peer,
-                    Optional.empty()
-            );
+                    Optional.empty());
             this.addNode(node);
             return nodeId;
         });
@@ -454,8 +453,7 @@ public final class FullRouteMapBuilder {
                 layoutIndex,
                 targetStation.levelKey(),
                 direction.x(),
-                direction.y()
-        );
+                direction.y());
         this.missingCrossDimensionHintsByLevel.computeIfAbsent(fromStation.levelKey(), ignored -> new ArrayList<>()).add(hint);
     }
 
@@ -579,8 +577,7 @@ public final class FullRouteMapBuilder {
                 node.routeLineIds(),
                 node.foldAnchorId(),
                 node.foldPeerId(),
-                Optional.of(clusterId)
-        );
+                Optional.of(clusterId));
         this.nodesByLevel.computeIfAbsent(foldNodeId.levelKey(), ignored -> new LinkedHashMap<>()).put(foldNodeId, updated);
     }
 
@@ -619,8 +616,7 @@ public final class FullRouteMapBuilder {
                     this.diagnosticsByLevel.getOrDefault(levelKey, List.of()),
                     bounds.inflate(32.0D),
                     this.source.routeRevision(),
-                    this.source.pipeRevision()
-            ));
+                    this.source.pipeRevision()));
         }
         return graphs;
     }
@@ -665,8 +661,7 @@ public final class FullRouteMapBuilder {
         if (levelKey == null) {
             this.source.stationGroups().stream().findFirst().map(StationGroup::levelKey).ifPresentOrElse(
                     key -> this.diagnostic(key, type, message),
-                    () -> this.diagnosticsByLevel.computeIfAbsent(Level.OVERWORLD, ignored -> new ArrayList<>()).add(new MapBuildDiagnostic(type, message))
-            );
+                    () -> this.diagnosticsByLevel.computeIfAbsent(Level.OVERWORLD, ignored -> new ArrayList<>()).add(new MapBuildDiagnostic(type, message)));
             return;
         }
         this.diagnosticsByLevel.computeIfAbsent(levelKey, ignored -> new ArrayList<>()).add(new MapBuildDiagnostic(type, message));
@@ -762,8 +757,7 @@ public final class FullRouteMapBuilder {
         }
     }
 
-    private record FoldTransition(PipeAnchorId localAnchor, PipeAnchorId peerAnchor) {
-    }
+    private record FoldTransition(PipeAnchorId localAnchor, PipeAnchorId peerAnchor) {}
 
     private record ClusterAggregate(UUID id, NodeId nodeId, boolean deep, double worldX, double worldZ, List<StationGroup> stations) {
         static ClusterAggregate deep(MapCluster cluster, List<StationGroup> stations) {

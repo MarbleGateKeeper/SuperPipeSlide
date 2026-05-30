@@ -2,13 +2,13 @@ package dev.marblegate.superpipeslide.common.core.route.storage;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
 import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNetworkChangeSet;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkView;
-import dev.marblegate.superpipeslide.common.core.networkgraph.storage.ServerPipeNetworkView;
 import dev.marblegate.superpipeslide.common.core.path.PipeGraphSnapshot;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayoutSectionRef;
@@ -25,17 +25,14 @@ import dev.marblegate.superpipeslide.common.core.route.service.RouteInvalidation
 import dev.marblegate.superpipeslide.common.core.route.service.RouteSectionService;
 import dev.marblegate.superpipeslide.common.core.route.service.RouteValidationService;
 import dev.marblegate.superpipeslide.common.core.route.sync.RouteSyncTracker;
-import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.config.Config;
 import dev.marblegate.superpipeslide.network.sync.route.ClientboundRouteDataDeltaPayload;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -43,8 +40,8 @@ import java.util.Set;
 import java.util.UUID;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
@@ -61,14 +58,12 @@ public final class RouteNetworkSavedData extends SavedData {
             RouteSectionPathRecord.CODEC.listOf().optionalFieldOf("route_section_paths", List.of()).forGetter(RouteNetworkSavedData::routeSectionPathsForCodec),
             StationTransferLink.CODEC.listOf().optionalFieldOf("station_transfer_links", List.of()).forGetter(RouteNetworkSavedData::stationTransferLinksForCodec),
             Codec.INT.optionalFieldOf("route_path_rules_version", 0).forGetter(RouteNetworkSavedData::routePathRulesVersionForCodec),
-            Codec.LONG.optionalFieldOf("revision", 0L).forGetter(RouteNetworkSavedData::revision)
-    ).apply(instance, RouteNetworkSavedData::new));
+            Codec.LONG.optionalFieldOf("revision", 0L).forGetter(RouteNetworkSavedData::revision)).apply(instance, RouteNetworkSavedData::new));
 
     public static final SavedDataType<RouteNetworkSavedData> TYPE = new SavedDataType<>(
             Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "route_network"),
             RouteNetworkSavedData::new,
-            CODEC
-    );
+            CODEC);
 
     private final RouteNetworkStore store;
     private final RouteIndex index = new RouteIndex();
@@ -108,8 +103,7 @@ public final class RouteNetworkSavedData extends SavedData {
                             routeSection.forwardBranchDecisions(),
                             routeSection.reverseBranchDecisions(),
                             routeSection.forwardStepDecisions(),
-                            routeSection.reverseStepDecisions()
-                    ));
+                            routeSection.reverseStepDecisions()));
                     this.sectionWorkQueue.markDirty(routeSection.id());
                 });
         this.routePathRulesVersion = ROUTE_PATH_RULES_VERSION;
@@ -903,8 +897,7 @@ public final class RouteNetworkSavedData extends SavedData {
                 List.of(),
                 List.of(),
                 List.of(),
-                List.of()
-        );
+                List.of());
     }
 
     private void updatePlatformRouteOwnership(UUID routeLineId) {
@@ -969,8 +962,7 @@ public final class RouteNetworkSavedData extends SavedData {
                         section.forwardBranchDecisions(),
                         section.reverseBranchDecisions(),
                         section.forwardStepDecisions(),
-                        section.reverseStepDecisions()
-                );
+                        section.reverseStepDecisions());
                 this.store.put(updated);
                 this.trackUpdated(updated);
                 changed = true;
@@ -1049,8 +1041,7 @@ public final class RouteNetworkSavedData extends SavedData {
                 section.forwardBranchDecisions(),
                 section.reverseBranchDecisions(),
                 section.forwardStepDecisions(),
-                section.reverseStepDecisions()
-        );
+                section.reverseStepDecisions());
         this.store.put(updated);
         this.trackUpdated(updated);
         return true;
@@ -1253,5 +1244,4 @@ public final class RouteNetworkSavedData extends SavedData {
             return this.status == PlatformStopUpdateStatus.UPDATED;
         }
     }
-
 }

@@ -5,5 +5,4 @@ package dev.marblegate.superpipeslide.common.core.appearance.coating;
 
 import com.mojang.logging.annotations.FieldsAreNonnullByDefault;
 import com.mojang.logging.annotations.MethodsReturnNonnullByDefault;
-
 import javax.annotation.ParametersAreNonnullByDefault;

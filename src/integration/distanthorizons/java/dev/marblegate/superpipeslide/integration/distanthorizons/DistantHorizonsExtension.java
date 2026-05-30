@@ -1,7 +1,5 @@
 package dev.marblegate.superpipeslide.integration.distanthorizons;
 
-import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeAppearanceCache;
-import dev.marblegate.superpipeslide.client.core.slide.ClientSlideController;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.integration.ModIntegration;
 import dev.marblegate.superpipeslide.integration.distanthorizons.client.ClientPipeFarLodProxyProvider;

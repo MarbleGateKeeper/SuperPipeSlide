@@ -1,20 +1,11 @@
 package dev.marblegate.superpipeslide.common.event;
 
+import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.appearance.storage.PipeAppearanceSavedData;
-import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
-import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNode;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.ServerPipeNetworkView;
-import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
-import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
-import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
-import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSection;
-import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionPathRecord;
-import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
-import dev.marblegate.superpipeslide.common.core.route.model.station.StationTransferLink;
 import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.core.slide.ServerSlideController;
-import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.network.editor.ClientboundEditorResultPayload;
 import dev.marblegate.superpipeslide.network.sync.pipe.PipeNetworkSnapshotChunkPayload;
 import dev.marblegate.superpipeslide.network.sync.pipe.PipeNetworkSnapshotEndPayload;
@@ -53,8 +44,7 @@ public final class ServerEvents {
     private static final Map<UUID, Long> LAST_ROUTE_RESYNC_REQUEST_MILLIS = new HashMap<>();
     private static final NetworkSyncScheduler SYNC = new NetworkSyncScheduler();
 
-    private ServerEvents() {
-    }
+    private ServerEvents() {}
 
     @SubscribeEvent
     public static void onPlayerTick(PlayerTickEvent.Post event) {
@@ -142,8 +132,7 @@ public final class ServerEvents {
                     revision,
                     chunkIndex++,
                     nodes.subList(nodeIndex, nextNodeIndex),
-                    connections.subList(connectionIndex, nextConnectionIndex)
-            ));
+                    connections.subList(connectionIndex, nextConnectionIndex)));
             nodeIndex = nextNodeIndex;
             connectionIndex = nextConnectionIndex;
         }
@@ -231,8 +220,7 @@ public final class ServerEvents {
                 routeLayouts.size(),
                 routeSections.size(),
                 routeSectionPaths.size(),
-                stationTransferLinks.size()
-        );
+                stationTransferLinks.size());
         PacketDistributor.sendToPlayer(player, new ClientboundRouteDataSnapshotStartPayload(
                 revision,
                 ServerPipeNetworkView.of(level.getServer()).revision(),
@@ -243,8 +231,7 @@ public final class ServerEvents {
                 routeSections.size(),
                 routeSectionPaths.size(),
                 stationTransferLinks.size(),
-                chunkCount
-        ));
+                chunkCount));
 
         int chunkIndex = 0;
         int stationIndex = 0;
@@ -277,8 +264,7 @@ public final class ServerEvents {
                     routeLayouts.subList(layoutIndex, nextLayoutIndex),
                     routeSections.subList(sectionIndex, nextSectionIndex),
                     routeSectionPaths.subList(sectionPathIndex, nextSectionPathIndex),
-                    stationTransferLinks.subList(transferLinkIndex, nextTransferLinkIndex)
-            ));
+                    stationTransferLinks.subList(transferLinkIndex, nextTransferLinkIndex)));
             stationIndex = nextStationIndex;
             platformIndex = nextPlatformIndex;
             lineIndex = nextLineIndex;
@@ -301,8 +287,7 @@ public final class ServerEvents {
     private static int pipeNetworkSnapshotChunkCount(int nodeCount, int connectionCount) {
         return Math.max(
                 (nodeCount + SNAPSHOT_NODES_PER_CHUNK - 1) / SNAPSHOT_NODES_PER_CHUNK,
-                (connectionCount + SNAPSHOT_CONNECTIONS_PER_CHUNK - 1) / SNAPSHOT_CONNECTIONS_PER_CHUNK
-        );
+                (connectionCount + SNAPSHOT_CONNECTIONS_PER_CHUNK - 1) / SNAPSHOT_CONNECTIONS_PER_CHUNK);
     }
 
     public static void sendEditorResult(ServerPlayer player, boolean accepted, String message, long routeRevision) {
@@ -359,7 +344,5 @@ public final class ServerEvents {
         return true;
     }
 
-    private record SyncedPlayer(int entityId) {
-    }
+    private record SyncedPlayer(int entityId) {}
 }
-

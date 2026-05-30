@@ -4,8 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class ProjectionQuadClipper {
-    private ProjectionQuadClipper() {
-    }
+    private ProjectionQuadClipper() {}
 
     public static List<Vertex> clip(float minX, float minY, float maxX, float maxY, Vertex... vertices) {
         if (vertices == null || vertices.length < 3 || maxX <= minX || maxY <= minY) {
@@ -71,8 +70,7 @@ public final class ProjectionQuadClipper {
                 lerp(from.x(), to.x(), ratio),
                 lerp(from.y(), to.y(), ratio),
                 lerp(from.u(), to.u(), ratio),
-                lerp(from.v(), to.v(), ratio)
-        );
+                lerp(from.v(), to.v(), ratio));
     }
 
     private static float lerp(float from, float to, float ratio) {

@@ -25,8 +25,8 @@ import dev.marblegate.superpipeslide.client.core.projection.render.ProjectionTex
 import dev.marblegate.superpipeslide.client.core.projection.render.ProjectionWorldTextRenderer;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
+import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.block.station.PlatformProjectorBlock;
-import dev.marblegate.superpipeslide.common.block.station.PlatformProjectorBlockEntity;
 import dev.marblegate.superpipeslide.common.block.station.PlatformProjectorConfig;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionBuiltinIcon;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponent;
@@ -42,7 +42,6 @@ import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
 import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
-import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.config.ClientConfig;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -54,15 +53,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
-import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -128,12 +127,10 @@ public final class PlatformProjectorRenderer {
             .build();
     private static final RenderType PROJECTION_TRANSLUCENT_QUADS = RenderType.create(
             "superpipeslide_platform_projector_translucent_quads",
-            RenderSetup.builder(PROJECTION_TRANSLUCENT_PIPELINE).bufferSize(4096).createRenderSetup()
-    );
+            RenderSetup.builder(PROJECTION_TRANSLUCENT_PIPELINE).bufferSize(4096).createRenderSetup());
     private static final Map<Identifier, RenderType> PROJECTION_TEXTURE_QUADS = new LinkedHashMap<>();
 
-    private PlatformProjectorRenderer() {
-    }
+    private PlatformProjectorRenderer() {}
 
     private static CircleLookup lookupFor(float diameter) {
         if (diameter < 0.05F) {
@@ -354,8 +351,7 @@ public final class PlatformProjectorRenderer {
                 projector.info().signature(),
                 ClientRouteDataCache.revision(),
                 ClientPipeNetworkCache.revision(),
-                networkImageStates(projector.layout(), true)
-        );
+                networkImageStates(projector.layout(), true));
     }
 
     private static DynamicProjectionKey dynamicKey(ProjectorData projector, boolean frontSide, float width, float height) {
@@ -374,8 +370,7 @@ public final class PlatformProjectorRenderer {
                 projector.info().signature(),
                 ClientRouteDataCache.revision(),
                 ClientPipeNetworkCache.revision(),
-                phases
-        );
+                phases);
     }
 
     private static boolean hasStaticRenderableContent(AppliedProjectionLayout layout, PlatformRenderInfo info) {
@@ -514,8 +509,7 @@ public final class PlatformProjectorRenderer {
                 center.z - safeRadius,
                 center.x + safeRadius,
                 center.y + safeRadius,
-                center.z + safeRadius
-        );
+                center.z + safeRadius);
         return frustum.isVisible(bounds);
     }
 
@@ -626,8 +620,7 @@ public final class PlatformProjectorRenderer {
             case PLATFORM_STATUS_TAGS -> renderStatusTagSurface(pose, buffer, transform, rect, (ProjectionComponentSettings.PlatformStatusTags) settings, info, z, pass);
             case BUILTIN_ICON -> renderBuiltinIconChrome(pose, buffer, transform, rect, (ProjectionComponentSettings.BuiltinIcon) settings, z, pass);
             case NETWORK_IMAGE -> renderNetworkImageChrome(pose, buffer, transform, rect, (ProjectionComponentSettings.NetworkImage) settings, z, pass);
-            default -> {
-            }
+            default -> {}
         }
     }
 
@@ -682,8 +675,7 @@ public final class PlatformProjectorRenderer {
             case PLATFORM_TRANSFER_MATRIX -> drawTransferMatrixText(poseStack, collector, font, rect, info, (ProjectionComponentSettings.PlatformTransferMatrix) settings, frameTimeMillis);
             case PLATFORM_LAYOUT_STOP_LIST, PLATFORM_LAYOUT_PHYSICAL_MAP, PLATFORM_LAYOUT_PRACTICAL_MAP, PLATFORM_LAYOUT_SCHEMATIC_MAP, PLATFORM_LAYOUT_EDITOR_MAP -> drawPlatformLayoutText(poseStack, collector, font, rect, info, (ProjectionComponentSettings.PlatformLayoutMap) settings, frameTimeMillis);
             case NETWORK_IMAGE -> drawNetworkImageStatusText(poseStack, collector, font, rect, (ProjectionComponentSettings.NetworkImage) settings);
-            default -> {
-            }
+            default -> {}
         }
         poseStack.popPose();
     }
@@ -797,8 +789,7 @@ public final class PlatformProjectorRenderer {
                     RenderSetup.builder(PROJECTION_TEXTURE_PIPELINE)
                             .withTexture("Sampler0", id)
                             .bufferSize(4096)
-                            .createRenderSetup()
-            ));
+                            .createRenderSetup()));
         }
     }
 
@@ -1229,8 +1220,7 @@ public final class PlatformProjectorRenderer {
                 platformLayouts.stream().anyMatch(RouteLayout::bidirectional),
                 platformLayouts.stream().anyMatch(RouteLayout::loop),
                 terminalPlatform(layout, stop.id()),
-                hasOutStationTransfers(stop)
-        );
+                hasOutStationTransfers(stop));
     }
 
     private static List<RouteLayout> platformLayouts(PlatformStop stop) {
@@ -1821,8 +1811,7 @@ public final class PlatformProjectorRenderer {
                 transform.centerX() + dx * cos - dy * sin,
                 transform.centerY() + dx * sin + dy * cos,
                 vertex.u(),
-                vertex.v()
-        );
+                vertex.v());
     }
 
     private static void emitClippedColorQuad(Matrix4f matrix, VertexConsumer buffer, float z, int color, List<ProjectionQuadClipper.Vertex> vertices) {
@@ -1987,24 +1976,21 @@ public final class PlatformProjectorRenderer {
         private static final RenderData EMPTY = new RenderData(List.of(), Vec3.ZERO);
     }
 
-    private record ProjectorData(BlockPos pos, Direction facing, PlatformProjectorConfig config, AppliedProjectionLayout layout, PlatformRenderInfo info) {
-    }
+    private record ProjectorData(BlockPos pos, Direction facing, PlatformProjectorConfig config, AppliedProjectionLayout layout, PlatformRenderInfo info) {}
 
     private record PlatformInfoCacheKey(
             long routeRevision,
             long pipeRevision,
             Optional<UUID> platformStopId,
             Optional<UUID> routeLayoutId,
-            PlatformProjectorConfig.PlatformProjectionDirection direction
-    ) {
+            PlatformProjectorConfig.PlatformProjectionDirection direction) {
         static PlatformInfoCacheKey of(PlatformProjectorConfig config) {
             return new PlatformInfoCacheKey(
                     ClientRouteDataCache.revision(),
                     ClientPipeNetworkCache.revision(),
                     config.platformStopId(),
                     config.routeLayoutId(),
-                    config.direction()
-            );
+                    config.direction());
         }
     }
 
@@ -2033,8 +2019,7 @@ public final class PlatformProjectorRenderer {
             List<PlatformTransferProjectionEngine.TransferData> transferData,
             Map<PlatformPrimitiveKey, PlatformLayoutProjectionEngine.Layout> platformLayouts,
             Map<TransferPrimitiveKey, PlatformTransferProjectionEngine.Layout> transferLayouts,
-            Map<StatusTagPrimitiveKey, PlatformStatusTagProjectionEngine.Layout> statusTagLayouts
-    ) {
+            Map<StatusTagPrimitiveKey, PlatformStatusTagProjectionEngine.Layout> statusTagLayouts) {
         PlatformRenderInfo(
                 boolean missing,
                 String stationName,
@@ -2056,8 +2041,7 @@ public final class PlatformProjectorRenderer {
                 boolean anyBidirectional,
                 boolean anyLoop,
                 boolean terminal,
-                boolean hasOutStationTransfers
-        ) {
+                boolean hasOutStationTransfers) {
             this(
                     missing,
                     stationName,
@@ -2083,8 +2067,7 @@ public final class PlatformProjectorRenderer {
                     PlatformProjectorRenderer.buildTransferData(transfers),
                     new LinkedHashMap<>(16, 0.75F, true),
                     new LinkedHashMap<>(16, 0.75F, true),
-                    new LinkedHashMap<>(8, 0.75F, true)
-            );
+                    new LinkedHashMap<>(8, 0.75F, true));
         }
 
         static PlatformRenderInfo unbound() {
@@ -2147,10 +2130,8 @@ public final class PlatformProjectorRenderer {
                     this.anyLoop,
                     this.terminal,
                     this.hasOutStationTransfers,
-                    this.transferData
-            );
+                    this.transferData);
         }
-
     }
 
     private record PlatformRenderInfoSignature(
@@ -2175,9 +2156,7 @@ public final class PlatformProjectorRenderer {
             boolean anyLoop,
             boolean terminal,
             boolean hasOutStationTransfers,
-            List<PlatformTransferProjectionEngine.TransferData> transferData
-    ) {
-    }
+            List<PlatformTransferProjectionEngine.TransferData> transferData) {}
 
     private record PlatformPrimitiveKey(ProjectionComponentSettings.PlatformLayoutMap settings, long phase) {
         static PlatformPrimitiveKey of(ProjectionComponentSettings.PlatformLayoutMap settings, long frameTimeMillis) {
@@ -2217,8 +2196,7 @@ public final class PlatformProjectorRenderer {
         }
     }
 
-    private record StatusTagPrimitiveKey(ProjectionComponentSettings.PlatformStatusTags settings, float width, float height, List<String> tags) {
-    }
+    private record StatusTagPrimitiveKey(ProjectionComponentSettings.PlatformStatusTags settings, float width, float height, List<String> tags) {}
 
     private record RouteChip(UUID id, String name, String translatedName, String station, String platform, boolean outStation, List<Integer> colors) {
         int firstColor() {
@@ -2226,8 +2204,7 @@ public final class PlatformProjectorRenderer {
         }
     }
 
-    private record TexturedComponent(Identifier textureId, ComponentTransform transform, ComponentRect rect, float z, int color, float u0, float v0, float u1, float v1) {
-    }
+    private record TexturedComponent(Identifier textureId, ComponentTransform transform, ComponentRect rect, float z, int color, float u0, float v0, float u1, float v1) {}
 
     private record TransferOption(UUID id, String name, String translatedName, String station, String platform, boolean outStation, List<Integer> colors) {
         int firstColor() {
@@ -2235,11 +2212,9 @@ public final class PlatformProjectorRenderer {
         }
     }
 
-    private record TransferKey(UUID lineId, UUID stationGroupId, boolean outStation) {
-    }
+    private record TransferKey(UUID lineId, UUID stationGroupId, boolean outStation) {}
 
-    private record StopChip(String name, boolean current, boolean transfer) {
-    }
+    private record StopChip(String name, boolean current, boolean transfer) {}
 
     private record StaticProjectionKey(
             BlockPos pos,
@@ -2252,9 +2227,7 @@ public final class PlatformProjectorRenderer {
             PlatformRenderInfoSignature info,
             long routeRevision,
             long pipeRevision,
-            List<NetworkImageStateKey> networkImages
-    ) {
-    }
+            List<NetworkImageStateKey> networkImages) {}
 
     private record DynamicProjectionKey(
             BlockPos pos,
@@ -2267,12 +2240,9 @@ public final class PlatformProjectorRenderer {
             PlatformRenderInfoSignature info,
             long routeRevision,
             long pipeRevision,
-            List<DynamicComponentPhase> phases
-    ) {
-    }
+            List<DynamicComponentPhase> phases) {}
 
-    private record NetworkImageStateKey(String url, ProjectionNetworkImageCache.Status status, Identifier textureId, int width, int height) {
-    }
+    private record NetworkImageStateKey(String url, ProjectionNetworkImageCache.Status status, Identifier textureId, int width, int height) {}
 
     private record DynamicComponentPhase(UUID componentId, long phase, String url, ProjectionNetworkImageCache.Status status, Identifier textureId, int width, int height) {
         private static DynamicComponentPhase phase(UUID componentId, long phase) {
@@ -2300,8 +2270,7 @@ public final class PlatformProjectorRenderer {
     }
 
     private static final class LayoutCache {
-        private LayoutCache() {
-        }
+        private LayoutCache() {}
 
         static <K, V> void trim(Map<K, V> cache, int maxEntries) {
             if (cache.size() < maxEntries) {
@@ -2401,8 +2370,7 @@ public final class PlatformProjectorRenderer {
         }
     }
 
-    private record ComponentTransform(float centerX, float centerY, float radians, CanvasBounds canvasBounds) {
-    }
+    private record ComponentTransform(float centerX, float centerY, float radians, CanvasBounds canvasBounds) {}
 
     private record CanvasBounds(float minX, float minY, float maxX, float maxY, Matrix4f worldToCanvas) {
         private static CanvasBounds of(float width, float height) {

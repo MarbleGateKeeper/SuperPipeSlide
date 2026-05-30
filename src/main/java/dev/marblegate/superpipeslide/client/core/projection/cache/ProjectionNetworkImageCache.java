@@ -6,25 +6,20 @@ import dev.marblegate.superpipeslide.config.ClientConfig;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.ProxySelector;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.net.InetAddress;
-import java.net.ProxySelector;
-import java.net.UnknownHostException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ExecutorService;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,13 +28,18 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.Set;
-import javax.net.ssl.SSLHandshakeException;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
+import javax.net.ssl.SSLHandshakeException;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
@@ -72,8 +72,7 @@ public final class ProjectionNetworkImageCache {
     private static final Queue<CompletedLoad> COMPLETED = new ConcurrentLinkedQueue<>();
     private static final AtomicInteger QUEUED_LOADS = new AtomicInteger();
 
-    private ProjectionNetworkImageCache() {
-    }
+    private ProjectionNetworkImageCache() {}
 
     private static HttpClient createHttpClient() {
         HttpClient.Builder builder = HttpClient.newBuilder()
@@ -774,8 +773,7 @@ public final class ProjectionNetworkImageCache {
         }
         try {
             input.close();
-        } catch (IOException ignored) {
-        }
+        } catch (IOException ignored) {}
     }
 
     private static void markStatus(String url, Status status, String messageKey) {
@@ -961,14 +959,11 @@ public final class ProjectionNetworkImageCache {
         }
     }
 
-    private record ScriptImageChallenge(String url, String cookie) {
-    }
+    private record ScriptImageChallenge(String url, String cookie) {}
 
-    private record FailureLogDecision(boolean log, int failures, long nextRetryMillis, String summary) {
-    }
+    private record FailureLogDecision(boolean log, int failures, long nextRetryMillis, String summary) {}
 
-    private record ExceptionFailure(Status status, String messageKey) {
-    }
+    private record ExceptionFailure(Status status, String messageKey) {}
 
     private enum ImageFormat {
         PNG,

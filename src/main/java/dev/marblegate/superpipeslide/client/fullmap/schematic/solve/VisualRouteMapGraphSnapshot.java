@@ -3,7 +3,6 @@ package dev.marblegate.superpipeslide.client.fullmap.schematic.solve;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualNode;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualRouteMapGraph;
-
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -18,6 +17,5 @@ public record VisualRouteMapGraphSnapshot(Map<NodeId, Position> positions) {
         return Optional.ofNullable(this.positions.get(nodeId));
     }
 
-    public record Position(double x, double z) {
-    }
+    public record Position(double x, double z) {}
 }

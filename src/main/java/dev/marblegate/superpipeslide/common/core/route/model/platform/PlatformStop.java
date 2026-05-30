@@ -3,14 +3,13 @@ package dev.marblegate.superpipeslide.common.core.route.model.platform;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
+import java.util.Comparator;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
-
-import java.util.Comparator;
-import java.util.Optional;
-import java.util.UUID;
 
 public record PlatformStop(
         UUID id,
@@ -19,8 +18,8 @@ public record PlatformStop(
         String platformNumber,
         Optional<String> displayName,
         PipeConnectionRef connectionRef,
-        double length
-) {
+        double length) {
+
     public static final Comparator<PlatformStop> DISPLAY_ORDER = Comparator
             .comparingInt(PlatformStop::platformNumberSortKey)
             .thenComparing(PlatformStop::platformNumber)
@@ -33,8 +32,7 @@ public record PlatformStop(
             Codec.STRING.optionalFieldOf("platform_number", "").forGetter(PlatformStop::platformNumber),
             Codec.STRING.optionalFieldOf("display_name").forGetter(PlatformStop::displayName),
             PipeConnectionRef.CODEC.fieldOf("connection").forGetter(PlatformStop::connectionRef),
-            Codec.DOUBLE.optionalFieldOf("length", 0.0D).forGetter(PlatformStop::length)
-    ).apply(instance, PlatformStop::new));
+            Codec.DOUBLE.optionalFieldOf("length", 0.0D).forGetter(PlatformStop::length)).apply(instance, PlatformStop::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, PlatformStop> STREAM_CODEC = StreamCodec.composite(
             UUIDUtil.STREAM_CODEC,
@@ -51,9 +49,7 @@ public record PlatformStop(
             PlatformStop::connectionRef,
             ByteBufCodecs.DOUBLE.cast(),
             PlatformStop::length,
-            PlatformStop::new
-    );
-
+            PlatformStop::new);
     public PlatformStop {
         platformNumber = sanitizePlatformNumber(platformNumber);
         length = Math.max(0.0D, length);
@@ -88,4 +84,3 @@ public record PlatformStop(
         }
     }
 }
-

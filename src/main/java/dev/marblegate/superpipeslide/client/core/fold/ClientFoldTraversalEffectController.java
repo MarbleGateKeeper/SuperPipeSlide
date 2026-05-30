@@ -1,12 +1,15 @@
 package dev.marblegate.superpipeslide.client.core.fold;
 
-
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorKind;
 import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
 import dev.marblegate.superpipeslide.common.core.slide.ResolvedPipeSpeedRules;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import javax.annotation.Nullable;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
@@ -14,11 +17,6 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-
-import javax.annotation.Nullable;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 public final class ClientFoldTraversalEffectController {
     private static final double APPROACH_RANGE = 12.0D;
@@ -44,8 +42,7 @@ public final class ClientFoldTraversalEffectController {
     private static ActiveEffect active;
     private static long lastApproachRefreshMs;
 
-    private ClientFoldTraversalEffectController() {
-    }
+    private ClientFoldTraversalEffectController() {}
 
     public static void tick(Minecraft minecraft, LocalPlayer player) {
         if (minecraft.level == null || active == null) {
@@ -114,8 +111,7 @@ public final class ClientFoldTraversalEffectController {
                     fold.exitPosition,
                     fold.exitTangent,
                     speed01,
-                    now
-            );
+                    now);
         }
         active.approachProgress = Math.max(active.approachProgress, approach);
         active.speed01 = Math.max(active.speed01 * 0.82D, speed01);
@@ -144,8 +140,7 @@ public final class ClientFoldTraversalEffectController {
                 fold.exitTangent,
                 speed01(Math.abs(speed), connection),
                 crossDimension,
-                now
-        );
+                now);
         lastApproachRefreshMs = now;
     }
 
@@ -202,8 +197,7 @@ public final class ClientFoldTraversalEffectController {
                 active.approachProgress,
                 progress,
                 life,
-                active.seed
-        ));
+                active.seed));
     }
 
     public static double fovOffset() {
@@ -307,8 +301,7 @@ public final class ClientFoldTraversalEffectController {
                 entryPosition,
                 entryTangent,
                 exitPosition,
-                exitTangent
-        ));
+                exitTangent));
     }
 
     private static void beginInvalid(PipeConnection connection, int direction) {
@@ -328,8 +321,7 @@ public final class ClientFoldTraversalEffectController {
                 entryTangent.scale(-1.0D),
                 0.45D,
                 false,
-                now
-        );
+                now);
         active.phase = Phase.CANCEL;
         active.phaseStartMs = now;
     }
@@ -525,8 +517,7 @@ public final class ClientFoldTraversalEffectController {
             double approachProgress,
             double phaseProgress,
             double life,
-            long seed
-    ) {
+            long seed) {
         public boolean dimensionFold() {
             return this.kind == FoldAnchorKind.DIMENSION;
         }
@@ -548,6 +539,5 @@ public final class ClientFoldTraversalEffectController {
         };
     }
 
-    private record ResolvedFoldEndpoint(FoldAnchorKind kind, PipeAnchorId entryAnchor, PipeAnchorId exitAnchor, Vec3 entryPosition, Vec3 entryTangent, Vec3 exitPosition, Vec3 exitTangent) {
-    }
+    private record ResolvedFoldEndpoint(FoldAnchorKind kind, PipeAnchorId entryAnchor, PipeAnchorId exitAnchor, Vec3 entryPosition, Vec3 entryTangent, Vec3 exitPosition, Vec3 exitTangent) {}
 }

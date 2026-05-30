@@ -7,6 +7,7 @@ import dev.marblegate.superpipeslide.client.core.navigation.ClientNavigationCont
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import dev.marblegate.superpipeslide.client.renderer.SubmitTextRenderer;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
+import java.util.Optional;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.player.LocalPlayer;
@@ -19,15 +20,12 @@ import net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent;
 import net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent;
 import org.joml.Matrix4f;
 
-import java.util.Optional;
-
 public final class ClientNavigationWorldHighlighter {
     private static final ContextKey<RenderData> RENDER_DATA = new ContextKey<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "navigation_world_highlight"));
     private static final Vec3 WORLD_UP = new Vec3(0.0D, 1.0D, 0.0D);
     private static final double WORLD_MARKER_RANGE = 72.0D;
 
-    private ClientNavigationWorldHighlighter() {
-    }
+    private ClientNavigationWorldHighlighter() {}
 
     public static void extract(ExtractLevelRenderStateEvent event) {
         Minecraft minecraft = Minecraft.getInstance();
@@ -56,8 +54,7 @@ public final class ClientNavigationWorldHighlighter {
                     event.getSubmitNodeCollector(),
                     poseStack,
                     ClientRenderCompatibility.effectQuads(),
-                    (pose, buffer) -> renderTarget(pose, buffer, target, camera, photic)
-            );
+                    (pose, buffer) -> renderTarget(pose, buffer, target, camera, photic));
             renderTargetLabel(event, poseStack, target, camera);
         });
         poseStack.popPose();
@@ -116,8 +113,7 @@ public final class ClientNavigationWorldHighlighter {
                 LightCoordsUtil.FULL_BRIGHT,
                 0xFFFFFFFF,
                 0xAA101820,
-                0
-        );
+                0);
         poseStack.popPose();
     }
 

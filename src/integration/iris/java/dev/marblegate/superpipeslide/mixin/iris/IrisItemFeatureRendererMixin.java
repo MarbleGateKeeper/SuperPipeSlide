@@ -13,13 +13,7 @@ import org.spongepowered.asm.mixin.injection.At;
 @Restriction(require = @Condition(ModIntegration.Constants.IRIS))
 @Mixin(ItemFeatureRenderer.class)
 public abstract class IrisItemFeatureRendererMixin {
-    @ModifyExpressionValue(
-            method = "renderItem(Lnet/minecraft/client/renderer/MultiBufferSource$BufferSource;Lnet/minecraft/client/renderer/OutlineBufferSource;Lnet/minecraft/client/renderer/SubmitNodeStorage$ItemSubmit;)V",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/client/resources/model/geometry/BakedQuad$MaterialInfo;itemRenderType()Lnet/minecraft/client/renderer/rendertype/RenderType;"
-            )
-    )
+    @ModifyExpressionValue(method = "renderItem(Lnet/minecraft/client/renderer/MultiBufferSource$BufferSource;Lnet/minecraft/client/renderer/OutlineBufferSource;Lnet/minecraft/client/renderer/SubmitNodeStorage$ItemSubmit;)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/resources/model/geometry/BakedQuad$MaterialInfo;itemRenderType()Lnet/minecraft/client/renderer/rendertype/RenderType;"))
     private RenderType superpipeslide$adaptItemRenderType(RenderType original) {
         return ClientRenderCompatibility.world(original);
     }

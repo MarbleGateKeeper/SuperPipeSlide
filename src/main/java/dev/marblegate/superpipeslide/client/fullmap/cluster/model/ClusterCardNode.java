@@ -3,12 +3,11 @@ package dev.marblegate.superpipeslide.client.fullmap.cluster.model;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapNode;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.level.Level;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 public record ClusterCardNode(
         String id,
@@ -24,8 +23,7 @@ public record ClusterCardNode(
         Optional<PipeAnchorId> foldAnchorId,
         Optional<PipeAnchorId> foldPeerId,
         Optional<NodeId> outsideNodeId,
-        boolean stationInternalLoop
-) {
+        boolean stationInternalLoop) {
     public ClusterCardNode {
         mapNodeId = mapNodeId == null ? Optional.empty() : mapNodeId;
         mapNode = mapNode == null ? Optional.empty() : mapNode;

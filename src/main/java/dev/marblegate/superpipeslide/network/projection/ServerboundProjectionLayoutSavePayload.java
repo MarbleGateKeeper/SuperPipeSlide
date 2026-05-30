@@ -6,6 +6,7 @@ import dev.marblegate.superpipeslide.common.core.projection.storage.ProjectionLa
 import dev.marblegate.superpipeslide.common.event.ServerEvents;
 import dev.marblegate.superpipeslide.common.registry.SPSDataComponents;
 import dev.marblegate.superpipeslide.common.registry.SPSItems;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -16,9 +17,8 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-import java.util.UUID;
-
 public record ServerboundProjectionLayoutSavePayload(UUID requestId, ProjectionLayoutDefinition layout, boolean select) implements CustomPacketPayload {
+
     public static final Type<ServerboundProjectionLayoutSavePayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "projection_layout_save"));
     public static final StreamCodec<RegistryFriendlyByteBuf, ServerboundProjectionLayoutSavePayload> STREAM_CODEC = StreamCodec.composite(
             UUIDUtil.STREAM_CODEC,
@@ -27,9 +27,7 @@ public record ServerboundProjectionLayoutSavePayload(UUID requestId, ProjectionL
             ServerboundProjectionLayoutSavePayload::layout,
             net.minecraft.network.codec.ByteBufCodecs.BOOL,
             ServerboundProjectionLayoutSavePayload::select,
-            ServerboundProjectionLayoutSavePayload::new
-    );
-
+            ServerboundProjectionLayoutSavePayload::new);
     public ServerboundProjectionLayoutSavePayload(ProjectionLayoutDefinition layout, boolean select) {
         this(UUID.randomUUID(), layout, select);
     }

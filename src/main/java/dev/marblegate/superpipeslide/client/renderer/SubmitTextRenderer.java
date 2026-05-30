@@ -2,6 +2,10 @@ package dev.marblegate.superpipeslide.client.renderer;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -9,14 +13,8 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.LightCoordsUtil;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
 public final class SubmitTextRenderer {
-    private SubmitTextRenderer() {
-    }
+    private SubmitTextRenderer() {}
 
     public static void submitText(SubmitNodeCollector collector, PoseStack poseStack, Font font, float x, float y,
             FormattedCharSequence string, boolean dropShadow, Font.DisplayMode displayMode, int lightCoords,

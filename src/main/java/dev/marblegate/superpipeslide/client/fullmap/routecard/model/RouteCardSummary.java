@@ -7,6 +7,4 @@ public record RouteCardSummary(
         int crossDimensionCount,
         int stationInternalCount,
         boolean bidirectional,
-        boolean loop
-) {
-}
+        boolean loop) {}

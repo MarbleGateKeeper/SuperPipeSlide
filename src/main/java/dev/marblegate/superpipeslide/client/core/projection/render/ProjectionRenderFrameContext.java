@@ -1,12 +1,11 @@
 package dev.marblegate.superpipeslide.client.core.projection.render;
 
-
 import dev.marblegate.superpipeslide.client.core.projection.cache.ProjectionNetworkImageCache;
+
 public final class ProjectionRenderFrameContext {
     private static final ThreadLocal<FrameState> FRAME_STATE = new ThreadLocal<>();
 
-    private ProjectionRenderFrameContext() {
-    }
+    private ProjectionRenderFrameContext() {}
 
     public static void begin(long frameTimeMillis) {
         FRAME_STATE.set(new FrameState(frameTimeMillis));

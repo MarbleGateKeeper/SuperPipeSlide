@@ -91,6 +91,5 @@ public final class Config {
 
     public static final ModConfigSpec SPEC = BUILDER.build();
 
-    private Config() {
-    }
+    private Config() {}
 }

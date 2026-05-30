@@ -6,19 +6,19 @@ import dev.marblegate.superpipeslide.client.fullmap.builder.FullRouteMapBuilder;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapLayoutMode;
 import dev.marblegate.superpipeslide.client.fullmap.model.FullRouteMapSourceSnapshot;
-import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
-import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapDimensionGraph;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapEdge;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapNode;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
+import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
+import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.client.fullmap.physical.PhysicalRouteMapGraph;
 import dev.marblegate.superpipeslide.client.fullmap.physical.PhysicalRouteMapGraphBuilder;
+import dev.marblegate.superpipeslide.client.fullmap.schematic.SchematicInputBuilder;
+import dev.marblegate.superpipeslide.client.fullmap.schematic.SchematicLayoutConfig;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicInputGraph;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicQualityReport;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SemanticEdgeKind;
-import dev.marblegate.superpipeslide.client.fullmap.schematic.SchematicInputBuilder;
-import dev.marblegate.superpipeslide.client.fullmap.schematic.SchematicLayoutConfig;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.solve.HeuristicGlobalSolver;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.solve.SchematicSolverBackend;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.solve.VisualRouteMapGraphSnapshot;
@@ -50,8 +50,7 @@ public final class FullRouteMapCache {
     private static final SchematicSolverBackend SOLVER = new HeuristicGlobalSolver();
     private static FullRouteMapLayoutMode layoutMode = FullRouteMapLayoutMode.PRACTICAL;
 
-    private FullRouteMapCache() {
-    }
+    private FullRouteMapCache() {}
 
     public static void invalidate() {
         cachedRouteRevision = Long.MIN_VALUE;
@@ -112,8 +111,7 @@ public final class FullRouteMapCache {
                 List.copyOf(ClientRouteDataCache.routeSections()),
                 List.copyOf(ClientRouteDataCache.stationTransferLinks()),
                 ClientRouteDataCache.routeSectionPaths(),
-                List.copyOf(ClientPipeNetworkCache.foldAnchors())
-        );
+                List.copyOf(ClientPipeNetworkCache.foldAnchors()));
         Map<ResourceKey<Level>, VisualRouteMapGraph> previousVisualGraphs = cachedVisualGraphs;
         cachedGraphs = new FullRouteMapBuilder(source).build();
         if (layoutMode.physical()) {
@@ -240,7 +238,6 @@ public final class FullRouteMapCache {
                 graph.worldBounds(),
                 graph.routeRevision(),
                 graph.pipeRevision(),
-                FullRouteMapConfig.SCHEMATIC_SOLVER_VERSION
-        );
+                FullRouteMapConfig.SCHEMATIC_SOLVER_VERSION);
     }
 }

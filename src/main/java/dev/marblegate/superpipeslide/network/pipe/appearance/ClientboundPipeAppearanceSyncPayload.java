@@ -3,21 +3,20 @@ package dev.marblegate.superpipeslide.network.pipe.appearance;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.appearance.model.PipeAppearanceAssignment;
 import dev.marblegate.superpipeslide.common.core.appearance.model.PipeAppearanceProfile;
+import java.util.List;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 
-import java.util.List;
-
 public record ClientboundPipeAppearanceSyncPayload(
         long revision,
         List<PipeAppearanceProfile> profiles,
         List<PipeAppearanceAssignment> assignments,
         List<Integer> clearedConnectionKeys,
-        boolean full
-) implements CustomPacketPayload {
+        boolean full) implements CustomPacketPayload {
+
     private static final int MAX_PROFILES = 4096;
     private static final int MAX_ASSIGNMENTS = 16384;
 
@@ -33,9 +32,7 @@ public record ClientboundPipeAppearanceSyncPayload(
             ClientboundPipeAppearanceSyncPayload::clearedConnectionKeys,
             ByteBufCodecs.BOOL,
             ClientboundPipeAppearanceSyncPayload::full,
-            ClientboundPipeAppearanceSyncPayload::new
-    );
-
+            ClientboundPipeAppearanceSyncPayload::new);
     public ClientboundPipeAppearanceSyncPayload {
         profiles = List.copyOf(profiles);
         assignments = List.copyOf(assignments);

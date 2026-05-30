@@ -69,8 +69,7 @@ public final class ClientNavigationController {
     private static UUID suppressedArrivalPlatformStopId;
     private static long suppressGenericArrivalUntilTick = Long.MIN_VALUE;
 
-    private ClientNavigationController() {
-    }
+    private ClientNavigationController() {}
 
     public static void clear() {
         session = null;
@@ -164,8 +163,7 @@ public final class ClientNavigationController {
                     context.kind(),
                     platformStopId,
                     context.stationGroupId(),
-                    context.colors()
-            ));
+                    context.colors()));
         }
         return Optional.empty();
     }
@@ -337,8 +335,7 @@ public final class ClientNavigationController {
         NavigationSegment next = session.currentSegment();
         segment.transferInstruction().ifPresentOrElse(
                 instruction -> sendTransferNotice(instruction, next, false),
-                () -> sendTransferNotice(TransferInstruction.sameStationFallback(segment, next), next, false)
-        );
+                () -> sendTransferNotice(TransferInstruction.sameStationFallback(segment, next), next, false));
     }
 
     public static void onSlideDetached(LocalPlayer player, ClientSlideState state, PipeConnection connection, DetachReason reason) {
@@ -364,8 +361,7 @@ public final class ClientNavigationController {
         NavigationSegment next = session.currentSegment();
         segment.transferInstruction().ifPresentOrElse(
                 instruction -> sendTransferNotice(instruction, next, true),
-                () -> sendTransferNotice(TransferInstruction.sameStationFallback(segment, next), next, true)
-        );
+                () -> sendTransferNotice(TransferInstruction.sameStationFallback(segment, next), next, true));
     }
 
     private static void restartFromCurrentPosition(LocalPlayer player) {
@@ -406,8 +402,7 @@ public final class ClientNavigationController {
                     0.0D,
                     0,
                     List.of(0xFFFF5E4D),
-                    Optional.empty()
-            ));
+                    Optional.empty()));
         }
         if (session.phase == NavigationPhase.ARRIVED) {
             return Optional.of(new NavigationHudSnapshot(
@@ -418,8 +413,7 @@ public final class ClientNavigationController {
                     1.0D,
                     0,
                     session.plan.primaryColors(),
-                    Optional.empty()
-            ));
+                    Optional.empty()));
         }
         NavigationSegment segment = session.currentSegment();
         Optional<TargetInfo> target = currentWorldTarget(player);
@@ -445,8 +439,7 @@ public final class ClientNavigationController {
                 progress,
                 session.segmentIndex + 1,
                 segment.colors(),
-                target
-        ));
+                target));
     }
 
     private static double navigationHudProgress(NavigationSegment segment) {
@@ -511,8 +504,7 @@ public final class ClientNavigationController {
                 target.name(),
                 target.colors().isEmpty() ? 0xFF47A6FF : target.colors().getFirst(),
                 target.distance(),
-                target.kind()
-        ));
+                target.kind()));
     }
 
     private static void rebuildCurrentRoute(LocalPlayer player, boolean userRequested) {
@@ -617,8 +609,7 @@ public final class ClientNavigationController {
                 position,
                 position.distanceTo(player.position()),
                 colors,
-                kind
-        ));
+                kind));
     }
 
     private static boolean nearSegmentAlighting(LocalPlayer player, ClientSlideState state, PipeConnection connection, NavigationSegment segment) {
@@ -693,8 +684,7 @@ public final class ClientNavigationController {
                 finalWalk,
                 crossDimensionFinalWalk,
                 best.walkDistance(),
-                primaryColors
-        ));
+                primaryColors));
     }
 
     @Nullable
@@ -816,15 +806,13 @@ public final class ClientNavigationController {
                     forwardKind,
                     link.id(),
                     firstStation.get(),
-                    secondStation.get()
-            ));
+                    secondStation.get()));
             edges.computeIfAbsent(NodeKey.stationTransfer(secondStation.get().id()), ignored -> new ArrayList<>()).add(GraphEdge.stationTransfer(
                     link.estimatedWalkTicks(),
                     forwardKind,
                     link.id(),
                     secondStation.get(),
-                    firstStation.get()
-            ));
+                    firstStation.get()));
         }
     }
 
@@ -851,8 +839,7 @@ public final class ClientNavigationController {
                                 step.sectionIndex(),
                                 cost,
                                 colors,
-                                lineName
-                        ));
+                                lineName));
                     });
         }
     }
@@ -993,8 +980,7 @@ public final class ClientNavigationController {
                 toStation.get(),
                 next.boardingPlatformStopId,
                 next.lineName,
-                next.colors
-        ));
+                next.colors));
     }
 
     private static Optional<FinalWalkInstruction> finalWalkInstruction(List<GraphEdge> transferEdges) {
@@ -1013,8 +999,7 @@ public final class ClientNavigationController {
                             edge.toStationGroupId(),
                             edge.transferLinkId(),
                             edge.fromLevelKey(),
-                            edge.toLevelKey()
-                    ));
+                            edge.toLevelKey()));
                 });
     }
 
@@ -1239,13 +1224,13 @@ public final class ClientNavigationController {
             lines.add(line(Component.translatable("navigation.superpipeslide.early_transfer.body")));
         }
         lines.add(line(Component.translatable(crossDimension
-                        ? "navigation.superpipeslide.final_cross_dimension_walk.body"
-                        : "navigation.superpipeslide.final_walk.body",
+                ? "navigation.superpipeslide.final_cross_dimension_walk.body"
+                : "navigation.superpipeslide.final_walk.body",
                 stationName(session.plan.destinationStationGroupId()))));
         sendNotice(ClientboundSlideNoticePayload.Kind.ARRIVAL, segment.colors(),
                 Component.translatable(crossDimension
-                                ? "navigation.superpipeslide.final_cross_dimension_walk"
-                                : "navigation.superpipeslide.final_walk",
+                        ? "navigation.superpipeslide.final_cross_dimension_walk"
+                        : "navigation.superpipeslide.final_walk",
                         stationName(session.plan.destinationStationGroupId())),
                 lines);
     }
@@ -1291,8 +1276,8 @@ public final class ClientNavigationController {
         if (segment.finalWalkInstruction().isPresent()) {
             boolean crossDimension = segment.finalWalkInstruction().get().kind() == TransferKind.CROSS_DIMENSION_OUT_OF_STATION;
             return Component.translatable(crossDimension
-                            ? "navigation.superpipeslide.hud.approaching_final_cross_dimension_walk"
-                            : "navigation.superpipeslide.hud.approaching_final_walk",
+                    ? "navigation.superpipeslide.hud.approaching_final_cross_dimension_walk"
+                    : "navigation.superpipeslide.hud.approaching_final_walk",
                     stationName(session.plan.destinationStationGroupId()).getString()).getString();
         }
         Optional<TransferInstruction> transfer = segment.transferInstruction();
@@ -1405,8 +1390,7 @@ public final class ClientNavigationController {
             boolean finalWalk,
             boolean crossDimensionFinalWalk,
             double initialWalkDistance,
-            List<Integer> primaryColors
-    ) {
+            List<Integer> primaryColors) {
         public NavigationPlan {
             segments = List.copyOf(segments);
             primaryColors = List.copyOf(primaryColors);
@@ -1428,8 +1412,7 @@ public final class ClientNavigationController {
             boolean finalSegment,
             int estimatedTicks,
             List<Integer> colors,
-            String lineName
-    ) {
+            String lineName) {
         public NavigationSegment {
             routeDirection = routeDirection < 0 ? -1 : 1;
             stationSequence = List.copyOf(stationSequence);
@@ -1445,8 +1428,7 @@ public final class ClientNavigationController {
         }
     }
 
-    public record NavigationSectionRef(UUID routeSectionId, int layoutIndex) {
-    }
+    public record NavigationSectionRef(UUID routeSectionId, int layoutIndex) {}
 
     public record TransferInstruction(
             TransferKind kind,
@@ -1457,8 +1439,7 @@ public final class ClientNavigationController {
             ResourceKey<Level> toLevelKey,
             UUID nextBoardingPlatformStopId,
             String nextLineName,
-            List<Integer> nextColors
-    ) {
+            List<Integer> nextColors) {
         public TransferInstruction {
             transferLinkId = transferLinkId == null ? Optional.empty() : transferLinkId;
             nextColors = List.copyOf(nextColors);
@@ -1474,8 +1455,7 @@ public final class ClientNavigationController {
                     edge.toLevelKey(),
                     nextBoardingPlatformStopId,
                     nextLineName,
-                    nextColors
-            );
+                    nextColors);
         }
 
         private static TransferInstruction sameStation(StationGroup fromStation, StationGroup toStation, UUID nextBoardingPlatformStopId, String nextLineName, List<Integer> nextColors) {
@@ -1488,8 +1468,7 @@ public final class ClientNavigationController {
                     toStation.levelKey(),
                     nextBoardingPlatformStopId,
                     nextLineName,
-                    nextColors
-            );
+                    nextColors);
         }
 
         public static TransferInstruction sameStationFallback(NavigationSegment current, NavigationSegment next) {
@@ -1511,8 +1490,7 @@ public final class ClientNavigationController {
                     toLevel,
                     next.boardingPlatformStopId(),
                     next.lineName(),
-                    next.colors()
-            );
+                    next.colors());
         }
     }
 
@@ -1522,8 +1500,7 @@ public final class ClientNavigationController {
             UUID destinationStationGroupId,
             Optional<UUID> transferLinkId,
             ResourceKey<Level> fromLevelKey,
-            ResourceKey<Level> destinationLevelKey
-    ) {
+            ResourceKey<Level> destinationLevelKey) {
         public FinalWalkInstruction {
             transferLinkId = transferLinkId == null ? Optional.empty() : transferLinkId;
         }
@@ -1536,8 +1513,7 @@ public final class ClientNavigationController {
             ResourceKey<Level> levelKey,
             double distanceBlocks,
             boolean reachable,
-            int matchScore
-    ) {
+            int matchScore) {
         public DestinationSearchResult {
             translatedNames = List.copyOf(translatedNames);
         }
@@ -1557,8 +1533,7 @@ public final class ClientNavigationController {
             double progress,
             int segmentNumber,
             List<Integer> colors,
-            Optional<TargetInfo> target
-    ) {
+            Optional<TargetInfo> target) {
         public NavigationHudSnapshot {
             colors = List.copyOf(colors);
         }
@@ -1570,8 +1545,7 @@ public final class ClientNavigationController {
         }
     }
 
-    public record WorldTarget(Vec3 position, String name, int color, double distance, TargetKind kind) {
-    }
+    public record WorldTarget(Vec3 position, String name, int color, double distance, TargetKind kind) {}
 
     private static final class NavigationSession {
         private NavigationPlan plan;
@@ -1678,8 +1652,7 @@ public final class ClientNavigationController {
                     station.id(),
                     station.id(),
                     station.levelKey(),
-                    station.levelKey()
-            );
+                    station.levelKey());
         }
 
         static TransferEdge stationTransfer(double cost, TransferKind transferKind, UUID transferLinkId, StationGroup fromStation, StationGroup toStation) {
@@ -1692,8 +1665,7 @@ public final class ClientNavigationController {
                     fromStation.id(),
                     toStation.id(),
                     fromStation.levelKey(),
-                    toStation.levelKey()
-            );
+                    toStation.levelKey());
         }
     }
 
@@ -1707,8 +1679,7 @@ public final class ClientNavigationController {
             int layoutIndex,
             double cost,
             List<Integer> colors,
-            String lineName
-    ) implements GraphEdge {
+            String lineName) implements GraphEdge {
         private RideEdge {
             routeDirection = routeDirection < 0 ? -1 : 1;
             colors = List.copyOf(colors);
@@ -1724,8 +1695,7 @@ public final class ClientNavigationController {
             NodeKey from,
             NodeKey to,
             UUID stationGroupId,
-            ResourceKey<Level> levelKey
-    ) implements GraphEdge {
+            ResourceKey<Level> levelKey) implements GraphEdge {
         @Override
         public EdgeKind kind() {
             return EdgeKind.STATION_ACCESS;
@@ -1746,8 +1716,7 @@ public final class ClientNavigationController {
             UUID fromStationGroupId,
             UUID toStationGroupId,
             ResourceKey<Level> fromLevelKey,
-            ResourceKey<Level> toLevelKey
-    ) implements GraphEdge {
+            ResourceKey<Level> toLevelKey) implements GraphEdge {
         private TransferEdge {
             transferLinkId = transferLinkId == null ? Optional.empty() : transferLinkId;
         }
@@ -1758,14 +1727,11 @@ public final class ClientNavigationController {
         }
     }
 
-    private record SearchState(NodeKey node, boolean hasRide) {
-    }
+    private record SearchState(NodeKey node, boolean hasRide) {}
 
-    private record SearchNode(SearchState state, double cost) {
-    }
+    private record SearchNode(SearchState state, double cost) {}
 
-    private record PathBackref(SearchState previous, GraphEdge edge) {
-    }
+    private record PathBackref(SearchState previous, GraphEdge edge) {}
 
     private record SearchResult(List<GraphEdge> edges, double cost, Optional<PlatformStop> start) {
         private SearchResult {
@@ -1780,8 +1746,7 @@ public final class ClientNavigationController {
         }
     }
 
-    private record CandidatePlan(PlatformStop start, SearchResult search, double cost, double walkDistance) {
-    }
+    private record CandidatePlan(PlatformStop start, SearchResult search, double cost, double walkDistance) {}
 
     private static final class AccessDistances {
         private final Vec3 playerPosition;
@@ -1870,8 +1835,7 @@ public final class ClientNavigationController {
                     finalSegment,
                     (int) Math.round(this.cost),
                     this.colors,
-                    this.lineName
-            );
+                    this.lineName);
         }
     }
 }

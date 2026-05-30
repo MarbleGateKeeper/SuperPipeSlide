@@ -10,9 +10,9 @@ import dev.marblegate.superpipeslide.client.fullmap.cluster.visual.ClusterCardVi
 import dev.marblegate.superpipeslide.client.fullmap.cluster.visual.ClusterCardVisualGraph;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.visual.ClusterCardVisualNode;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
+import dev.marblegate.superpipeslide.client.fullmap.model.MapNode;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
-import dev.marblegate.superpipeslide.client.fullmap.model.MapNode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -176,8 +176,7 @@ public final class ClusterCardLayoutSolver {
                 double pull = node.kind() == ClusterCardNodeKind.MEMBER_FOLD_ANCHOR ? 0.055D : (profile == ClusterCardProfile.DEEP ? 0.045D : 0.035D);
                 Vec2 next = new Vec2(
                         current.x() + push.x() + (anchor.x() - current.x()) * pull,
-                        current.y() + push.y() + (anchor.y() - current.y()) * pull
-                );
+                        current.y() + push.y() + (anchor.y() - current.y()) * pull);
                 positions.put(node.id(), next);
             }
             if (!moved) {
@@ -245,8 +244,7 @@ public final class ClusterCardLayoutSolver {
                 double distance = distanceToBoundsEdge(inside, direction, placementBounds, externalPortBoundsInflate(profile)) + externalPortGap(profile);
                 Vec2 portPosition = new Vec2(
                         inside.x() + direction.x() * distance + normal.x() * (i - center) * externalPortSpacing(profile),
-                        inside.y() + direction.y() * distance + normal.y() * (i - center) * externalPortSpacing(profile)
-                );
+                        inside.y() + direction.y() * distance + normal.y() * (i - center) * externalPortSpacing(profile));
                 positions.put(placement.node().id(), portPosition);
             }
         }
@@ -372,6 +370,5 @@ public final class ClusterCardLayoutSolver {
         return value * value;
     }
 
-    private record PortPlacement(ClusterCardNode node, Vec2 insidePosition, Vec2 direction) {
-    }
+    private record PortPlacement(ClusterCardNode node, Vec2 insidePosition, Vec2 direction) {}
 }

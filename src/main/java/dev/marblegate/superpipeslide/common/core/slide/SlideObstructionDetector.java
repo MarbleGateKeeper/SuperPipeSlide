@@ -9,8 +9,7 @@ import net.minecraft.world.phys.AABB;
 public final class SlideObstructionDetector {
     private static final double EPSILON = 1.0E-5D;
 
-    private SlideObstructionDetector() {
-    }
+    private SlideObstructionDetector() {}
 
     public static boolean isInsideSuffocatingBlock(Level level, AABB box) {
         int minX = Mth.floor(box.minX + EPSILON);

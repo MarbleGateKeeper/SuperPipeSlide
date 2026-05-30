@@ -1,12 +1,11 @@
 package dev.marblegate.superpipeslide.client.fullmap.ui;
 
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public final class FullMapTooltipCard {
     private static final int MIN_WIDTH = 132;
@@ -14,8 +13,7 @@ public final class FullMapTooltipCard {
     private static final int PADDING = 5;
     private static final int GAP = 2;
 
-    private FullMapTooltipCard() {
-    }
+    private FullMapTooltipCard() {}
 
     public static void renderComponent(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect boundary, int anchorX, int anchorY, Component tooltip) {
         renderComponent(graphics, font, boundary, List.of(), anchorX, anchorY, tooltip);
@@ -47,8 +45,7 @@ public final class FullMapTooltipCard {
             String subtitle,
             List<Row> rows,
             List<RouteChip> chips,
-            int accentColor
-    ) {
+            int accentColor) {
         render(graphics, font, boundary, List.of(), anchorX, anchorY, DisplayNameStack.of(title), subtitle, rows, chips, accentColor);
     }
 
@@ -62,8 +59,7 @@ public final class FullMapTooltipCard {
             String subtitle,
             List<Row> rows,
             List<RouteChip> chips,
-            int accentColor
-    ) {
+            int accentColor) {
         render(graphics, font, boundary, List.of(), anchorX, anchorY, title, subtitle, rows, chips, accentColor);
     }
 
@@ -78,8 +74,7 @@ public final class FullMapTooltipCard {
             String subtitle,
             List<Row> rows,
             List<RouteChip> chips,
-            int accentColor
-    ) {
+            int accentColor) {
         render(graphics, font, boundary, avoidRects, anchorX, anchorY, DisplayNameStack.of(title), subtitle, rows, chips, accentColor);
     }
 
@@ -94,8 +89,7 @@ public final class FullMapTooltipCard {
             String subtitle,
             List<Row> rows,
             List<RouteChip> chips,
-            int accentColor
-    ) {
+            int accentColor) {
         DisplayNameStack safeTitle = title == null ? DisplayNameStack.of("?") : title;
         String safeSubtitle = subtitle == null ? "" : subtitle;
         List<Row> safeRows = rows == null ? List.of() : rows;
@@ -178,8 +172,7 @@ public final class FullMapTooltipCard {
                 new SPSGui.Rect(preferred.x(), preferred.y() - preferred.height() - 18, preferred.width(), preferred.height()),
                 new SPSGui.Rect(preferred.x() - preferred.width() - 18, preferred.y() - preferred.height() - 18, preferred.width(), preferred.height()),
                 new SPSGui.Rect(boundary.right() - preferred.width() - padding, preferred.y(), preferred.width(), preferred.height()),
-                new SPSGui.Rect(boundary.x() + padding, preferred.y(), preferred.width(), preferred.height())
-        );
+                new SPSGui.Rect(boundary.x() + padding, preferred.y(), preferred.width(), preferred.height()));
         SPSGui.Rect best = null;
         long bestScore = Long.MAX_VALUE;
         for (SPSGui.Rect candidate : candidates) {
@@ -218,9 +211,7 @@ public final class FullMapTooltipCard {
         return Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
     }
 
-    public record Row(String label, String value, int color) {
-    }
+    public record Row(String label, String value, int color) {}
 
-    public record RouteChip(String label, List<Integer> colors, int seed) {
-    }
+    public record RouteChip(String label, List<Integer> colors, int seed) {}
 }

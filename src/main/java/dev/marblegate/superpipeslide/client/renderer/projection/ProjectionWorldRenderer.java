@@ -12,8 +12,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 
 public final class ProjectionWorldRenderer {
-    private ProjectionWorldRenderer() {
-    }
+    private ProjectionWorldRenderer() {}
 
     public static void renderAfterLevel(RenderLevelStageEvent.AfterLevel event) {
         boolean hasStationProjectors = StationNameProjectorRenderer.hasQueuedProjectors();

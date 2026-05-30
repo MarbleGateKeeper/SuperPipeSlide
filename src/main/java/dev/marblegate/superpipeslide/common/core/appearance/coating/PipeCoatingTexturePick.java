@@ -2,25 +2,23 @@ package dev.marblegate.superpipeslide.common.core.appearance.coating;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import java.util.Optional;
 import net.minecraft.core.Direction;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.Identifier;
 
-import java.util.Optional;
-
 public record PipeCoatingTexturePick(
         PipeTexturePickType type,
         Optional<Direction> face,
-        Optional<Identifier> fallbackSprite
-) {
+        Optional<Identifier> fallbackSprite) {
+
     public static final PipeCoatingTexturePick AUTO = new PipeCoatingTexturePick(PipeTexturePickType.AUTO, Optional.empty(), Optional.empty());
 
     public static final Codec<PipeCoatingTexturePick> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             PipeTexturePickType.CODEC.optionalFieldOf("type", PipeTexturePickType.AUTO).forGetter(PipeCoatingTexturePick::type),
             Direction.CODEC.optionalFieldOf("face").forGetter(PipeCoatingTexturePick::face),
-            Identifier.CODEC.optionalFieldOf("sprite").forGetter(PipeCoatingTexturePick::fallbackSprite)
-    ).apply(instance, PipeCoatingTexturePick::new));
+            Identifier.CODEC.optionalFieldOf("sprite").forGetter(PipeCoatingTexturePick::fallbackSprite)).apply(instance, PipeCoatingTexturePick::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, PipeCoatingTexturePick> STREAM_CODEC = new StreamCodec<>() {
         @Override
@@ -41,7 +39,6 @@ public record PipeCoatingTexturePick(
             normalized.fallbackSprite().ifPresent(sprite -> Identifier.STREAM_CODEC.encode(buffer, sprite));
         }
     };
-
     public PipeCoatingTexturePick {
         type = type == null ? PipeTexturePickType.AUTO : type;
         face = face == null ? Optional.empty() : face;

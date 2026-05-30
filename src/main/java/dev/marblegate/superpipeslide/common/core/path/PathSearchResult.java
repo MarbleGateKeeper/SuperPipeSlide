@@ -1,7 +1,6 @@
 package dev.marblegate.superpipeslide.common.core.path;
 
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;

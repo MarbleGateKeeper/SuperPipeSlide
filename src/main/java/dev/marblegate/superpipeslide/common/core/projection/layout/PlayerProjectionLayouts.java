@@ -1,27 +1,24 @@
 package dev.marblegate.superpipeslide.common.core.projection.layout;
 
-
-import dev.marblegate.superpipeslide.common.core.projection.storage.ProjectionLayoutSavedData;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.core.UUIDUtil;
-
+import dev.marblegate.superpipeslide.common.core.projection.storage.ProjectionLayoutSavedData;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import net.minecraft.core.UUIDUtil;
 
 public record PlayerProjectionLayouts(UUID owner, List<ProjectionLayoutDefinition> layouts, Map<ProjectionLayoutTarget, UUID> selectedLayoutIds) {
+
     public static final int MAX_LAYOUTS_PER_PLAYER = 96;
 
     public static final Codec<PlayerProjectionLayouts> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             UUIDUtil.STRING_CODEC.fieldOf("owner").forGetter(PlayerProjectionLayouts::owner),
             ProjectionLayoutDefinition.CODEC.listOf().optionalFieldOf("layouts", List.of()).forGetter(PlayerProjectionLayouts::layouts),
-            Codec.unboundedMap(ProjectionLayoutTarget.CODEC, UUIDUtil.STRING_CODEC).optionalFieldOf("selected_by_target", Map.of()).forGetter(PlayerProjectionLayouts::selectedLayoutIds)
-    ).apply(instance, PlayerProjectionLayouts::new));
-
+            Codec.unboundedMap(ProjectionLayoutTarget.CODEC, UUIDUtil.STRING_CODEC).optionalFieldOf("selected_by_target", Map.of()).forGetter(PlayerProjectionLayouts::selectedLayoutIds)).apply(instance, PlayerProjectionLayouts::new));
     public PlayerProjectionLayouts {
         layouts = layouts == null ? List.of() : layouts.stream().limit(MAX_LAYOUTS_PER_PLAYER).toList();
         selectedLayoutIds = selectedLayoutIds == null ? Map.of() : Map.copyOf(selectedLayoutIds);

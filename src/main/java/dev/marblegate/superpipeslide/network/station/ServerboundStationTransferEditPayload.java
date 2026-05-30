@@ -1,10 +1,11 @@
 package dev.marblegate.superpipeslide.network.station;
 
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
-import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
+import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.event.ServerEvents;
 import dev.marblegate.superpipeslide.config.Config;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -15,16 +16,14 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-import java.util.UUID;
-
 public record ServerboundStationTransferEditPayload(
         UUID requestId,
         String action,
         long baseRouteRevision,
         UUID stationGroupId,
         UUID otherStationGroupId,
-        boolean confirmedRisk
-) implements CustomPacketPayload {
+        boolean confirmedRisk) implements CustomPacketPayload {
+
     public static final String ADD = "add";
     public static final String REMOVE = "remove";
 
@@ -42,9 +41,7 @@ public record ServerboundStationTransferEditPayload(
             ServerboundStationTransferEditPayload::otherStationGroupId,
             ByteBufCodecs.BOOL,
             ServerboundStationTransferEditPayload::confirmedRisk,
-            ServerboundStationTransferEditPayload::new
-    );
-
+            ServerboundStationTransferEditPayload::new);
     public ServerboundStationTransferEditPayload(String action, long baseRouteRevision, UUID stationGroupId, UUID otherStationGroupId, boolean confirmedRisk) {
         this(UUID.randomUUID(), action, baseRouteRevision, stationGroupId, otherStationGroupId, confirmedRisk);
     }

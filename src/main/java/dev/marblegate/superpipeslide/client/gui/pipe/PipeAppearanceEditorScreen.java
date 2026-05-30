@@ -24,9 +24,9 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.data.AtlasIds;
 import net.minecraft.network.chat.Component;
@@ -348,8 +348,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
                 summaryX,
                 rect.y() + 6,
                 PipeAppearanceTerminalGui.TEXT_MUTED,
-                0.56F
-        );
+                0.56F);
         int gap = 5;
         int tileH = Math.max(24, rect.height() - headerHeight - 9);
         int tileW = clampInt(tileH + 16, 42, 54);
@@ -645,8 +644,8 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
         }
         String pick = normalized.texturePick().type() == PipeTexturePickType.FACE
                 ? normalized.texturePick().face()
-                .map(face -> Component.translatable("screen.superpipeslide.pipe_appearance.texture_pick.face." + face.getSerializedName()).getString())
-                .orElse(Component.translatable("screen.superpipeslide.pipe_appearance.texture_pick.auto").getString())
+                        .map(face -> Component.translatable("screen.superpipeslide.pipe_appearance.texture_pick.face." + face.getSerializedName()).getString())
+                        .orElse(Component.translatable("screen.superpipeslide.pipe_appearance.texture_pick.auto").getString())
                 : Component.translatable("screen.superpipeslide.pipe_appearance.texture_pick.custom").getString();
         return blockName + " / " + pick + " / " + mode;
     }
@@ -658,8 +657,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
                 "screen.superpipeslide.pipe_appearance.material_slot.tooltip",
                 Component.translatable(slot.nameKey()),
                 selectionName(normalized),
-                texture
-        );
+                texture);
     }
 
     private String texturePickName(PipeCoatingSelection selection) {
@@ -707,8 +705,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
         return new PipeAppearanceLayout(railWidth, tuningWidth, materialHeight, actionHeight, headerHeight, gap);
     }
 
-    private record PipeAppearanceLayout(int railWidth, int tuningWidth, int materialHeight, int actionHeight, int headerHeight, int gap) {
-    }
+    private record PipeAppearanceLayout(int railWidth, int tuningWidth, int materialHeight, int actionHeight, int headerHeight, int gap) {}
 
     private static PipeCoatingRenderResolver.ResolvedPipeCoating resolvedForSlot(PipeAppearanceProfile profile, String slotId) {
         return PipeCoatingRenderResolver.resolve(PipeAppearanceDefinitions.selectionFor(profile, slotId));
@@ -750,8 +747,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
                 sprite.getU(0.0015F),
                 sprite.getU(0.9985F),
                 sprite.getV(0.0015F),
-                sprite.getV(0.9985F)
-        );
+                sprite.getV(0.9985F));
         if (framed) {
             graphics.outline(rect.x(), rect.y(), rect.width(), rect.height(), PipeAppearanceTerminalGui.BORDER_MUTED);
         }
@@ -776,8 +772,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
                 resolved.u(0.0015F),
                 resolved.u(0.9985F),
                 resolved.v(0.0015F),
-                resolved.v(0.9985F)
-        );
+                resolved.v(0.9985F));
         if (framed) {
             graphics.outline(rect.x(), rect.y(), rect.width(), rect.height(), PipeAppearanceTerminalGui.BORDER_MUTED);
         }
@@ -879,8 +874,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
                     new LocalPoint(x, surface.by() - slideContactY, surface.bx()),
                     surface.vStart(),
                     surface.vEnd(),
-                    surface.render()
-            ));
+                    surface.render()));
         }
         return new PreviewModelSection(List.copyOf(surfaces), model.perimeter(), distance, new LocalPoint(x, -slideContactY, 0.0D));
     }
@@ -1014,8 +1008,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
                     coating,
                     centerX,
                     centerY,
-                    scale
-            );
+                    scale);
         }
     }
 
@@ -1151,8 +1144,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
                 scale,
                 layer,
                 animationKind,
-                animationPhase
-        );
+                animationPhase);
     }
 
     private void addPreviewMarkerTaperedRange(List<PreviewFace> faces, PreviewModelSection previous, PreviewModelSection current, double uStart, double uEnd, double vStart0, double vEnd0, double vStart1, double vEnd1, int color, TextureAtlasSprite sprite, double centerX, double centerY, double scale, int layer, int animationKind, double animationPhase) {
@@ -1196,8 +1188,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
                     sprite.getV(0.82F),
                     sprite.atlasLocation(),
                     animationKind,
-                    animationPhase
-            ));
+                    animationPhase));
             return;
         }
         addPreviewMarkerBand(faces, previous, current, uStart, uEnd, (minV + maxV) * 0.5D, maxV - minV, color, sprite, centerX, centerY, scale, layer);
@@ -1266,8 +1257,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
                     sprite.getV(0.82F),
                     sprite.atlasLocation(),
                     PREVIEW_ANIMATION_NONE,
-                    0.0D
-            ));
+                    0.0D));
         }
     }
 
@@ -1276,8 +1266,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
         LocalPoint quadCenter = new LocalPoint(
                 (a.x() + b.x() + d.x()) / 3.0D,
                 (a.y() + b.y() + d.y()) / 3.0D,
-                (a.z() + b.z() + d.z()) / 3.0D
-        );
+                (a.z() + b.z() + d.z()) / 3.0D);
         LocalPoint center = previewLerp(center0, center1, 0.5D);
         Vec3Like outward = quadCenter.subtract(center);
         if (outward.lengthSqr() > 1.0E-8D && normal.dot(outward) < 0.0D) {
@@ -1291,8 +1280,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
         return new LocalPoint(
                 point.x() + normal.x() * offset,
                 point.y() + normal.y() * offset,
-                point.z() + normal.z() * offset
-        );
+                point.z() + normal.z() * offset);
     }
 
     private static LocalPoint previewSurfacePoint(LocalPoint a, LocalPoint b, double t) {
@@ -1332,8 +1320,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
                         coating.v(previewTileFraction(nextV, vBase)),
                         coating.textureId(),
                         PREVIEW_ANIMATION_NONE,
-                        0.0D
-                ));
+                        0.0D));
                 cursorV = nextV;
             }
             cursorU = nextU;
@@ -1361,8 +1348,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
         return new LocalPoint(
                 a.x() + (b.x() - a.x()) * t,
                 a.y() + (b.y() - a.y()) * t,
-                a.z() + (b.z() - a.z()) * t
-        );
+                a.z() + (b.z() - a.z()) * t);
     }
 
     private void drawSlidePositionMarker(GuiGraphicsExtractor graphics, double centerX, double centerY, double scale) {
@@ -1420,8 +1406,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
                         previewSectionLocalPoint(section, box.left(), box.bottom()),
                         previewSectionLocalPoint(section, box.left(), box.top()),
                         previewSectionLocalPoint(section, box.right(), box.bottom()),
-                        previewSectionLocalPoint(section, box.right(), box.top())
-                )) {
+                        previewSectionLocalPoint(section, box.right(), box.top()))) {
                     ProjectedPoint projected = project(point, 0.0D, 0.0D, 1.0D);
                     minX = Math.min(minX, projected.xy().x());
                     minY = Math.min(minY, projected.xy().y());
@@ -1434,8 +1419,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
                 new LocalPoint(-0.72D, 0.0D, -0.070D),
                 new LocalPoint(-0.72D, 0.0D, 0.070D),
                 new LocalPoint(0.72D, 0.0D, -0.070D),
-                new LocalPoint(0.72D, 0.0D, 0.070D)
-        )) {
+                new LocalPoint(0.72D, 0.0D, 0.070D))) {
             ProjectedPoint projected = project(point, 0.0D, 0.0D, 1.0D);
             minX = Math.min(minX, projected.xy().x());
             minY = Math.min(minY, projected.xy().y());
@@ -1543,22 +1527,18 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
         }
     }
 
-    private record PreviewModelSection(List<PreviewSurface> surfaces, double perimeter, double distance, LocalPoint center) {
-    }
+    private record PreviewModelSection(List<PreviewSurface> surfaces, double perimeter, double distance, LocalPoint center) {}
 
-    private record PreviewSurface(String slotId, LocalPoint a, LocalPoint b, double vStart, double vEnd, boolean render) {
-    }
+    private record PreviewSurface(String slotId, LocalPoint a, LocalPoint b, double vStart, double vEnd, boolean render) {}
 
-    private record PreviewFit(double centerX, double centerY, double scale) {
-    }
+    private record PreviewFit(double centerX, double centerY, double scale) {}
 
     private record Vec3Like(double x, double y, double z) {
         Vec3Like cross(Vec3Like other) {
             return new Vec3Like(
                     this.y * other.z - this.z * other.y,
                     this.z * other.x - this.x * other.z,
-                    this.x * other.y - this.y * other.x
-            );
+                    this.x * other.y - this.y * other.x);
         }
 
         double dot(Vec3Like other) {
@@ -1582,8 +1562,7 @@ public class PipeAppearanceEditorScreen extends SPSScreen {
         }
     }
 
-    private record ProjectedPoint(Vec2 xy, double depth) {
-    }
+    private record ProjectedPoint(Vec2 xy, double depth) {}
 
     private record PreviewFace(ProjectedPoint a, ProjectedPoint b, ProjectedPoint c, ProjectedPoint d, int color, float u0, float u1, float v0, float v1, Identifier textureId, int animationKind, double animationPhase) {
         double depth() {

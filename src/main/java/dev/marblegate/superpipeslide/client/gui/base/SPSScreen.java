@@ -1,13 +1,12 @@
 package dev.marblegate.superpipeslide.client.gui.base;
 
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public abstract class SPSScreen extends Screen {
     protected final List<ClickAction> clickActions = new ArrayList<>();
@@ -23,8 +22,7 @@ public abstract class SPSScreen extends Screen {
         this.rebuildWidgets();
     }
 
-    protected void rebuildWidgets() {
-    }
+    protected void rebuildWidgets() {}
 
     protected void beginFrame() {
         this.clickActions.clear();
@@ -142,6 +140,5 @@ public abstract class SPSScreen extends Screen {
         return new ClickAction(bounds, action, tooltip);
     }
 
-    protected record ClickAction(SPSGui.Rect bounds, Runnable action, Component tooltip) {
-    }
+    protected record ClickAction(SPSGui.Rect bounds, Runnable action, Component tooltip) {}
 }

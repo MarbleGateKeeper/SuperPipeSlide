@@ -9,14 +9,12 @@ import net.minecraft.network.codec.StreamCodec;
 public record PipeAppearanceAssignment(int connectionKey, int profileId) {
     public static final Codec<PipeAppearanceAssignment> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.INT.fieldOf("connection_key").forGetter(PipeAppearanceAssignment::connectionKey),
-            Codec.INT.fieldOf("profile_id").forGetter(PipeAppearanceAssignment::profileId)
-    ).apply(instance, PipeAppearanceAssignment::new));
+            Codec.INT.fieldOf("profile_id").forGetter(PipeAppearanceAssignment::profileId)).apply(instance, PipeAppearanceAssignment::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, PipeAppearanceAssignment> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_INT.cast(),
             PipeAppearanceAssignment::connectionKey,
             ByteBufCodecs.VAR_INT.cast(),
             PipeAppearanceAssignment::profileId,
-            PipeAppearanceAssignment::new
-    );
+            PipeAppearanceAssignment::new);
 }

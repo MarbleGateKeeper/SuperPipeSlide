@@ -14,8 +14,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
@@ -77,8 +77,7 @@ public class StationTransferEditorScreen extends RouteEditorScreenBase implement
                 List.of(Component.translatable("screen.superpipeslide.station_editor"), Component.literal(station.get().primaryName()), Component.translatable("screen.superpipeslide.station_transfer.short")),
                 Component.translatable("screen.superpipeslide.station_transfer.count", transferLinks.size()),
                 transferLinks.isEmpty() ? RouteEditorGui.INK_MUTED : RouteEditorGui.BLUE,
-                station.get().id().hashCode()
-        );
+                station.get().id().hashCode());
 
         SPSGui.Rect content = this.editorContent();
         int top = this.documentBodyY();
@@ -209,9 +208,9 @@ public class StationTransferEditorScreen extends RouteEditorScreenBase implement
                                 .map(other -> distanceSortKey(station, other))
                                 .orElse(Double.POSITIVE_INFINITY))
                         .thenComparing(link -> link.other(station.id())
-                        .flatMap(ClientRouteDataCache::stationGroup)
-                        .map(FullStationName::display)
-                        .orElse("")))
+                                .flatMap(ClientRouteDataCache::stationGroup)
+                                .map(FullStationName::display)
+                                .orElse("")))
                 .toList();
     }
 
@@ -238,8 +237,7 @@ public class StationTransferEditorScreen extends RouteEditorScreenBase implement
                     Component.translatable("screen.superpipeslide.station_transfer.confirm.title"),
                     Component.translatable("screen.superpipeslide.station_transfer.confirm.body", FullStationName.display(other)),
                     Component.translatable("screen.superpipeslide.station_transfer.confirm.accept"),
-                    () -> addTransfer(station, other, true)
-            );
+                    () -> addTransfer(station, other, true));
             return;
         }
         ClientPacketDistributor.sendToServer(new ServerboundStationTransferEditPayload(ServerboundStationTransferEditPayload.ADD, ClientRouteDataCache.revision(), station.id(), other.id(), confirmedRisk));
@@ -336,8 +334,7 @@ public class StationTransferEditorScreen extends RouteEditorScreenBase implement
     }
 
     private static final class FullStationName {
-        private FullStationName() {
-        }
+        private FullStationName() {}
 
         static String display(StationGroup station) {
             String translated = SPSGui.translatedNamesLine(station.translatedNames());

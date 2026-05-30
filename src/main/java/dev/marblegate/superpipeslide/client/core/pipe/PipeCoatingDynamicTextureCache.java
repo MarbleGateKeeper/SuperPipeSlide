@@ -1,11 +1,11 @@
 package dev.marblegate.superpipeslide.client.core.pipe;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.appearance.coating.PipeCoatingDyeMode;
 import dev.marblegate.superpipeslide.common.core.appearance.coating.PipeCoatingSelection;
-import dev.marblegate.superpipeslide.common.SuperPipeSlide;
-import java.io.InputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -28,8 +28,7 @@ final class PipeCoatingDynamicTextureCache {
     private static final Map<String, TextureEntry> CACHE = new LinkedHashMap<>(32, 0.75F, true);
     private static final Map<Identifier, SourcePixels> SOURCE_CACHE = new LinkedHashMap<>(32, 0.75F, true);
 
-    private PipeCoatingDynamicTextureCache() {
-    }
+    private PipeCoatingDynamicTextureCache() {}
 
     static Identifier textureFor(TextureAtlasSprite sourceSprite, PipeCoatingSelection selection) {
         String key = sourceSprite.contents().name() + "|" + selection.contentKey();
@@ -241,8 +240,7 @@ final class PipeCoatingDynamicTextureCache {
                 (int) Math.round(mix((a >>> 24) & 0xFF, (b >>> 24) & 0xFF, t)),
                 mix(channel(a, 16), channel(b, 16), t),
                 mix(channel(a, 8), channel(b, 8), t),
-                mix(channel(a, 0), channel(b, 0), t)
-        );
+                mix(channel(a, 0), channel(b, 0), t));
     }
 
     private static double[] mixColor(int a, int b, double t) {
@@ -340,8 +338,7 @@ final class PipeCoatingDynamicTextureCache {
         return new Oklab(
                 0.2104542553D * l + 0.7936177850D * m - 0.0040720468D * s,
                 1.9779984951D * l - 2.4285922050D * m + 0.4505937099D * s,
-                0.0259040371D * l + 0.7827717662D * m - 0.8086757660D * s
-        );
+                0.0259040371D * l + 0.7827717662D * m - 0.8086757660D * s);
     }
 
     private static double srgbToLinear(double channel) {
@@ -361,20 +358,15 @@ final class PipeCoatingDynamicTextureCache {
         }
     }
 
-    private record TextureEntry(Identifier textureId, DynamicTexture texture) {
-    }
+    private record TextureEntry(Identifier textureId, DynamicTexture texture) {}
 
-    private record Hsv(double h, double s, double v) {
-    }
+    private record Hsv(double h, double s, double v) {}
 
-    private record Oklab(double l, double a, double b) {
-    }
+    private record Oklab(double l, double a, double b) {}
 
-    private record ThemeSample(int color, Oklab lab, double luma, double chroma, double weight) {
-    }
+    private record ThemeSample(int color, Oklab lab, double luma, double chroma, double weight) {}
 
-    private record ThemeCluster(Oklab lab, double luma, double lumaSpread, double chroma, double coverage, double accentScore, int averageColor) {
-    }
+    private record ThemeCluster(Oklab lab, double luma, double lumaSpread, double chroma, double coverage, double accentScore, int averageColor) {}
 
     private record ThemePaletteStats(List<ThemeCluster> clusters, double averageLuma, double totalWeight) {
         static ThemePaletteStats from(SourcePixels image) {
@@ -628,8 +620,7 @@ final class PipeCoatingDynamicTextureCache {
             Oklab lab = new Oklab(
                     first.lab().l() * firstWeight + second.lab().l() * secondWeight,
                     first.lab().a() * firstWeight + second.lab().a() * secondWeight,
-                    first.lab().b() * firstWeight + second.lab().b() * secondWeight
-            );
+                    first.lab().b() * firstWeight + second.lab().b() * secondWeight);
             return new ThemeCluster(
                     lab,
                     first.luma() * firstWeight + second.luma() * secondWeight,
@@ -637,8 +628,7 @@ final class PipeCoatingDynamicTextureCache {
                     first.chroma() * firstWeight + second.chroma() * secondWeight,
                     weight,
                     Math.max(first.accentScore(), second.accentScore()),
-                    mixArgb(first.averageColor(), second.averageColor(), secondWeight)
-            );
+                    mixArgb(first.averageColor(), second.averageColor(), secondWeight));
         }
 
         private static double colorDistance(int first, int second) {
@@ -717,8 +707,7 @@ final class PipeCoatingDynamicTextureCache {
                     avg,
                     hueFromVector(lowSin, lowCos, lowWeight, avg),
                     hueFromVector(midSin, midCos, midWeight, avg),
-                    hueFromVector(highSin, highCos, highWeight, avg)
-            );
+                    hueFromVector(highSin, highCos, highWeight, avg));
         }
 
         double normalizedLuma(double luma) {

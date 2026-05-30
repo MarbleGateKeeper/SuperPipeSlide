@@ -4,7 +4,6 @@ import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SemanticEdge
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
-
 import java.util.List;
 import java.util.UUID;
 
@@ -20,8 +19,7 @@ public record RouteCardEdge(
         boolean loopBack,
         RouteSectionStatus status,
         List<PipeConnectionRef> backingPathSlice,
-        List<Integer> themeColors
-) {
+        List<Integer> themeColors) {
     public RouteCardEdge {
         backingPathSlice = List.copyOf(backingPathSlice);
         themeColors = themeColors.stream().map(SPSGui::opaque).limit(3).toList();

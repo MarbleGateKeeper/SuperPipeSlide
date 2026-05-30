@@ -1,14 +1,12 @@
 package dev.marblegate.superpipeslide.common.core.geometry;
 
-import net.minecraft.world.phys.Vec3;
-
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import net.minecraft.world.phys.Vec3;
 
 public final class PipeConnectionUtils {
-    private PipeConnectionUtils() {
-    }
+    private PipeConnectionUtils() {}
 
     public static Optional<PipeAnchorId> targetFor(PipeConnection connection, PipeAnchorId anchorId) {
         if (connection.fromAnchor().equals(anchorId)) {

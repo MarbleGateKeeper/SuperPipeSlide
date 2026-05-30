@@ -9,11 +9,10 @@ import dev.marblegate.superpipeslide.network.route.ServerboundRouteEditPayload;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
@@ -100,8 +99,7 @@ public class RouteLineScreen extends RouteEditorScreenBase implements RouteDataA
                 Component.translatable("screen.superpipeslide.confirm.delete_route.title"),
                 Component.translatable("screen.superpipeslide.confirm.delete_route.body"),
                 Component.translatable("screen.superpipeslide.action.delete_route"),
-                this::deleteRoute
-        ), Component.translatable("screen.superpipeslide.action.delete_route"));
+                this::deleteRoute), Component.translatable("screen.superpipeslide.action.delete_route"));
 
         this.scroll = Math.max(0.0D, Math.min(maxScroll(), this.scroll));
         SPSGui.Rect content = this.editorContent();

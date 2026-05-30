@@ -10,8 +10,7 @@ public final class ClientDataResyncRequests {
     private static long lastPipeRequestMillis;
     private static long lastRouteRequestMillis;
 
-    private ClientDataResyncRequests() {
-    }
+    private ClientDataResyncRequests() {}
 
     public static boolean shouldRequestPipeNetwork() {
         long now = System.currentTimeMillis();

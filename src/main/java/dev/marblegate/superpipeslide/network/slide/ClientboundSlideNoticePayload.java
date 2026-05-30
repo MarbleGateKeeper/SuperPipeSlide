@@ -1,6 +1,8 @@
 package dev.marblegate.superpipeslide.network.slide;
 
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
+import java.util.Arrays;
+import java.util.List;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
@@ -9,15 +11,12 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 
-import java.util.Arrays;
-import java.util.List;
-
 public record ClientboundSlideNoticePayload(
         Kind kind,
         List<Integer> accentColors,
         Component title,
-        List<NoticeLine> lines
-) implements CustomPacketPayload {
+        List<NoticeLine> lines) implements CustomPacketPayload {
+
     private static final int MAX_COLORS = 3;
     private static final int MAX_LINES = 32;
 
@@ -34,9 +33,7 @@ public record ClientboundSlideNoticePayload(
             ClientboundSlideNoticePayload::title,
             NoticeLine.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_LINES)),
             ClientboundSlideNoticePayload::lines,
-            ClientboundSlideNoticePayload::new
-    );
-
+            ClientboundSlideNoticePayload::new);
     public ClientboundSlideNoticePayload {
         kind = kind == null ? Kind.STANDARD : kind;
         accentColors = List.copyOf((accentColors == null ? List.<Integer>of() : accentColors).stream().limit(MAX_COLORS).toList());
@@ -77,6 +74,7 @@ public record ClientboundSlideNoticePayload(
     }
 
     public record NoticeLine(Component text, List<Integer> colors, boolean chip) {
+
         public static final StreamCodec<RegistryFriendlyByteBuf, NoticeLine> STREAM_CODEC = StreamCodec.composite(
                 ComponentSerialization.STREAM_CODEC,
                 NoticeLine::text,
@@ -84,9 +82,7 @@ public record ClientboundSlideNoticePayload(
                 NoticeLine::colors,
                 ByteBufCodecs.BOOL,
                 NoticeLine::chip,
-                NoticeLine::new
-        );
-
+                NoticeLine::new);
         public NoticeLine {
             colors = List.copyOf((colors == null ? List.<Integer>of() : colors).stream().limit(MAX_COLORS).toList());
         }

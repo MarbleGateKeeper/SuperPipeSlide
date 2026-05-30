@@ -1,26 +1,24 @@
 package dev.marblegate.superpipeslide.client.gui.station;
 
-
+import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.gui.base.RouteDataAwareScreen;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
 import dev.marblegate.superpipeslide.client.gui.platform.PlatformStopEditorScreen;
 import dev.marblegate.superpipeslide.client.gui.route.RouteEditorGui;
 import dev.marblegate.superpipeslide.client.gui.route.RouteEditorScreenBase;
 import dev.marblegate.superpipeslide.client.gui.route.RouteLineCreateScreen;
-import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
-import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
+import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
 import dev.marblegate.superpipeslide.network.station.ServerboundStationEditPayload;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
-
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 public class StationEditorScreen extends RouteEditorScreenBase implements RouteDataAwareScreen {
     private final UUID stationGroupId;
@@ -122,23 +120,23 @@ public class StationEditorScreen extends RouteEditorScreenBase implements RouteD
         int y = top - (int) this.platformScroll;
         graphics.enableScissor(area.x() + 1, top, area.right() - 1, bottom);
         for (PlatformStop stop : stops) {
-                SPSGui.Rect card = new SPSGui.Rect(area.x() + 6, y, area.width() - 12, 28);
-                if (card.bottom() >= top && card.y() <= bottom) {
-                    RouteEditorGui.paperSection(graphics, card, card.contains(mouseX, mouseY), false);
-                    List<RouteLine> serviceLines = serviceLines(stop);
-                    if (!serviceLines.isEmpty()) {
-                        RouteEditorGui.routeStripe(graphics, card.x(), card.y(), card.height(), serviceLines.getFirst().themeColors());
-                    }
-                    SPSGui.text(graphics, this.font, SPSGui.scrollingText(this.font, stop.platformNumber() + " / " + stop.displayName().orElse(Component.translatable("screen.superpipeslide.platform").getString()), card.width() - 62, stop.id().hashCode()), card.x() + 7, card.y() + 5, RouteEditorGui.INK_PRIMARY);
-                    int layoutCount = ClientRouteDataCache.routeLayoutIdsForPlatformStop(stop.id()).size();
-                    String summary = Component.translatable("screen.superpipeslide.platform.summary", String.format("%.1f", stop.length()), layoutCount).getString();
-                    SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, summary, Math.round((card.width() - 62) / 0.72F)), card.x() + 7, card.y() + 18, RouteEditorGui.INK_SECONDARY, 0.72F);
-                    if (serviceLines.isEmpty()) {
-                        String draft = Component.translatable("screen.superpipeslide.status.draft").getString();
-                        RouteEditorGui.stamp(graphics, this.font, draft, card.right() - this.font.width(draft) - 12, card.y() + 4, RouteEditorGui.INK_MUTED);
-                    }
-                    this.addClick(card, () -> this.minecraft.setScreen(new PlatformStopEditorScreen(stop.id())), Component.translatable("screen.superpipeslide.action.open_platform"));
+            SPSGui.Rect card = new SPSGui.Rect(area.x() + 6, y, area.width() - 12, 28);
+            if (card.bottom() >= top && card.y() <= bottom) {
+                RouteEditorGui.paperSection(graphics, card, card.contains(mouseX, mouseY), false);
+                List<RouteLine> serviceLines = serviceLines(stop);
+                if (!serviceLines.isEmpty()) {
+                    RouteEditorGui.routeStripe(graphics, card.x(), card.y(), card.height(), serviceLines.getFirst().themeColors());
                 }
+                SPSGui.text(graphics, this.font, SPSGui.scrollingText(this.font, stop.platformNumber() + " / " + stop.displayName().orElse(Component.translatable("screen.superpipeslide.platform").getString()), card.width() - 62, stop.id().hashCode()), card.x() + 7, card.y() + 5, RouteEditorGui.INK_PRIMARY);
+                int layoutCount = ClientRouteDataCache.routeLayoutIdsForPlatformStop(stop.id()).size();
+                String summary = Component.translatable("screen.superpipeslide.platform.summary", String.format("%.1f", stop.length()), layoutCount).getString();
+                SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, summary, Math.round((card.width() - 62) / 0.72F)), card.x() + 7, card.y() + 18, RouteEditorGui.INK_SECONDARY, 0.72F);
+                if (serviceLines.isEmpty()) {
+                    String draft = Component.translatable("screen.superpipeslide.status.draft").getString();
+                    RouteEditorGui.stamp(graphics, this.font, draft, card.right() - this.font.width(draft) - 12, card.y() + 4, RouteEditorGui.INK_MUTED);
+                }
+                this.addClick(card, () -> this.minecraft.setScreen(new PlatformStopEditorScreen(stop.id())), Component.translatable("screen.superpipeslide.action.open_platform"));
+            }
             y += 32;
         }
         graphics.disableScissor();
@@ -162,7 +160,7 @@ public class StationEditorScreen extends RouteEditorScreenBase implements RouteD
     private boolean isDirty(StationGroup station) {
         return this.primaryName != null
                 && (!station.primaryName().equals(this.primaryName.getValue())
-                || !station.translatedNames().equals(RouteLineCreateScreen.splitCsv(this.translatedNames.getValue())));
+                        || !station.translatedNames().equals(RouteLineCreateScreen.splitCsv(this.translatedNames.getValue())));
     }
 
     @Override

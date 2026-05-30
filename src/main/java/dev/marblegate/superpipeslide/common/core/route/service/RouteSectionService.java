@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.common.core.route.service;
 
-import dev.marblegate.superpipeslide.client.fullmap.model.search.SearchResult;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionUtils;
@@ -15,16 +14,15 @@ import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectio
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionPath;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
 import java.util.ArrayList;
-import java.util.function.Function;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 public final class RouteSectionService {
-    private RouteSectionService() {
-    }
+    private RouteSectionService() {}
 
     public static ComputedSection computeSection(
             UUID sectionId,
@@ -33,8 +31,7 @@ public final class RouteSectionService {
             UUID toPlatformStopId,
             PipeNetworkView pipeNetwork,
             PipeGraphSnapshot graph,
-            Function<UUID, Optional<PlatformStop>> platformStopLookup
-    ) {
+            Function<UUID, Optional<PlatformStop>> platformStopLookup) {
         Optional<PlatformStop> from = platformStopLookup.apply(fromPlatformStopId);
         Optional<PlatformStop> to = platformStopLookup.apply(toPlatformStopId);
         if (from.isEmpty() || to.isEmpty()) {
@@ -66,8 +63,7 @@ public final class RouteSectionService {
                 branchDecisionsForConnections(forwardConnections, pipeNetwork, 1),
                 branchDecisionsForConnections(reverseConnections, pipeNetwork, -1),
                 stepDecisionsForConnections(forwardConnections, pipeNetwork, 1),
-                stepDecisionsForConnections(reverseConnections, pipeNetwork, -1)
-        );
+                stepDecisionsForConnections(reverseConnections, pipeNetwork, -1));
         return new ComputedSection(section, new RouteSectionPath(forwardConnections, reverseConnections));
     }
 
@@ -140,10 +136,7 @@ public final class RouteSectionService {
         }
     }
 
-    public record ComputedSection(RouteSection section, RouteSectionPath path) {
-    }
+    public record ComputedSection(RouteSection section, RouteSectionPath path) {}
 
-    private record DecisionKey(UUID branchNodeId, UUID incomingConnectionId, UUID selectedConnectionId, int routeDirection) {
-    }
+    private record DecisionKey(UUID branchNodeId, UUID incomingConnectionId, UUID selectedConnectionId, int routeDirection) {}
 }
-

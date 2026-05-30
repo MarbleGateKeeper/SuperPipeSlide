@@ -1,10 +1,12 @@
 package dev.marblegate.superpipeslide.client.core.navigation;
 
-
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteHudController;
-import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
+import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
+import java.util.List;
+import java.util.Optional;
+import javax.annotation.Nullable;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
@@ -12,10 +14,6 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3fc;
-
-import javax.annotation.Nullable;
-import java.util.List;
-import java.util.Optional;
 
 public final class ClientNavigationHudController {
     private static final int TEXT = 0xFFEAF1F6;
@@ -36,8 +34,7 @@ public final class ClientNavigationHudController {
     private static ClientNavigationController.NavigationHudSnapshot snapshot;
     private static double visibleAlpha;
 
-    private ClientNavigationHudController() {
-    }
+    private ClientNavigationHudController() {}
 
     public static void clear() {
         snapshot = null;
@@ -179,8 +176,7 @@ public final class ClientNavigationHudController {
         } else {
             point = new Vec2(
                     Math.max(PROJECTED_MARKER_PADDING, Math.min(graphics.guiWidth() - PROJECTED_MARKER_PADDING, projection.screenX())),
-                    Math.max(PROJECTED_MARKER_PADDING, Math.min(graphics.guiHeight() - PROJECTED_MARKER_PADDING, projection.screenY()))
-            );
+                    Math.max(PROJECTED_MARKER_PADDING, Math.min(graphics.guiHeight() - PROJECTED_MARKER_PADDING, projection.screenY())));
         }
         drawTargetIndicator(graphics, font, target.get(), point, edge, alpha);
     }
@@ -246,8 +242,7 @@ public final class ClientNavigationHudController {
         }
         return new Vec2(
                 Math.max(left, Math.min(right, centerX + directionX * t)),
-                Math.max(top, Math.min(bottom, centerY + directionY * t))
-        );
+                Math.max(top, Math.min(bottom, centerY + directionY * t)));
     }
 
     private static void drawTargetIndicator(GuiGraphicsExtractor graphics, Font font, ClientNavigationController.WorldTarget target, Vec2 point, boolean edge, double alpha) {
@@ -322,6 +317,5 @@ public final class ClientNavigationHudController {
         return Math.max(0.0D, Math.min(1.0D, value));
     }
 
-    private record TargetProjection(double screenX, double screenY, double directionX, double directionY, boolean insideSafeArea, boolean behind) {
-    }
+    private record TargetProjection(double screenX, double screenY, double directionX, double directionY, boolean insideSafeArea, boolean behind) {}
 }

@@ -45,9 +45,9 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.ModContainer;
 import net.neoforged.neoforge.client.event.AddClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent;
@@ -73,8 +73,7 @@ public class SuperPipeSlideClient {
             KeyConflictContext.IN_GAME,
             InputConstants.Type.KEYSYM,
             InputConstants.KEY_M,
-            KEY_CATEGORY
-    );
+            KEY_CATEGORY);
 
     public SuperPipeSlideClient(IEventBus modEventBus, ModContainer container) {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
@@ -106,8 +105,7 @@ public class SuperPipeSlideClient {
 
     @EventBusSubscriber(modid = SuperPipeSlide.MODID, value = Dist.CLIENT)
     private static final class ClientEvents {
-        private ClientEvents() {
-        }
+        private ClientEvents() {}
 
         @SubscribeEvent
         public static void onClientTick(ClientTickEvent.Post event) {
@@ -259,5 +257,4 @@ public class SuperPipeSlideClient {
             });
         }
     }
-
 }

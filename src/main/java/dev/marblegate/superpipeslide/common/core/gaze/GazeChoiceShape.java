@@ -2,7 +2,6 @@ package dev.marblegate.superpipeslide.common.core.gaze;
 
 import net.minecraft.world.phys.Vec3;
 
-
 public record GazeChoiceShape(GazeChoiceShapeType type, Vec3 arrowDirectionLocal) {
     public GazeChoiceShape {
         if (type == GazeChoiceShapeType.ARROW && arrowDirectionLocal.lengthSqr() < 1.0E-6D) {

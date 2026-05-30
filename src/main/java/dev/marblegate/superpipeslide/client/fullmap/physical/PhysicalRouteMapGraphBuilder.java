@@ -20,7 +20,6 @@ import dev.marblegate.superpipeslide.common.core.route.model.station.StationGrou
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -28,8 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -118,8 +117,7 @@ public final class PhysicalRouteMapGraphBuilder {
                     Optional.of(platform.id()),
                     Optional.of(platform.stationGroupId()),
                     Optional.empty(),
-                    routeLineIds
-            );
+                    routeLineIds);
             this.addNode(node);
         }
     }
@@ -211,8 +209,7 @@ public final class PhysicalRouteMapGraphBuilder {
                 Optional.of(platformNodeId(toStopId)),
                 points,
                 new PhysicalEdgeMetadata(line.id(), layout.id(), sectionId, layoutIndex, 1, layout.bidirectional(), fromStopId, toStopId, List.of(), true, fromCenter.distanceTo(toCenter)),
-                boundsFor(points).inflate(8.0D)
-        ));
+                boundsFor(points).inflate(8.0D)));
     }
 
     private void buildPhysicalPathEdges(RouteLine line, RouteLayout layout, RouteSection section, int layoutIndex, UUID fromStopId, UUID toStopId, List<PipeConnectionRef> pathRefs) {
@@ -261,8 +258,7 @@ public final class PhysicalRouteMapGraphBuilder {
                         pathIndex == end ? toNode : Optional.empty(),
                         points,
                         new PhysicalEdgeMetadata(line.id(), layout.id(), section.id(), layoutIndex, 1, layout.bidirectional(), fromStopId, toStopId, List.of(connection.ref()), false, lengthOf(List.of(connection))),
-                        boundsFor(points).inflate(8.0D)
-                ));
+                        boundsFor(points).inflate(8.0D)));
                 edgeIndex++;
             }
             start = end + 1;
@@ -332,8 +328,7 @@ public final class PhysicalRouteMapGraphBuilder {
                 Optional.empty(),
                 Optional.empty(),
                 Optional.of(anchorId),
-                List.of()
-        );
+                List.of());
         this.addNode(node);
         return node;
     }
@@ -413,8 +408,7 @@ public final class PhysicalRouteMapGraphBuilder {
                     List.copyOf(this.diagnosticsByLevel.getOrDefault(levelKey, List.of())),
                     bounds,
                     this.source.routeRevision(),
-                    this.source.pipeRevision()
-            ));
+                    this.source.pipeRevision()));
         }
         return result;
     }
@@ -449,8 +443,7 @@ public final class PhysicalRouteMapGraphBuilder {
                     bounds.centerX(),
                     bounds.centerY(),
                     entry.getValue().isEmpty() ? station.stationBlockPos().getY() : y / entry.getValue().size(),
-                    bounds
-            ));
+                    bounds));
         }
         return frames;
     }
@@ -473,8 +466,7 @@ public final class PhysicalRouteMapGraphBuilder {
             ResourceKey<Level> levelKey,
             ResourceKey<Level> targetLevelKey,
             Vec3 fromCenter,
-            Vec3 toCenter
-    ) {
+            Vec3 toCenter) {
         Vec2 direction = missingCrossDimensionDirection(fromCenter, toCenter, sectionId, fromStopId);
         PhysicalMissingCrossDimensionPathHint hint = new PhysicalMissingCrossDimensionPathHint(
                 "physical-missing-cross:" + sectionId + ":" + levelKey.identifier() + ":" + fromStopId,
@@ -488,8 +480,7 @@ public final class PhysicalRouteMapGraphBuilder {
                 toStopId,
                 targetLevelKey,
                 direction.x(),
-                direction.y()
-        );
+                direction.y());
         this.missingCrossDimensionHintsByLevel.computeIfAbsent(levelKey, ignored -> new ArrayList<>()).add(hint);
     }
 
@@ -619,9 +610,7 @@ public final class PhysicalRouteMapGraphBuilder {
         return UUID.nameUUIDFromBytes(value.getBytes(StandardCharsets.UTF_8));
     }
 
-    private record PathConnection(PipeConnectionRef ref, PipeConnection connection) {
-    }
+    private record PathConnection(PipeConnectionRef ref, PipeConnection connection) {}
 
-    private record FoldTransition(PipeAnchorId localAnchor, PipeAnchorId peerAnchor) {
-    }
+    private record FoldTransition(PipeAnchorId localAnchor, PipeAnchorId peerAnchor) {}
 }

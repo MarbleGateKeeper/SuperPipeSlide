@@ -8,22 +8,20 @@ import dev.marblegate.superpipeslide.client.core.gaze.ClientGazeChoiceController
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.gaze.GazeChoiceShapeType;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.context.ContextKey;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent;
 import net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public final class ClientGazeChoiceGeometryRenderer {
     private static final ContextKey<RenderData> RENDER_DATA = new ContextKey<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "gaze_choice_geometry"));
     private static final int GRID_SIZE = 16;
     private static final double BASE_THICKNESS = 0.105D;
 
-    private ClientGazeChoiceGeometryRenderer() {
-    }
+    private ClientGazeChoiceGeometryRenderer() {}
 
     public static void extract(ExtractLevelRenderStateEvent event) {
         Vec3 camera = event.getCamera().position();
@@ -45,8 +43,7 @@ public final class ClientGazeChoiceGeometryRenderer {
                     colorWithState(choice.primaryColor(), choice.visualState(), choice.focusProgress()),
                     choice.focusProgress(),
                     choice.resultProgress(),
-                    choice.visualState()
-            ));
+                    choice.visualState()));
         }
         event.getRenderState().setRenderData(RENDER_DATA, new RenderData(List.copyOf(choices)));
     }
@@ -110,7 +107,7 @@ public final class ClientGazeChoiceGeometryRenderer {
         double wide = 1.16D * scale;
         double high = 0.86D * scale;
         double cut = 0.22D * scale;
-        return new Vec3[]{
+        return new Vec3[] {
                 new Vec3(-wide + cut, -high, 0.0D),
                 new Vec3(wide - cut, -high, 0.0D),
                 new Vec3(wide, -high + cut, 0.0D),
@@ -231,7 +228,7 @@ public final class ClientGazeChoiceGeometryRenderer {
     private static Vec3[] arrowPolygon(Vec3 arrowDirection, double scale) {
         Vec3 direction = safeNormalize(arrowDirection, new Vec3(1.0D, 0.0D, 0.0D));
         Vec3 side = new Vec3(-direction.y, direction.x, 0.0D);
-        return new Vec3[]{
+        return new Vec3[] {
                 arrowPoint(direction, side, -0.86D, -0.22D, scale),
                 arrowPoint(direction, side, 0.14D, -0.22D, scale),
                 arrowPoint(direction, side, 0.14D, -0.54D, scale),
@@ -300,11 +297,11 @@ public final class ClientGazeChoiceGeometryRenderer {
     }
 
     private static void addFace(PoseStack.Pose pose, VertexConsumer buffer, ChoiceMesh choice, int color,
-                                double ax, double ay, double az,
-                                double bx, double by, double bz,
-                                double cx, double cy, double cz,
-                                double dx, double dy, double dz,
-                                Vec3 normal) {
+            double ax, double ay, double az,
+            double bx, double by, double bz,
+            double cx, double cy, double cz,
+            double dx, double dy, double dz,
+            Vec3 normal) {
         addVertex(pose, buffer, choice, color, ax, ay, az, normal);
         addVertex(pose, buffer, choice, color, bx, by, bz, normal);
         addVertex(pose, buffer, choice, color, cx, cy, cz, normal);
@@ -312,7 +309,7 @@ public final class ClientGazeChoiceGeometryRenderer {
     }
 
     private static void addTriangle(PoseStack.Pose pose, VertexConsumer buffer, ChoiceMesh choice, int color,
-                                    Vec3 a, double az, Vec3 b, double bz, Vec3 c, double cz, Vec3 normal) {
+            Vec3 a, double az, Vec3 b, double bz, Vec3 c, double cz, Vec3 normal) {
         addVertex(pose, buffer, choice, color, a.x, a.y, az, normal);
         addVertex(pose, buffer, choice, color, b.x, b.y, bz, normal);
         addVertex(pose, buffer, choice, color, c.x, c.y, cz, normal);
@@ -428,14 +425,11 @@ public final class ClientGazeChoiceGeometryRenderer {
         return (Math.max(0, Math.min(255, alpha)) << 24) | (argb & 0x00FFFFFF);
     }
 
-    private record RenderData(List<ChoiceMesh> choices) {
-    }
+    private record RenderData(List<ChoiceMesh> choices) {}
 
     private record ChoiceMesh(Vec3 center, Vec3 right, Vec3 up, Vec3 normal, double radius, double thickness,
-                              GazeChoiceShapeType shapeType, Vec3 arrowDirection, List<Integer> colors, boolean recommended, int color,
-                              double focusProgress, double resultProgress, ChoiceVisualState visualState) {
-    }
+            GazeChoiceShapeType shapeType, Vec3 arrowDirection, List<Integer> colors, boolean recommended, int color,
+            double focusProgress, double resultProgress, ChoiceVisualState visualState) {}
 
-    private record BillboardFrame(Vec3 right, Vec3 up, Vec3 normal) {
-    }
+    private record BillboardFrame(Vec3 right, Vec3 up, Vec3 normal) {}
 }

@@ -2,7 +2,6 @@ package dev.marblegate.superpipeslide.common.core.slide.traversal;
 
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
-
 import java.util.Optional;
 
 public record ContinuationDecision(Type type, Optional<PipeConnection> connection, int direction, Optional<PipeAnchorId> anchorId) {

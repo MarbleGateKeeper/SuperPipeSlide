@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.client.fullmap.model.hit;
 
-
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import java.util.Optional;
 
@@ -11,8 +10,7 @@ public record HitTarget(
         Optional<String> transferHintId,
         Optional<String> missingCrossDimensionHintId,
         Optional<String> physicalNodeId,
-        Optional<String> physicalEdgeId
-) {
+        Optional<String> physicalEdgeId) {
     public HitTarget {
         nodeId = nodeId == null ? Optional.empty() : nodeId;
         edgeId = edgeId == null ? Optional.empty() : edgeId;

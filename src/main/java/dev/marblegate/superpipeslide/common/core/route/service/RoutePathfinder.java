@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.common.core.route.service;
 
-
 import dev.marblegate.superpipeslide.client.fullmap.model.search.SearchResult;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
@@ -11,14 +10,12 @@ import dev.marblegate.superpipeslide.common.core.path.PipeGraphSnapshot;
 import dev.marblegate.superpipeslide.common.core.path.PipePathfinder;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
 import dev.marblegate.superpipeslide.config.Config;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public final class RoutePathfinder {
-    private RoutePathfinder() {
-    }
+    private RoutePathfinder() {}
 
     public static Optional<PathResult> shortestPath(PipeConnection fromConnection, PipeConnection toConnection, PipeNetworkView pipeNetwork) {
         SearchResult result = shortestPathResult(fromConnection, toConnection, pipeNetwork, configuredMaxVisitedNodes());
@@ -42,8 +39,7 @@ public final class RoutePathfinder {
                 fromConnection,
                 toConnection,
                 graph,
-                new PathSearchOptions(maxVisitedNodes)
-        ));
+                new PathSearchOptions(maxVisitedNodes)));
     }
 
     private static SearchResult fromPathSearchResult(PathSearchResult result) {

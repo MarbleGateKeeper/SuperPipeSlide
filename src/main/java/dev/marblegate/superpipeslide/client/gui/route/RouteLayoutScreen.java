@@ -1,23 +1,21 @@
 package dev.marblegate.superpipeslide.client.gui.route;
 
-
+import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.gui.base.RouteDataAwareScreen;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
-import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSection;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
 import dev.marblegate.superpipeslide.network.route.ServerboundRouteEditPayload;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
-
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 public class RouteLayoutScreen extends RouteEditorScreenBase implements RouteDataAwareScreen {
     private static final double MAP_OVERSCROLL = 34.0D;
@@ -93,8 +91,7 @@ public class RouteLayoutScreen extends RouteEditorScreenBase implements RouteDat
         this.drawTitle(graphics, Component.translatable("screen.superpipeslide.layout.title", lineName, SPSGui.layoutName(layout.get())), true, List.of(
                 new SPSGui.IconButton(SPSGui.Icon.REMOVE, RouteEditorGui.DANGER, false),
                 SPSGui.IconButton.of(SPSGui.Icon.RECALCULATE),
-                new SPSGui.IconButton(SPSGui.Icon.SAVE, RouteEditorGui.BLUE, !saveActive)
-        ), mouseX, mouseY);
+                new SPSGui.IconButton(SPSGui.Icon.SAVE, RouteEditorGui.BLUE, !saveActive)), mouseX, mouseY);
         this.drawDocumentHeader(graphics, SPSGui.Icon.LAYOUT, List.of(Component.literal(lineName), Component.literal(SPSGui.layoutName(layout.get()))), saveActive ? Component.translatable("screen.superpipeslide.editor.unsaved") : statusLabel, saveActive ? RouteEditorGui.SAVE : RouteEditorGui.statusColor(status), layout.get().id().hashCode());
         if (saveActive) {
             this.addClick(save, this::saveMetadata, Component.translatable("screen.superpipeslide.action.save_layout"));
@@ -104,8 +101,7 @@ public class RouteLayoutScreen extends RouteEditorScreenBase implements RouteDat
                 Component.translatable("screen.superpipeslide.confirm.delete_layout.title"),
                 Component.translatable("screen.superpipeslide.confirm.delete_layout.body"),
                 Component.translatable("screen.superpipeslide.action.delete_layout"),
-                this::deleteLayout
-        ), Component.translatable("screen.superpipeslide.action.delete_layout"));
+                this::deleteLayout), Component.translatable("screen.superpipeslide.action.delete_layout"));
 
         SPSGui.Rect content = this.editorContent();
         int top = this.documentBodyY();
@@ -161,8 +157,7 @@ public class RouteLayoutScreen extends RouteEditorScreenBase implements RouteDat
                             Component.translatable("screen.superpipeslide.confirm.split_layout.title"),
                             Component.translatable("screen.superpipeslide.confirm.split_layout.body"),
                             Component.translatable("screen.superpipeslide.layout.split_bidirectional"),
-                            () -> toggleBidirectional(layout.get())
-                    );
+                            () -> toggleBidirectional(layout.get()));
                 } else {
                     toggleBidirectional(layout.get());
                 }

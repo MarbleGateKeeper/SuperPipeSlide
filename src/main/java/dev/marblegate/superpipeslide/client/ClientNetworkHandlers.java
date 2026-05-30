@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.client;
 
-
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeAppearanceCache;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
@@ -18,8 +17,6 @@ import dev.marblegate.superpipeslide.client.gui.projection.ProjectionLayoutLibra
 import dev.marblegate.superpipeslide.client.gui.route.RouteEditorScreen;
 import dev.marblegate.superpipeslide.client.gui.station.StationEditorScreen;
 import dev.marblegate.superpipeslide.client.gui.station.StationNameProjectorScreen;
-import dev.marblegate.superpipeslide.common.block.station.PlatformProjectorBlockEntity;
-import dev.marblegate.superpipeslide.common.block.station.StationNameProjectorBlockEntity;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.network.editor.ClientboundEditorResultPayload;
 import dev.marblegate.superpipeslide.network.fold.ClientboundOpenFoldAnchorEditorPayload;
@@ -57,8 +54,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 @EventBusSubscriber(modid = SuperPipeSlide.MODID, value = Dist.CLIENT)
 public final class ClientNetworkHandlers {
-    private ClientNetworkHandlers() {
-    }
+    private ClientNetworkHandlers() {}
 
     @SubscribeEvent
     public static void register(RegisterClientPayloadHandlersEvent event) {
@@ -206,8 +202,7 @@ public final class ClientNetworkHandlers {
                     .map(summary -> summary.preview())
                     .ifPresentOrElse(
                             layout -> minecraft.setScreen(new ProjectionLayoutCanvasScreen(payload, layout)),
-                            () -> minecraft.setScreen(new ProjectionLayoutLibraryScreen(payload))
-                    );
+                            () -> minecraft.setScreen(new ProjectionLayoutLibraryScreen(payload)));
         } else {
             minecraft.setScreen(new ProjectionLayoutLibraryScreen(payload));
         }

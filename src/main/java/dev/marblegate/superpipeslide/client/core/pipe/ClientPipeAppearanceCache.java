@@ -20,8 +20,7 @@ public final class ClientPipeAppearanceCache {
         PROFILES_BY_ID.put(PipeAppearanceProfile.DEFAULT_PROFILE_ID, PipeAppearanceProfile.defaultProfile().normalizedToDefinitions());
     }
 
-    private ClientPipeAppearanceCache() {
-    }
+    private ClientPipeAppearanceCache() {}
 
     public static void handleSync(ClientboundPipeAppearanceSyncPayload payload) {
         if (payload.full()) {
@@ -74,8 +73,7 @@ public final class ClientPipeAppearanceCache {
     public static PipeAppearanceRenderInvalidation consumeRenderInvalidation() {
         PipeAppearanceRenderInvalidation invalidation = new PipeAppearanceRenderInvalidation(
                 renderFullInvalidation,
-                List.copyOf(RENDER_CHANGED_CONNECTION_KEYS)
-        );
+                List.copyOf(RENDER_CHANGED_CONNECTION_KEYS));
         renderFullInvalidation = false;
         RENDER_CHANGED_CONNECTION_KEYS.clear();
         return invalidation;

@@ -2,25 +2,22 @@ package dev.marblegate.superpipeslide.client.renderer;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.PoseStack;
+import java.util.Objects;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
 
-import java.util.Objects;
-
 public final class ClientRenderCompatibility {
     private static final RenderType EFFECT_QUADS = RenderType.create(
             "superpipeslide_effect_quads",
             RenderSetup.builder(RenderPipelines.LIGHTNING)
                     .sortOnUpload()
-                    .createRenderSetup()
-    );
+                    .createRenderSetup());
     private static volatile RenderTypeAdapter renderTypeAdapter = RenderTypeAdapter.IDENTITY;
 
-    private ClientRenderCompatibility() {
-    }
+    private ClientRenderCompatibility() {}
 
     public static void registerRenderTypeAdapter(RenderTypeAdapter adapter) {
         renderTypeAdapter = Objects.requireNonNull(adapter, "adapter");
@@ -68,8 +65,7 @@ public final class ClientRenderCompatibility {
     }
 
     public interface RenderTypeAdapter {
-        RenderTypeAdapter IDENTITY = new RenderTypeAdapter() {
-        };
+        RenderTypeAdapter IDENTITY = new RenderTypeAdapter() {};
 
         default String renderStateKey() {
             return "vanilla";
@@ -79,7 +75,6 @@ public final class ClientRenderCompatibility {
             return original;
         }
 
-        default void clearCaches() {
-        }
+        default void clearCaches() {}
     }
 }

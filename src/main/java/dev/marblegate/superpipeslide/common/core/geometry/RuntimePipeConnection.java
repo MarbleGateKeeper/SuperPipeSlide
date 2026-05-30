@@ -1,9 +1,8 @@
 package dev.marblegate.superpipeslide.common.core.geometry;
 
+import java.util.Arrays;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-
-import java.util.Arrays;
 
 public final class RuntimePipeConnection {
     private static final int MIN_SAMPLES = 8;

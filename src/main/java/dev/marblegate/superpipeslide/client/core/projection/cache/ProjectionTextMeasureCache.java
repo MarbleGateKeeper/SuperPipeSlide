@@ -1,18 +1,16 @@
 package dev.marblegate.superpipeslide.client.core.projection.cache;
 
-import net.minecraft.client.gui.Font;
-import net.minecraft.util.FormattedCharSequence;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import net.minecraft.client.gui.Font;
+import net.minecraft.util.FormattedCharSequence;
 
 public final class ProjectionTextMeasureCache {
     private static final int MAX_WIDTH_ENTRIES = 8192;
     private static final Map<WidthKey, Integer> WIDTHS = new LinkedHashMap<>(512, 0.75F, true);
 
-    private ProjectionTextMeasureCache() {
-    }
+    private ProjectionTextMeasureCache() {}
 
     public static int width(Font font, String text) {
         if (font == null || text == null || text.isEmpty()) {

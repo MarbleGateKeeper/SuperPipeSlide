@@ -3,8 +3,8 @@ package dev.marblegate.superpipeslide.integration.distanthorizons.client;
 import java.util.Locale;
 
 public record PipeFarLodGroupKey(int sectionX, int sectionY, int sectionZ,
-                                 PipeFarLodMaterial material, boolean emissive,
-                                 boolean translucent) {
+        PipeFarLodMaterial material, boolean emissive,
+        boolean translucent) {
     public PipeFarLodGroupKey {
         material = material == null ? PipeFarLodMaterial.STONE : material;
     }

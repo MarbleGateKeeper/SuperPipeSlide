@@ -1,15 +1,13 @@
 package dev.marblegate.superpipeslide.common.core.networkgraph.model;
 
-
-import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
-import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
+import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
+import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
+import java.util.Optional;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
-
-import java.util.Optional;
 
 /**
  * Authoritative endpoint node data for the pipe graph.
@@ -19,16 +17,14 @@ import java.util.Optional;
 public record PipeNode(PipeAnchorId id, PipeNodeData data) {
     public static final Codec<PipeNode> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             PipeAnchorId.CODEC.fieldOf("id").forGetter(PipeNode::id),
-            PipeNodeData.CODEC.fieldOf("data").forGetter(PipeNode::data)
-    ).apply(instance, PipeNode::new));
+            PipeNodeData.CODEC.fieldOf("data").forGetter(PipeNode::data)).apply(instance, PipeNode::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, PipeNode> STREAM_CODEC = StreamCodec.composite(
             PipeAnchorId.STREAM_CODEC,
             PipeNode::id,
             PipeNodeData.STREAM_CODEC,
             PipeNode::data,
-            PipeNode::new
-    );
+            PipeNode::new);
 
     public PipeNode {
         if (data instanceof BranchNode branchNode && !branchNode.anchorId().equals(id)) {

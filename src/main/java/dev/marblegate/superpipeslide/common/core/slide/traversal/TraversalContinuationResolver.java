@@ -5,15 +5,13 @@ import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkView;
 import dev.marblegate.superpipeslide.common.core.slide.traversal.TraversalContext.RouteChoiceSelection;
-import net.minecraft.world.phys.Vec3;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.world.phys.Vec3;
 
 public final class TraversalContinuationResolver {
-    private TraversalContinuationResolver() {
-    }
+    private TraversalContinuationResolver() {}
 
     public static ContinuationDecision resolve(PipeNetworkView pipeNetwork, TraversalContext context, PipeConnection current, int currentDirection, PipeAnchorId exitAnchor) {
         if (pipeNetwork.foldAnchorAt(exitAnchor).isPresent()) {
@@ -51,8 +49,7 @@ public final class TraversalContinuationResolver {
                             context.currentRouteSectionId(),
                             context.routeConnectionIndex(),
                             current.id(),
-                            branch.id()
-                    ))
+                            branch.id()))
                     .map(RouteChoiceSelection::selectedConnectionId)
                     .flatMap(pipeNetwork::connection)
                     .filter(connection -> validBranchExit(connection, branch, current));

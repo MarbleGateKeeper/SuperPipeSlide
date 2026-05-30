@@ -1,7 +1,6 @@
 package dev.marblegate.superpipeslide.common.core.slide.traversal;
 
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
-
 import java.util.Optional;
 
 public record TraversalEvent(TraversalEventType type, TraversalCursor cursor, Optional<PipeAnchorId> anchorId) {

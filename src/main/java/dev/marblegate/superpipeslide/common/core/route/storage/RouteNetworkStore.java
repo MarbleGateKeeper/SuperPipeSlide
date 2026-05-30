@@ -21,8 +21,7 @@ final class RouteNetworkStore {
     final Map<UUID, RouteSection> routeSections = new LinkedHashMap<>();
     final Map<UUID, StationTransferLink> stationTransferLinks = new LinkedHashMap<>();
 
-    RouteNetworkStore() {
-    }
+    RouteNetworkStore() {}
 
     RouteNetworkStore(List<StationGroup> stationGroups, List<PlatformStop> platformStops, List<RouteLine> routeLines, List<RouteLayout> routeLayouts, List<RouteSection> routeSections, List<StationTransferLink> stationTransferLinks) {
         stationGroups.forEach(this::put);
@@ -169,4 +168,3 @@ final class RouteNetworkStore {
         return !this.routeLayouts.isEmpty();
     }
 }
-

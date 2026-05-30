@@ -3,8 +3,7 @@ package dev.marblegate.superpipeslide.common.core.geometry;
 public final class PipeConnectionLengthPolicy {
     public static final int VALIDATION_SAMPLES = 96;
 
-    private PipeConnectionLengthPolicy() {
-    }
+    private PipeConnectionLengthPolicy() {}
 
     public static double measuredLength(PipeConnection connection) {
         double chordLength = connection.fromSurface().distanceTo(connection.toSurface());

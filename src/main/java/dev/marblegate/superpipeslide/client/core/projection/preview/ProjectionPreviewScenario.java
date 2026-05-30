@@ -1,9 +1,7 @@
 package dev.marblegate.superpipeslide.client.core.projection.preview;
 
-
 import dev.marblegate.superpipeslide.client.core.projection.engine.PlatformLayoutProjectionEngine;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,8 +19,7 @@ public record ProjectionPreviewScenario(
         boolean platformBidirectional,
         boolean platformLoop,
         boolean outStationTransfers,
-        int platformStopCount
-) {
+        int platformStopCount) {
     public ProjectionPreviewScenario {
         primaryName = normalized(primaryName, "Block Plaza");
         translationName = normalized(translationName, "Block Plaza");
@@ -171,8 +168,8 @@ public record ProjectionPreviewScenario(
     }
 
     private String stopName(int index, int layoutIndex) {
-        String[] shortNames = {"Quartz", "Copper", "Block Plaza", "Market", "Prismarine", "Basalt", "Library", "Harbor", "End", "Gateway", "Garden", "Archive", "Canyon", "Depot", "Tower", "Museum"};
-        String[] longNames = {"Quartz Harbor Transit Center", "Old Copper Factory Interchange", "Block Plaza", "Central Block Plaza Transportation Hub North", "Prismarine Gate", "Basalt Delta Museum", "Great Library Underpass", "Harbor Freight Terminal", "End Gateway International Terminal", "Gateway Garden Station", "Archive Hall", "Canyon South", "Depot East", "Tower Junction", "Museum Park", "Beacon Hill"};
+        String[] shortNames = { "Quartz", "Copper", "Block Plaza", "Market", "Prismarine", "Basalt", "Library", "Harbor", "End", "Gateway", "Garden", "Archive", "Canyon", "Depot", "Tower", "Museum" };
+        String[] longNames = { "Quartz Harbor Transit Center", "Old Copper Factory Interchange", "Block Plaza", "Central Block Plaza Transportation Hub North", "Prismarine Gate", "Basalt Delta Museum", "Great Library Underpass", "Harbor Freight Terminal", "End Gateway International Terminal", "Gateway Garden Station", "Archive Hall", "Canyon South", "Depot East", "Tower Junction", "Museum Park", "Beacon Hill" };
         String[] names = this.longNames ? longNames : shortNames;
         return names[Math.floorMod(index + layoutIndex * 2, names.length)];
     }
@@ -294,5 +291,4 @@ public record ProjectionPreviewScenario(
             platform = normalized(platform, "");
         }
     }
-
 }

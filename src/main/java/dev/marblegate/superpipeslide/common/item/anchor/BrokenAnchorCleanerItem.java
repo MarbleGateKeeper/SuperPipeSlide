@@ -1,6 +1,7 @@
 package dev.marblegate.superpipeslide.common.item.anchor;
 
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
+import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -14,8 +15,6 @@ import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-
-import java.util.function.Consumer;
 
 public class BrokenAnchorCleanerItem extends Item {
     private static final double CLEAN_RADIUS = 32.0D;
@@ -76,8 +75,7 @@ public class BrokenAnchorCleanerItem extends Item {
                 "message.superpipeslide.broken_anchor_cleaner_cleaned",
                 result.removedNodes(),
                 result.removedConnections(),
-                formatRadius(radius)
-        ).withStyle(ChatFormatting.YELLOW));
+                formatRadius(radius)).withStyle(ChatFormatting.YELLOW));
         return InteractionResult.SUCCESS_SERVER;
     }
 

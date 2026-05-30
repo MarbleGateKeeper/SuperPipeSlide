@@ -6,8 +6,7 @@ import net.minecraft.world.phys.Vec3;
 public final class SlideGeometry {
     private static final int PROJECTION_SAMPLES = 48;
 
-    private SlideGeometry() {
-    }
+    private SlideGeometry() {}
 
     public static Projection project(PipeConnection connection, Vec3 point) {
         double totalLength = connection.length();

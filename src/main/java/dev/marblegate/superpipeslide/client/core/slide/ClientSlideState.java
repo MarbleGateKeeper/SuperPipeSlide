@@ -11,10 +11,9 @@ public record ClientSlideState(
         double speed,
         double temporarySpeedCapRestoreSpeed,
         int ticksSliding,
-        boolean previousNoPhysics
-) {
-    private static final double NO_TEMPORARY_SPEED_CAP_RESTORE_SPEED = -1.0D;
+        boolean previousNoPhysics) {
 
+    private static final double NO_TEMPORARY_SPEED_CAP_RESTORE_SPEED = -1.0D;
     static ClientSlideState start(UUID sessionId, UUID connectionId, int direction, double distanceOnConnection, double speed, boolean previousNoPhysics) {
         return new ClientSlideState(sessionId, connectionId, connectionId, direction, distanceOnConnection, speed, NO_TEMPORARY_SPEED_CAP_RESTORE_SPEED, 0, previousNoPhysics);
     }

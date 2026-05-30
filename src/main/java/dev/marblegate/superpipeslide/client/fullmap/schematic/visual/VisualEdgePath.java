@@ -5,7 +5,6 @@ import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SemanticEdgeKind;
-
 import java.util.List;
 import java.util.UUID;
 
@@ -20,8 +19,7 @@ public record VisualEdgePath(
         List<VisualLane> lanes,
         VisualHitShape hitShape,
         Aabb2 bounds,
-        boolean fallback
-) {
+        boolean fallback) {
     public VisualEdgePath {
         routeLineIds = routeLineIds.stream().distinct().sorted().toList();
         occurrences = List.copyOf(occurrences);

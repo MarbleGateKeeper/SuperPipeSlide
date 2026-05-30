@@ -1,11 +1,10 @@
 package dev.marblegate.superpipeslide.client.fullmap.routecard.model;
 
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.level.Level;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 public record RouteCardNode(
         RouteCardNodeId id,
@@ -18,8 +17,7 @@ public record RouteCardNode(
         double worldZ,
         double worldY,
         String label,
-        List<UUID> routeLineIds
-) {
+        List<UUID> routeLineIds) {
     public RouteCardNode {
         stationGroupId = stationGroupId == null ? Optional.empty() : stationGroupId;
         platformStopId = platformStopId == null ? Optional.empty() : platformStopId;

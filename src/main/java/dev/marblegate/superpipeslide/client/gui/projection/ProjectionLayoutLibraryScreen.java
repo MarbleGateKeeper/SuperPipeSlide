@@ -1,26 +1,24 @@
 package dev.marblegate.superpipeslide.client.gui.projection;
 
-
+import dev.marblegate.superpipeslide.client.core.projection.preview.ProjectionLayoutPreviewPainter;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
 import dev.marblegate.superpipeslide.client.gui.route.RouteEditorGui;
 import dev.marblegate.superpipeslide.client.gui.route.RouteEditorScreenBase;
-import dev.marblegate.superpipeslide.client.core.projection.preview.ProjectionLayoutPreviewPainter;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutSummary;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutTarget;
 import dev.marblegate.superpipeslide.network.projection.ClientboundOpenProjectionLayoutDesignerPayload;
 import dev.marblegate.superpipeslide.network.projection.ServerboundProjectionLayoutDeletePayload;
 import dev.marblegate.superpipeslide.network.projection.ServerboundProjectionLayoutSelectPayload;
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.UUID;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 import org.lwjgl.glfw.GLFW;
-
-import java.util.ArrayList;
-import java.util.EnumMap;
-import java.util.List;
-import java.util.UUID;
 
 public final class ProjectionLayoutLibraryScreen extends RouteEditorScreenBase {
     private ClientboundOpenProjectionLayoutDesignerPayload payload;
@@ -272,6 +270,5 @@ public final class ProjectionLayoutLibraryScreen extends RouteEditorScreenBase {
         this.scroll = 0.0D;
     }
 
-    private record CardTarget(SPSGui.Rect bounds, ProjectionLayoutSummary summary) {
-    }
+    private record CardTarget(SPSGui.Rect bounds, ProjectionLayoutSummary summary) {}
 }

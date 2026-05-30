@@ -1,12 +1,11 @@
 package dev.marblegate.superpipeslide.common.block.station;
 
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
 
 public record PlatformProjectorConfig(
         BindingMode bindingMode,
@@ -15,8 +14,8 @@ public record PlatformProjectorConfig(
         PlatformProjectionDirection direction,
         float offsetX,
         float offsetY,
-        boolean backsideProjection
-) {
+        boolean backsideProjection) {
+
     public static final float MIN_OFFSET_X = -10.0F;
     public static final float MAX_OFFSET_X = 10.0F;
     public static final float MIN_OFFSET_Y = -10.0F;
@@ -24,9 +23,7 @@ public record PlatformProjectorConfig(
 
     public static final StreamCodec<RegistryFriendlyByteBuf, PlatformProjectorConfig> STREAM_CODEC = StreamCodec.of(
             PlatformProjectorConfig::encode,
-            PlatformProjectorConfig::decode
-    );
-
+            PlatformProjectorConfig::decode);
     public PlatformProjectorConfig {
         bindingMode = bindingMode == null ? BindingMode.AUTO : bindingMode;
         platformStopId = platformStopId == null ? Optional.empty() : platformStopId;
@@ -82,8 +79,7 @@ public record PlatformProjectorConfig(
                 buffer.readEnum(PlatformProjectionDirection.class),
                 buffer.readFloat(),
                 buffer.readFloat(),
-                buffer.readBoolean()
-        );
+                buffer.readBoolean());
     }
 
     public static <E extends Enum<E>> E enumByName(Class<E> type, String name, E fallback) {

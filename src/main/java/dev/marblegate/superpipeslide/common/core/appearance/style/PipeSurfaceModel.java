@@ -9,8 +9,8 @@ public record PipeSurfaceModel(
         double perimeter,
         MarkerLanes lanes,
         List<CoatingBand> bands,
-        List<PatternedBox> boxes
-) {
+        List<PatternedBox> boxes) {
+
     private static final double EPSILON = 1.0E-5D;
     private static final String INTERNAL_MARKER_ACCELERATION_SLOT = "__marker_acceleration";
     private static final String INTERNAL_MARKER_HIGHWAY_SLOT = "__marker_highway";
@@ -24,7 +24,6 @@ public record PipeSurfaceModel(
     private static final double HIGHWAY_ANCHOR_WIDTH = HIGHWAY_MARKER_WIDTH * 1.30D;
     private static final double DIRECTION_ANCHOR_WIDTH = DIRECTION_MARKER_WIDTH * 1.18D;
     private static final double PLATFORM_ANCHOR_WIDTH = PLATFORM_MARKER_WIDTH * 2.00D;
-
     public PipeSurfaceModel {
         surfaces = List.copyOf(surfaces);
         bands = List.copyOf(bands);
@@ -425,8 +424,7 @@ public record PipeSurfaceModel(
                 center(direction),
                 DIRECTION_MARKER_WIDTH,
                 center(platform),
-                PLATFORM_MARKER_WIDTH
-        );
+                PLATFORM_MARKER_WIDTH);
     }
 
     private static boolean isInternalSlot(String slotId) {
@@ -442,20 +440,15 @@ public record PipeSurfaceModel(
         TWO_SIDED
     }
 
-    public record LocalSurface(String slotId, double ax, double ay, double bx, double by, double vStart, double vEnd, boolean render, FaceVisibility visibility) {
-    }
+    public record LocalSurface(String slotId, double ax, double ay, double bx, double by, double vStart, double vEnd, boolean render, FaceVisibility visibility) {}
 
-    public record Local2(double x, double y) {
-    }
+    public record Local2(double x, double y) {}
 
-    public record CoatingBand(String slotId, double vCenter, double vWidth, double period, double length, double phase, int layer) {
-    }
+    public record CoatingBand(String slotId, double vCenter, double vWidth, double period, double length, double phase, int layer) {}
 
-    public record PatternedBox(String slotId, double left, double bottom, double right, double top, double period, double length, double phase, int layer) {
-    }
+    public record PatternedBox(String slotId, double left, double bottom, double right, double top, double period, double length, double phase, int layer) {}
 
-    public record MarkerLanes(double accelerationCenter, double accelerationWidth, double highwayCenter, double highwayWidth, double directionCenter, double directionWidth, double platformCenter, double platformWidth) {
-    }
+    public record MarkerLanes(double accelerationCenter, double accelerationWidth, double highwayCenter, double highwayWidth, double directionCenter, double directionWidth, double platformCenter, double platformWidth) {}
 
     private static final class SurfaceBuilder {
         private final List<LocalSurface> surfaces = new ArrayList<>();
@@ -496,6 +489,5 @@ public record PipeSurfaceModel(
                     .max(java.util.Comparator.comparingDouble(surface -> (surface.ay() + surface.by()) * 0.5D))
                     .orElseGet(() -> this.surfaces.isEmpty() ? new LocalSurface("body", -0.1D, 0.0D, 0.1D, 0.0D, 0.0D, 0.2D, true, FaceVisibility.TWO_SIDED) : this.surfaces.getFirst());
         }
-
     }
 }

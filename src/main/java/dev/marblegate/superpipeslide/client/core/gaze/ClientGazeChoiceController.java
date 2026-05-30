@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.client.core.gaze;
 
-
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideController;
 import dev.marblegate.superpipeslide.common.core.gaze.GazeChoice;
 import dev.marblegate.superpipeslide.common.core.gaze.GazeChoicePlacement;
@@ -37,8 +36,7 @@ public final class ClientGazeChoiceController {
     private static boolean sentChoice;
     private static boolean resultAccepted;
 
-    private ClientGazeChoiceController() {
-    }
+    private ClientGazeChoiceController() {}
 
     public static void openLocal(GazeChoiceSession session) {
         openSession(session);
@@ -230,8 +228,7 @@ public final class ClientGazeChoiceController {
                 choice.shape(),
                 frame.forward(),
                 frame.up(),
-                frame.right()
-        );
+                frame.right());
     }
 
     private static ChoiceVisualState visualState(boolean focused, boolean submitted, boolean result, double progress) {
@@ -323,6 +320,5 @@ public final class ClientGazeChoiceController {
         }
     }
 
-    private record ResolvedFrame(Vec3 anchor, Vec3 position, Vec3 forward, Vec3 up, Vec3 right) {
-    }
+    private record ResolvedFrame(Vec3 anchor, Vec3 position, Vec3 forward, Vec3 up, Vec3 right) {}
 }

@@ -14,8 +14,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 
 public final class FullMapNavigationViewModel {
-    private FullMapNavigationViewModel() {
-    }
+    private FullMapNavigationViewModel() {}
 
     public static DestinationCard destinationCard(LocalPlayer player, ClientNavigationController.DestinationSearchResult result, boolean selected) {
         boolean sameDimension = result.levelKey().equals(player.level().dimension());
@@ -24,8 +23,8 @@ public final class FullMapNavigationViewModel {
         String statusText = !result.reachable()
                 ? Component.translatable("screen.superpipeslide.navigation.badge.unreachable").getString()
                 : sameDimension
-                ? Component.translatable("screen.superpipeslide.navigation.badge.reachable").getString()
-                : Component.translatable("screen.superpipeslide.navigation.badge.cross_dimension").getString();
+                        ? Component.translatable("screen.superpipeslide.navigation.badge.reachable").getString()
+                        : Component.translatable("screen.superpipeslide.navigation.badge.cross_dimension").getString();
         return new DestinationCard(
                 result.stationGroupId(),
                 result.primaryName(),
@@ -35,8 +34,7 @@ public final class FullMapNavigationViewModel {
                 selected,
                 !sameDimension,
                 statusText,
-                statusTone
-        );
+                statusTone);
     }
 
     public static RoutePreview emptyPreview() {
@@ -52,8 +50,7 @@ public final class FullMapNavigationViewModel {
                 Component.translatable("screen.superpipeslide.navigation.start").getString(),
                 List.of(),
                 List.of(),
-                0xFF47A6FF
-        );
+                0xFF47A6FF);
     }
 
     public static RoutePreview unreachablePreview(UUID stationGroupId) {
@@ -80,11 +77,9 @@ public final class FullMapNavigationViewModel {
                         List.of(),
                         List.of(0xFFFFB13B),
                         true,
-                        false
-                )),
+                        false)),
                 List.of(),
-                0xFFFFB13B
-        );
+                0xFFFFB13B);
     }
 
     public static RoutePreview routePreview(ClientNavigationController.NavigationPlan plan) {
@@ -119,8 +114,7 @@ public final class FullMapNavigationViewModel {
                 actionLabel,
                 itinerary,
                 warnings,
-                primaryColor(plan.primaryColors())
-        );
+                primaryColor(plan.primaryColors()));
     }
 
     private static String routeSummary(ClientNavigationController.NavigationPlan plan) {
@@ -155,8 +149,7 @@ public final class FullMapNavigationViewModel {
                     List.of(),
                     List.of(primary),
                     false,
-                    false
-            ));
+                    false));
             return steps;
         }
 
@@ -168,8 +161,7 @@ public final class FullMapNavigationViewModel {
                 List.of(),
                 List.of(primary),
                 false,
-                false
-        ));
+                false));
 
         ClientNavigationController.NavigationSegment first = plan.segments().getFirst();
         steps.add(new ItineraryStep(
@@ -182,8 +174,7 @@ public final class FullMapNavigationViewModel {
                 List.of(),
                 first.colors(),
                 false,
-                false
-        ));
+                false));
 
         for (int i = 0; i < plan.segments().size(); i++) {
             ClientNavigationController.NavigationSegment segment = plan.segments().get(i);
@@ -198,8 +189,7 @@ public final class FullMapNavigationViewModel {
                     stationNames(segment.stationSequence()),
                     segment.colors(),
                     false,
-                    segment.stationSequence().size() > 7
-            ));
+                    segment.stationSequence().size() > 7));
             if (segment.finalWalkInstruction().isPresent()) {
                 ClientNavigationController.FinalWalkInstruction instruction = segment.finalWalkInstruction().get();
                 boolean crossDimension = instruction.kind() == ClientNavigationController.TransferKind.CROSS_DIMENSION_OUT_OF_STATION;
@@ -213,8 +203,7 @@ public final class FullMapNavigationViewModel {
                         List.of(),
                         segment.colors(),
                         crossDimension,
-                        false
-                ));
+                        false));
             }
             if (i + 1 < plan.segments().size()) {
                 ClientNavigationController.NavigationSegment next = plan.segments().get(i + 1);
@@ -231,8 +220,7 @@ public final class FullMapNavigationViewModel {
                 List.of(),
                 List.of(primary),
                 false,
-                false
-        ));
+                false));
         return List.copyOf(steps);
     }
 
@@ -260,8 +248,7 @@ public final class FullMapNavigationViewModel {
                 List.of(),
                 next.colors(),
                 transfer.kind() == ClientNavigationController.TransferKind.CROSS_DIMENSION_OUT_OF_STATION,
-                false
-        );
+                false);
     }
 
     private static List<String> stationNames(List<UUID> platformStopIds) {
@@ -344,9 +331,7 @@ public final class FullMapNavigationViewModel {
             boolean selected,
             boolean crossDimension,
             String statusText,
-            ChipTone statusTone
-    ) {
-    }
+            ChipTone statusTone) {}
 
     public record RoutePreview(
             String destinationName,
@@ -360,8 +345,7 @@ public final class FullMapNavigationViewModel {
             String primaryActionLabel,
             List<ItineraryStep> itinerary,
             List<String> warnings,
-            int primaryColor
-    ) {
+            int primaryColor) {
         public RoutePreview {
             itinerary = List.copyOf(itinerary);
             warnings = List.copyOf(warnings);
@@ -376,8 +360,7 @@ public final class FullMapNavigationViewModel {
             List<String> stationNames,
             List<Integer> colors,
             boolean warning,
-            boolean expandable
-    ) {
+            boolean expandable) {
         public ItineraryStep {
             stationNames = List.copyOf(stationNames);
             colors = List.copyOf(colors);

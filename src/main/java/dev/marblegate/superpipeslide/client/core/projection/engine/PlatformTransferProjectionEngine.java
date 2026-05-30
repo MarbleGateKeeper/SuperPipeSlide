@@ -3,7 +3,6 @@ package dev.marblegate.superpipeslide.client.core.projection.engine;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponentSettings;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionOverflowMode;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionTextAlign;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -16,8 +15,7 @@ public final class PlatformTransferProjectionEngine {
     private static final int LAYER_BADGE = 40;
     private static final int LAYER_TEXT = 100;
 
-    private PlatformTransferProjectionEngine() {
-    }
+    private PlatformTransferProjectionEngine() {}
 
     public static Layout buildList(List<TransferData> transfers, ProjectionComponentSettings.PlatformTransferList settings, long timeMillis, int seed) {
         ProjectionComponentSettings.PlatformTransferList safe = settings == null ? ProjectionComponentSettings.PlatformTransferList.defaults() : settings;
@@ -285,27 +283,21 @@ public final class PlatformTransferProjectionEngine {
         }
     }
 
-    public record Layout(List<Primitive> primitives) {
-    }
+    public record Layout(List<Primitive> primitives) {}
 
     public sealed interface Primitive permits Rect, Capsule, Icon, Text {
         int layer();
     }
 
-    public record Rect(float x, float y, float width, float height, int color, int layer) implements Primitive {
-    }
+    public record Rect(float x, float y, float width, float height, int color, int layer) implements Primitive {}
 
-    public record Capsule(float x, float y, float width, float height, int color, int layer) implements Primitive {
-    }
+    public record Capsule(float x, float y, float width, float height, int color, int layer) implements Primitive {}
 
-    public record Icon(float centerX, float centerY, float size, ProjectionComponentSettings.IconShape shape, boolean outline, int fillColor, int borderColor, float borderWidth, float ringThicknessRatio, int layer) implements Primitive {
-    }
+    public record Icon(float centerX, float centerY, float size, ProjectionComponentSettings.IconShape shape, boolean outline, int fillColor, int borderColor, float borderWidth, float ringThicknessRatio, int layer) implements Primitive {}
 
-    public record Text(float x, float y, float width, float height, String value, int color, float fontSize, ProjectionTextAlign align, ProjectionOverflowMode overflow, int layer) implements Primitive {
-    }
+    public record Text(float x, float y, float width, float height, String value, int color, float fontSize, ProjectionTextAlign align, ProjectionOverflowMode overflow, int layer) implements Primitive {}
 
-    private record Window(List<TransferData> items, int hidden) {
-    }
+    private record Window(List<TransferData> items, int hidden) {}
 
     private static final class LayoutBuilder {
         private final List<Primitive> primitives = new ArrayList<>();

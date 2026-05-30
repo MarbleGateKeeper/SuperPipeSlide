@@ -1,7 +1,7 @@
 package dev.marblegate.superpipeslide.common.core.networkgraph.branch;
 
-import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.mojang.serialization.MapCodec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNodeData;
 import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNodeType;
@@ -10,11 +10,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -25,8 +25,8 @@ public record BranchNode(
         Vec3 position,
         Optional<PipeAnchorId> optionalAnchorId,
         Optional<UUID> defaultConnectionId,
-        List<BranchConnectionSlot> connections
-) implements PipeNodeData {
+        List<BranchConnectionSlot> connections) implements PipeNodeData {
+
     public static final int MAX_CONNECTIONS = 32;
 
     public static final MapCodec<BranchNode> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -35,8 +35,7 @@ public record BranchNode(
             Vec3.CODEC.fieldOf("position").forGetter(BranchNode::position),
             PipeAnchorId.CODEC.optionalFieldOf("anchor_id").forGetter(BranchNode::optionalAnchorId),
             UUIDUtil.STRING_CODEC.optionalFieldOf("default_connection_id").forGetter(BranchNode::defaultConnectionId),
-            BranchConnectionSlot.CODEC.listOf().optionalFieldOf("connections", List.of()).forGetter(BranchNode::connections)
-    ).apply(instance, BranchNode::new));
+            BranchConnectionSlot.CODEC.listOf().optionalFieldOf("connections", List.of()).forGetter(BranchNode::connections)).apply(instance, BranchNode::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, BranchNode> STREAM_CODEC = StreamCodec.composite(
             UUIDUtil.STREAM_CODEC,
@@ -51,9 +50,7 @@ public record BranchNode(
             BranchNode::defaultConnectionId,
             BranchConnectionSlot.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_CONNECTIONS)).cast(),
             BranchNode::connections,
-            BranchNode::new
-    );
-
+            BranchNode::new);
     public BranchNode {
         validateFinite(position, "position");
         optionalAnchorId.ifPresent(anchor -> {

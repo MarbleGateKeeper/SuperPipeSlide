@@ -1,28 +1,26 @@
 package dev.marblegate.superpipeslide.client.gui.platform;
 
-
+import dev.marblegate.superpipeslide.client.core.projection.preview.ProjectionLayoutPreviewPainter;
+import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.gui.base.RouteDataAwareScreen;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
 import dev.marblegate.superpipeslide.client.gui.route.RouteEditorGui;
 import dev.marblegate.superpipeslide.client.gui.route.RouteEditorScreenBase;
-import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
-import dev.marblegate.superpipeslide.client.core.projection.preview.ProjectionLayoutPreviewPainter;
 import dev.marblegate.superpipeslide.common.block.station.PlatformProjectorConfig;
 import dev.marblegate.superpipeslide.common.core.projection.layout.AppliedProjectionLayout;
-import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
+import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
 import dev.marblegate.superpipeslide.network.platform.ServerboundPlatformProjectorSavePayload;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
-import net.neoforged.neoforge.client.network.ClientPacketDistributor;
-
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
 public class PlatformProjectorScreen extends RouteEditorScreenBase implements RouteDataAwareScreen {
     private static final double PLATFORM_SELECT_RADIUS = 96.0D;
@@ -49,8 +47,7 @@ public class PlatformProjectorScreen extends RouteEditorScreenBase implements Ro
     }
 
     @Override
-    public void refreshFromRouteSnapshot() {
-    }
+    public void refreshFromRouteSnapshot() {}
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
@@ -68,8 +65,7 @@ public class PlatformProjectorScreen extends RouteEditorScreenBase implements Ro
                 List.of(Component.translatable("screen.superpipeslide.platform_projector"), Component.translatable("screen.superpipeslide.station_projector.position", this.pos.toShortString())),
                 Component.translatable("screen.superpipeslide.platform_projector.device"),
                 RouteEditorGui.BLUE,
-                this.pos.asLong() == Long.MIN_VALUE ? 0 : Long.hashCode(this.pos.asLong())
-        );
+                this.pos.asLong() == Long.MIN_VALUE ? 0 : Long.hashCode(this.pos.asLong()));
 
         int bodyTop = this.documentBodyY();
         int gap = 8;

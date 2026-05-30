@@ -1,21 +1,18 @@
 package dev.marblegate.superpipeslide.client.gui.route;
 
-
-import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
-import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
+import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
 import dev.marblegate.superpipeslide.network.route.ServerboundRouteEditPayload;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
 
 public class RouteLineCreateScreen extends RouteEditorScreenBase {
     private EditBox nameBox;
@@ -106,8 +103,7 @@ public class RouteLineCreateScreen extends RouteEditorScreenBase {
         SPSGui.stationMap(graphics, this.font, List.of(
                 new SPSGui.StationNode("A", List.of(), false, dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus.VALID),
                 new SPSGui.StationNode("B", List.of(), false, dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus.VALID),
-                new SPSGui.StationNode("C", List.of(), false, dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus.VALID)
-        ), colors, new SPSGui.Rect(preview.x() + 10, preview.y() + 49, preview.width() - 20, 30), false, 0, true);
+                new SPSGui.StationNode("C", List.of(), false, dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus.VALID)), colors, new SPSGui.Rect(preview.x() + 10, preview.y() + 49, preview.width() - 20, 30), false, 0, true);
 
         SPSGui.Rect cancel = new SPSGui.Rect(content.right() - 82, content.bottom() - 18, 34, 18);
         SPSGui.Rect save = new SPSGui.Rect(content.right() - 42, content.bottom() - 18, 34, 18);
@@ -209,7 +205,9 @@ public class RouteLineCreateScreen extends RouteEditorScreenBase {
         } catch (NumberFormatException ignored) {
             return Optional.empty();
         }
-    }    public static List<String> splitCsv(String value) {
+    }
+
+    public static List<String> splitCsv(String value) {
         return Arrays.stream(value.split(","))
                 .map(String::trim)
                 .filter(entry -> !entry.isEmpty())

@@ -12,8 +12,7 @@ final class ClientSlideBalancePoseSolver {
     private static final float LEG_ROOT_Y = 12.0F;
     private static final float LEG_ROOT_Z = 0.0F;
 
-    private ClientSlideBalancePoseSolver() {
-    }
+    private ClientSlideBalancePoseSolver() {}
 
     static ModelPose solveModel(ClientSlidePoseController.PoseSnapshot pose, ClientSlidePoseController.SlidePoseFrame frame, float sideStance) {
         BalanceState balance = BalanceState.of(pose, frame, sideStance);
@@ -163,16 +162,14 @@ final class ClientSlideBalancePoseSolver {
                 (0.145F + balance.railSpread() * 0.220F + balance.sideLoad() * 0.10F + balance.descend() * 0.025F) * balance.alpha(),
                 RIGHT_LEG_ROOT_X + midlinePull,
                 LEG_ROOT_Y,
-                rightZ
-        );
+                rightZ);
         LegPose left = new LegPose(
                 (leftX + baseCrouch + balance.ascend() * balance.verticalBrace() * 0.40F - balance.descend() * balance.verticalBrace() * 0.16F) * balance.alpha(),
                 (railOut + balance.footYaw() * 0.24F + balance.turn() * 0.030F + balance.sideStance() * 0.020F) * balance.alpha(),
                 (-0.145F - balance.railSpread() * 0.220F + balance.sideLoad() * 0.10F - balance.ascend() * 0.020F) * balance.alpha(),
                 LEFT_LEG_ROOT_X - midlinePull,
                 LEG_ROOT_Y,
-                leftZ
-        );
+                leftZ);
         return followBody(balance, body, right, left);
     }
 
@@ -190,16 +187,14 @@ final class ClientSlideBalancePoseSolver {
                 (0.034F + balance.sideLoad() * 0.12F + (balance.rightLead() ? -0.012F : 0.018F)) * balance.alpha(),
                 RIGHT_LEG_ROOT_X + midlinePull,
                 LEG_ROOT_Y,
-                balance.rightLead() ? frontDepth : rearDepth
-        );
+                balance.rightLead() ? frontDepth : rearDepth);
         LegPose left = new LegPose(
                 ((balance.rightLead() ? back : -front) + balance.crouch() * 0.34F) * balance.alpha(),
                 (0.050F + balance.footYaw() * 0.48F + balance.turn() * 0.030F + balance.sideStance() * 0.025F) * balance.alpha(),
                 (-0.034F + balance.sideLoad() * 0.12F + (balance.rightLead() ? -0.018F : 0.012F)) * balance.alpha(),
                 LEFT_LEG_ROOT_X - midlinePull,
                 LEG_ROOT_Y,
-                balance.rightLead() ? rearDepth : frontDepth
-        );
+                balance.rightLead() ? rearDepth : frontDepth);
         return followBody(balance, body, right, left);
     }
 
@@ -244,8 +239,7 @@ final class ClientSlideBalancePoseSolver {
                         + balance.descend() * 0.012F) * balance.alpha(),
                 RIGHT_LEG_ROOT_X + midlinePull,
                 LEG_ROOT_Y,
-                balance.rightLead() ? frontDepth : rearDepth
-        );
+                balance.rightLead() ? frontDepth : rearDepth);
         LegPose left = new LegPose(
                 (balance.rightLead() ? rearLeg : frontLeg) * balance.alpha() * (1.0F - balance.forwardStability()),
                 (lineTurn + (balance.rightLead() ? rearToe : frontToe) + balance.turn() * 0.020F + balance.sideStance() * (monorail ? 0.160F : 0.135F)) * balance.alpha(),
@@ -255,8 +249,7 @@ final class ClientSlideBalancePoseSolver {
                         - balance.ascend() * 0.010F) * balance.alpha(),
                 LEFT_LEG_ROOT_X - midlinePull,
                 LEG_ROOT_Y,
-                balance.rightLead() ? rearDepth : frontDepth
-        );
+                balance.rightLead() ? rearDepth : frontDepth);
         return followBody(balance, body, right, left);
     }
 
@@ -274,16 +267,14 @@ final class ClientSlideBalancePoseSolver {
                 (balance.footRoll() * (1.0F - balance.vertical() * 0.45F) + balance.sideLoad() * 0.13F + (balance.rightLead() ? -0.018F : 0.024F) + balance.descend() * 0.018F) * balance.alpha(),
                 RIGHT_LEG_ROOT_X + midlinePull,
                 LEG_ROOT_Y,
-                balance.rightLead() ? frontDepth : rearDepth
-        );
+                balance.rightLead() ? frontDepth : rearDepth);
         LegPose left = new LegPose(
                 ((balance.rightLead() ? back : -front) + balance.crouch() * 0.30F + balance.ascend() * balance.verticalBrace() * 0.24F - balance.descend() * balance.verticalBrace() * 0.14F) * balance.alpha() * (1.0F - balance.forwardStability()),
                 (0.040F + balance.footYaw() + balance.turn() * 0.034F + balance.sideStance() * 0.048F) * balance.alpha(),
                 (-balance.footRoll() * (1.0F - balance.vertical() * 0.45F) + balance.sideLoad() * 0.13F + (balance.rightLead() ? -0.024F : 0.018F) - balance.ascend() * 0.014F) * balance.alpha(),
                 LEFT_LEG_ROOT_X - midlinePull,
                 LEG_ROOT_Y,
-                balance.rightLead() ? rearDepth : frontDepth
-        );
+                balance.rightLead() ? rearDepth : frontDepth);
         return followBody(balance, body, right, left);
     }
 
@@ -301,16 +292,14 @@ final class ClientSlideBalancePoseSolver {
                 right.zRot() + body.zRot() * rotationFollow,
                 rightRoot.x,
                 rightRoot.y,
-                rightRoot.z
-        );
+                rightRoot.z);
         LegPose followedLeft = new LegPose(
                 left.xRot() + body.xRot() * rotationFollow,
                 left.yRot() + body.yRot() * rotationFollow,
                 left.zRot() + body.zRot() * rotationFollow,
                 leftRoot.x,
                 leftRoot.y,
-                leftRoot.z
-        );
+                leftRoot.z);
         return new LegPairPose(followedRight, followedLeft);
     }
 
@@ -339,8 +328,7 @@ final class ClientSlideBalancePoseSolver {
                         - rightOutside * turnAmount * 0.135F
                         + rightForward * turnAmount * 0.040F) * balance.alpha(),
                 (-0.060F - balance.speed() * 0.040F + balance.previewTurn() * 0.125F - balance.sideStance() * 0.048F + balance.descend() * 0.026F) * balance.alpha(),
-                (armOpen + rightOutside * turnAmount * 0.210F - rightForward * 0.045F + balance.sideLoad() * 0.135F) * balance.alpha()
-        );
+                (armOpen + rightOutside * turnAmount * 0.210F - rightForward * 0.045F + balance.sideLoad() * 0.135F) * balance.alpha());
         ArmPose left = new ArmPose(
                 ((balance.rightLead() ? backSweep : -forwardReach)
                         - slopeArm * 0.52F
@@ -348,8 +336,7 @@ final class ClientSlideBalancePoseSolver {
                         - leftOutside * turnAmount * 0.135F
                         + leftForward * turnAmount * 0.040F) * balance.alpha(),
                 (0.060F + balance.speed() * 0.040F + balance.previewTurn() * 0.125F - balance.sideStance() * 0.048F - balance.ascend() * 0.020F) * balance.alpha(),
-                (-armOpen - leftOutside * turnAmount * 0.210F + leftForward * 0.045F + balance.sideLoad() * 0.135F) * balance.alpha()
-        );
+                (-armOpen - leftOutside * turnAmount * 0.210F + leftForward * 0.045F + balance.sideLoad() * 0.135F) * balance.alpha());
         return new ArmPairPose(right, left);
     }
 
@@ -362,8 +349,7 @@ final class ClientSlideBalancePoseSolver {
         return t * t * (3.0D - 2.0D * t);
     }
 
-    record WorldPose(float pitchDegrees, float rollDegrees) {
-    }
+    record WorldPose(float pitchDegrees, float rollDegrees) {}
 
     record ModelPose(BodyPose body, HeadPose head, LegPose rightLeg, LegPose leftLeg, ArmPose rightArm, ArmPose leftArm) {
         void apply(PlayerModel model) {
@@ -379,17 +365,13 @@ final class ClientSlideBalancePoseSolver {
         }
     }
 
-    private record BodyPose(float xRot, float yRot, float zRot) {
-    }
+    private record BodyPose(float xRot, float yRot, float zRot) {}
 
-    private record HeadPose(float xRot, float zRot) {
-    }
+    private record HeadPose(float xRot, float zRot) {}
 
-    private record LegPairPose(LegPose right, LegPose left) {
-    }
+    private record LegPairPose(LegPose right, LegPose left) {}
 
-    private record ArmPairPose(ArmPose right, ArmPose left) {
-    }
+    private record ArmPairPose(ArmPose right, ArmPose left) {}
 
     private record LegPose(float xRot, float yRot, float zRot, float x, float y, float z) {
         private void applyToRight(PlayerModel model) {
@@ -454,8 +436,7 @@ final class ClientSlideBalancePoseSolver {
             float uphillPress,
             float downhillBrace,
             float verticalBrace,
-            float forwardStability
-    ) {
+            float forwardStability) {
         private static BalanceState of(ClientSlidePoseController.PoseSnapshot pose, ClientSlidePoseController.SlidePoseFrame frame, float sideStance) {
             ClientSlidePoseController.RidePoseDescriptor ride = pose.ride();
             float alpha = (float) Mth.clamp(pose.poseAlpha(), 0.0D, 1.0D);
@@ -508,8 +489,7 @@ final class ClientSlideBalancePoseSolver {
                     uphillPress,
                     downhillBrace,
                     vertical * (0.040F + speed * 0.026F),
-                    0.08F + uphillStability * 0.16F + vertical * 0.08F
-            );
+                    0.08F + uphillStability * 0.16F + vertical * 0.08F);
         }
     }
 }

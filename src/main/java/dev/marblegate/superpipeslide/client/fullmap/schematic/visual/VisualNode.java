@@ -2,7 +2,6 @@ package dev.marblegate.superpipeslide.client.fullmap.schematic.visual;
 
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeKind;
-
 import java.util.List;
 import java.util.UUID;
 
@@ -16,8 +15,7 @@ public record VisualNode(
         String label,
         List<UUID> routeLineIds,
         int importance,
-        boolean fallbackPosition
-) {
+        boolean fallbackPosition) {
     public VisualNode {
         routeLineIds = List.copyOf(routeLineIds);
     }

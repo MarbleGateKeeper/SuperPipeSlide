@@ -1,15 +1,13 @@
 package dev.marblegate.superpipeslide.common.core.route.service;
 
-import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
-
+import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
 public final class RouteValidationService {
-    private RouteValidationService() {
-    }
+    private RouteValidationService() {}
 
     public static ValidationResult validateLayoutStops(RouteNetworkSavedData routes, RouteLayout layout, List<UUID> platformStopIds) {
         if (layout == null) {
@@ -42,4 +40,3 @@ public final class RouteValidationService {
         DUPLICATE_PLATFORM_STOP
     }
 }
-

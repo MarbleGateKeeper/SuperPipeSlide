@@ -3,7 +3,6 @@ package dev.marblegate.superpipeslide.client.fullmap.schematic.model;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapNode;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeKind;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,8 +18,7 @@ public record SchematicNode(
         Optional<NodeId> clusterId,
         double anchorWeight,
         double maxDisplacement,
-        int importance
-) {
+        int importance) {
     public SchematicNode {
         routeLineIds = List.copyOf(routeLineIds);
         clusterId = clusterId == null ? Optional.empty() : clusterId;
@@ -38,7 +36,6 @@ public record SchematicNode(
                 node.clusterId(),
                 anchorWeight,
                 maxDisplacement,
-                importance
-        );
+                importance);
     }
 }

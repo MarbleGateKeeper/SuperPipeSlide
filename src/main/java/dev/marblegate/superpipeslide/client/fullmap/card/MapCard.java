@@ -3,19 +3,17 @@ package dev.marblegate.superpipeslide.client.fullmap.card;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.model.ClusterCardState;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardViewMode;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.render.RouteLineCardState;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.level.Level;
-
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 public record MapCard(
         CardKind kind,
         UUID id,
         Optional<ResourceKey<Level>> levelKey,
         Optional<RouteLineCardState> routeLineState,
-        Optional<ClusterCardState> clusterState
-) {
+        Optional<ClusterCardState> clusterState) {
     public MapCard {
         levelKey = levelKey == null ? Optional.empty() : levelKey;
         routeLineState = routeLineState == null ? Optional.empty() : routeLineState;

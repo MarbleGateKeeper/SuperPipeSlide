@@ -9,6 +9,9 @@ import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetwor
 import dev.marblegate.superpipeslide.common.registry.SPSBlocks;
 import dev.marblegate.superpipeslide.common.registry.SPSDataComponents;
 import dev.marblegate.superpipeslide.config.Config;
+import java.util.List;
+import java.util.Locale;
+import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -16,8 +19,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
@@ -27,10 +30,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
-
-import java.util.List;
-import java.util.Locale;
-import java.util.function.Consumer;
 
 public class PipeConnectorItem extends Item {
     private static final int MAX_CONTROL_POINTS = 8;
@@ -431,5 +430,4 @@ public class PipeConnectorItem extends Item {
         Vec3 normalizedChord = chord.normalize();
         return axis.dot(normalizedChord) < 0.0D ? axis.scale(-1.0D) : axis;
     }
-
 }

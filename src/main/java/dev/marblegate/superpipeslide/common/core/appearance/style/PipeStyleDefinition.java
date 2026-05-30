@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.common.core.appearance.style;
 
-
 import dev.marblegate.superpipeslide.common.core.appearance.material.MaterialSlotDefinition;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,8 +17,7 @@ public record PipeStyleDefinition(
         List<PipeStyleParameterDefinition> parameters,
         float lineWidth,
         int ringInterval,
-        boolean openTop
-) {
+        boolean openTop) {
     public PipeStyleDefinition {
         slots = List.copyOf(slots);
         parameters = List.copyOf(parameters);

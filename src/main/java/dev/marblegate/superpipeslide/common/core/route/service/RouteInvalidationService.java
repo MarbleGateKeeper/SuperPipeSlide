@@ -22,8 +22,7 @@ import java.util.UUID;
 public final class RouteInvalidationService {
     private static final int REPAIR_COMPONENT_SEARCH_LIMIT = 512;
 
-    private RouteInvalidationService() {
-    }
+    private RouteInvalidationService() {}
 
     public static boolean apply(PipeNetworkChangeSet changes, RouteNetworkSavedData routes, PipeNetworkView pipeNetwork) {
         if (changes.isEmpty() || !changes.mayInvalidateRouteSections()) {
@@ -48,7 +47,7 @@ public final class RouteInvalidationService {
 
         boolean foldTopologyMayHaveChanged = !changes.removedNodeIds().isEmpty()
                 || changes.addedOrUpdatedNodeIds().stream()
-                .anyMatch(anchorId -> pipeNetwork.foldAnchorAt(anchorId).isPresent());
+                        .anyMatch(anchorId -> pipeNetwork.foldAnchorAt(anchorId).isPresent());
         if (foldTopologyMayHaveChanged) {
             Set<PipeAnchorId> affectedFoldAnchors = new LinkedHashSet<>();
             affectedFoldAnchors.addAll(changes.removedNodeIds());
@@ -146,4 +145,3 @@ public final class RouteInvalidationService {
         SEARCH_INCOMPLETE
     }
 }
-

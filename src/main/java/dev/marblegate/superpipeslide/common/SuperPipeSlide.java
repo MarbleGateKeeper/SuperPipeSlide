@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.common;
 
-
 import com.mojang.logging.LogUtils;
 import dev.marblegate.superpipeslide.common.registry.SPSBlockEntities;
 import dev.marblegate.superpipeslide.common.registry.SPSBlocks;
@@ -11,10 +10,10 @@ import dev.marblegate.superpipeslide.config.ClientConfig;
 import dev.marblegate.superpipeslide.config.Config;
 import dev.marblegate.superpipeslide.network.SPSNetworking;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.neoforged.fml.ModContainer;
 import org.slf4j.Logger;
 
 @Mod(SuperPipeSlide.MODID)

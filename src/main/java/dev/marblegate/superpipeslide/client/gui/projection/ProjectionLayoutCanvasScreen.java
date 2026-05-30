@@ -1,31 +1,34 @@
 package dev.marblegate.superpipeslide.client.gui.projection;
 
-
-import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
-import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
+import dev.marblegate.superpipeslide.client.core.projection.cache.ProjectionBuiltinIconTextureCache;
+import dev.marblegate.superpipeslide.client.core.projection.cache.ProjectionNetworkImageCache;
+import dev.marblegate.superpipeslide.client.core.projection.preview.ProjectionLayoutPreviewPainter;
+import dev.marblegate.superpipeslide.client.core.projection.preview.ProjectionPreviewScenario;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
 import dev.marblegate.superpipeslide.client.gui.route.RouteEditorGui;
 import dev.marblegate.superpipeslide.client.gui.route.RouteEditorScreenBase;
-import dev.marblegate.superpipeslide.client.core.projection.preview.ProjectionLayoutPreviewPainter;
-import dev.marblegate.superpipeslide.client.core.projection.cache.ProjectionBuiltinIconTextureCache;
-import dev.marblegate.superpipeslide.client.core.projection.cache.ProjectionNetworkImageCache;
-import dev.marblegate.superpipeslide.client.core.projection.preview.ProjectionPreviewScenario;
 import dev.marblegate.superpipeslide.client.renderer.projection.PlatformProjectorRenderer;
 import dev.marblegate.superpipeslide.client.renderer.projection.StationNameProjectorRenderer;
-import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionCanvas;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionBuiltinIcon;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponent;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponentDescriptors;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponentSettings;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponentType;
-import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionImageLayout;
-import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutDefinition;
-import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutTarget;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionOverflowMode;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionTextAlign;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionVisibleCondition;
+import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionCanvas;
+import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionImageLayout;
+import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutDefinition;
+import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutTarget;
 import dev.marblegate.superpipeslide.network.projection.ClientboundOpenProjectionLayoutDesignerPayload;
 import dev.marblegate.superpipeslide.network.projection.ServerboundProjectionLayoutSavePayload;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
@@ -35,13 +38,6 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 import org.lwjgl.glfw.GLFW;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
-import java.util.UUID;
 
 public final class ProjectionLayoutCanvasScreen extends RouteEditorScreenBase {
     private static final int BG = 0xFF141A1E;
@@ -2712,13 +2708,13 @@ public final class ProjectionLayoutCanvasScreen extends RouteEditorScreenBase {
                     this.dragStart = component;
                     this.dragMouseX = event.x();
                     this.dragMouseY = event.y();
-            } else {
-                this.selectedId = null;
-                this.propertiesOpen = false;
-                clearFloatingTextBoxFocus();
+                } else {
+                    this.selectedId = null;
+                    this.propertiesOpen = false;
+                    clearFloatingTextBoxFocus();
+                }
+                return true;
             }
-            return true;
-        }
         }
         if (event.button() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE && this.stage.contains(event.x(), event.y())) {
             this.dragMode = DragMode.PAN;
@@ -3336,7 +3332,6 @@ public final class ProjectionLayoutCanvasScreen extends RouteEditorScreenBase {
         int ySign() {
             return this.ySign;
         }
-
     }
 
     private enum Handle {
@@ -3376,11 +3371,9 @@ public final class ProjectionLayoutCanvasScreen extends RouteEditorScreenBase {
         }
     }
 
-    private record Point(double x, double y) {
-    }
+    private record Point(double x, double y) {}
 
-    private record LayeredClickAction(ClickLayer layer, SPSGui.Rect bounds, Runnable action, Component tooltip) {
-    }
+    private record LayeredClickAction(ClickLayer layer, SPSGui.Rect bounds, Runnable action, Component tooltip) {}
 
     private enum ClickLayer {
         BASE,

@@ -3,7 +3,6 @@ package dev.marblegate.superpipeslide.common.core.path;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
-
 import java.util.Comparator;
 import java.util.Optional;
 
@@ -13,13 +12,12 @@ public record PipeGraphEdge(
         Optional<PipeConnectionRef> connectionRef,
         double length,
         double cost,
-        String stableKey
-) {
+        String stableKey) {
+
     static final Comparator<PipeGraphEdge> STABLE_ORDER = Comparator
             .comparingDouble(PipeGraphEdge::cost)
             .thenComparing(PipeGraphEdge::stableKey)
             .thenComparing(edge -> PipeGraphSnapshot.stableAnchorKey(edge.to()));
-
     public PipeGraphEdge {
         connectionRef = connectionRef == null ? Optional.empty() : connectionRef;
         length = Math.max(0.0D, length);
@@ -34,8 +32,7 @@ public record PipeGraphEdge(
                 Optional.of(ref),
                 connection.length(),
                 connection.length() + Math.max(0.0D, branchPenalty),
-                "pipe/" + connection.id()
-        );
+                "pipe/" + connection.id());
     }
 
     static PipeGraphEdge fold(PipeAnchorId from, PipeAnchorId to) {
@@ -45,7 +42,6 @@ public record PipeGraphEdge(
                 Optional.empty(),
                 0.0D,
                 0.25D,
-                "fold/" + PipeGraphSnapshot.stableAnchorKey(to)
-        );
+                "fold/" + PipeGraphSnapshot.stableAnchorKey(to));
     }
 }

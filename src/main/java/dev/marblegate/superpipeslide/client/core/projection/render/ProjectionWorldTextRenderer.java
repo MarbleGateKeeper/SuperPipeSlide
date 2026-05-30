@@ -3,6 +3,11 @@ package dev.marblegate.superpipeslide.client.core.projection.render;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -13,19 +18,12 @@ import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 import org.joml.Vector3f;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
 public final class ProjectionWorldTextRenderer {
     private static final Matrix4f IDENTITY_POSE = new Matrix4f();
     private static final int MAX_PREPARED_TEXT_ENTRIES = 4096;
     private static final Map<PreparedTextKey, PreparedTextBatch> PREPARED_TEXT = new LinkedHashMap<>(256, 0.75F, true);
 
-    private ProjectionWorldTextRenderer() {
-    }
+    private ProjectionWorldTextRenderer() {}
 
     public static void clear() {
         synchronized (PREPARED_TEXT) {

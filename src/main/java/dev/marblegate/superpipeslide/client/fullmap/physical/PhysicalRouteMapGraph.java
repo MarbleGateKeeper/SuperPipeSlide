@@ -22,8 +22,7 @@ public record PhysicalRouteMapGraph(
         List<MapBuildDiagnostic> diagnostics,
         Aabb2 worldBounds,
         long routeRevision,
-        long pipeRevision
-) {
+        long pipeRevision) {
     public PhysicalRouteMapGraph {
         nodes = nodes.stream().sorted(Comparator.comparing(PhysicalMapNode::id)).toList();
         nodesById = Map.copyOf(nodesById);

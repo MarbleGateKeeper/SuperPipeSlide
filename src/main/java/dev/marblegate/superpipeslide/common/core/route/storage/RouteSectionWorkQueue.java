@@ -56,7 +56,5 @@ final class RouteSectionWorkQueue {
         this.lastRepairAttemptRevisionBySection.remove(sectionId);
     }
 
-    record WorkItem(UUID sectionId, boolean repairAttempt) {
-    }
+    record WorkItem(UUID sectionId, boolean repairAttempt) {}
 }
-

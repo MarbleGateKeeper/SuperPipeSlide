@@ -5,8 +5,8 @@ import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetwor
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.ServerPipeNetworkView;
 import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.network.pipe.appearance.ClientboundPipeAppearanceSyncPayload;
-import dev.marblegate.superpipeslide.network.sync.route.ClientboundRouteDataDeltaPayload;
 import dev.marblegate.superpipeslide.network.sync.pipe.PipeNetworkDeltaPayload;
+import dev.marblegate.superpipeslide.network.sync.route.ClientboundRouteDataDeltaPayload;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;

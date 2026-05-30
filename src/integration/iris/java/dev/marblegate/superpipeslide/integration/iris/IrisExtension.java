@@ -1,8 +1,8 @@
 package dev.marblegate.superpipeslide.integration.iris;
 
-import dev.marblegate.superpipeslide.client.renderer.pipe.ClientPipeRenderer;
-import dev.marblegate.superpipeslide.client.renderer.fold.ClientFoldTraversalPostEffectRenderer;
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
+import dev.marblegate.superpipeslide.client.renderer.fold.ClientFoldTraversalPostEffectRenderer;
+import dev.marblegate.superpipeslide.client.renderer.pipe.ClientPipeRenderer;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.integration.ModIntegration;
 import dev.marblegate.superpipeslide.integration.iris.client.IrisFoldTraversalPostEffectExtension;

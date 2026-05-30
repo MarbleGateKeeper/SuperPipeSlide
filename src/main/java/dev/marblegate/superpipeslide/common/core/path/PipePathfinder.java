@@ -11,13 +11,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.Set;
-import java.util.UUID;
 
 public final class PipePathfinder {
     private static final double COST_EPSILON = 1.0E-6D;
 
-    private PipePathfinder() {
-    }
+    private PipePathfinder() {}
 
     public static PathSearchResult shortestPath(PipeConnection fromConnection, PipeConnection toConnection, PipeGraphSnapshot graph, PathSearchOptions options) {
         List<PipeAnchorId> starts = List.of(fromConnection.fromAnchor(), fromConnection.toAnchor()).stream()
@@ -130,6 +128,5 @@ public final class PipePathfinder {
                 .thenComparing(node -> PipeGraphSnapshot.stableAnchorKey(node.anchorId()));
     }
 
-    private record Step(PipeAnchorId previousAnchor, Optional<PipeConnectionRef> connectionRef, double length) {
-    }
+    private record Step(PipeAnchorId previousAnchor, Optional<PipeConnectionRef> connectionRef, double length) {}
 }

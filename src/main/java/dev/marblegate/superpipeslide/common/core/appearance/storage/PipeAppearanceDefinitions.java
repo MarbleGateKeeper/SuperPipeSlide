@@ -54,8 +54,7 @@ public final class PipeAppearanceDefinitions {
         registerVariants();
     }
 
-    private PipeAppearanceDefinitions() {
-    }
+    private PipeAppearanceDefinitions() {}
 
     public static List<PipeStyleDefinition> styles() {
         return List.copyOf(STYLES.values());
@@ -134,51 +133,42 @@ public final class PipeAppearanceDefinitions {
                         selection.preserveAccents(),
                         selection.textureStrength(),
                         selection.accentSensitivity(),
-                        selection.smartStrength()
-                ))
+                        selection.smartStrength()))
                 .orElseGet(() -> defaultSelectionForSlot(fallbackSlotId));
     }
 
     private static void registerStyles() {
         style("round_pipe", "basic", PipeStyleShape.ROUND, "round_basic", BODY, List.of(
-                parameter(PARAM_RADIUS, 0.20D, 0.10D, 0.60D, 0.01D)
-        ), 1.7F, 5, false);
+                parameter(PARAM_RADIUS, 0.20D, 0.10D, 0.60D, 0.01D)), 1.7F, 5, false);
         style("box_pipe", "basic", PipeStyleShape.BOX, "box_basic", BODY, List.of(
                 parameter(PARAM_WIDTH, 0.56D, 0.20D, 1.40D, 0.02D),
-                parameter(PARAM_HEIGHT, 0.42D, 0.14D, 1.20D, 0.02D)
-        ), 2.0F, 4, false);
+                parameter(PARAM_HEIGHT, 0.42D, 0.14D, 1.20D, 0.02D)), 2.0F, 4, false);
         style("triangle_pipe", "profiled", PipeStyleShape.TRIANGLE, "triangle_basic", TOP_SIDE, List.of(
                 parameter(PARAM_WIDTH, 0.58D, 0.26D, 1.40D, 0.02D),
                 parameter(PARAM_DEPTH, 0.40D, 0.16D, 1.10D, 0.02D),
-                parameter(PARAM_TOP_FLATNESS, 0.20D, 0.06D, 0.60D, 0.02D)
-        ), 1.9F, 4, false);
+                parameter(PARAM_TOP_FLATNESS, 0.20D, 0.06D, 0.60D, 0.02D)), 1.9F, 4, false);
         style("rail_pipe", "track", PipeStyleShape.RAIL, "rail_basic", RAIL_TIE, List.of(
                 parameter(PARAM_GAUGE, 0.44D, 0.28D, 1.00D, 0.02D),
                 parameter(PARAM_RAIL_WIDTH, 0.08D, 0.04D, 0.20D, 0.01D),
                 parameter(PARAM_RAIL_HEIGHT, 0.10D, 0.05D, 0.28D, 0.01D),
                 parameter(PARAM_TIE_INTERVAL, 0.62D, 0.32D, 1.40D, 0.05D),
-                parameter(PARAM_TIE_WIDTH, 0.12D, 0.06D, 0.30D, 0.01D)
-        ), 1.8F, 5, true);
+                parameter(PARAM_TIE_WIDTH, 0.12D, 0.06D, 0.30D, 0.01D)), 1.8F, 5, true);
         style("slide_pipe", "track", PipeStyleShape.SLIDE, "slide_basic", FLOOR_WALL, List.of(
                 parameter(PARAM_WIDTH, 0.72D, 0.36D, 1.50D, 0.02D),
                 parameter(PARAM_DEPTH, 0.24D, 0.10D, 0.72D, 0.02D),
                 parameter(PARAM_RIM_WIDTH, 0.065D, 0.035D, 0.20D, 0.005D),
                 parameter(PARAM_WALL_SLOPE, 0.20D, 0.00D, 0.80D, 0.02D),
-                parameter(PARAM_FLOOR_RATIO, 0.56D, 0.30D, 0.90D, 0.02D)
-        ), 2.2F, 4, true);
+                parameter(PARAM_FLOOR_RATIO, 0.56D, 0.30D, 0.90D, 0.02D)), 2.2F, 4, true);
         style("faceted_pipe", "profiled", PipeStyleShape.FACETED, "faceted_basic", BODY, List.of(
-                parameter(PARAM_RADIUS, 0.22D, 0.12D, 0.62D, 0.01D)
-        ), 1.8F, 5, false);
+                parameter(PARAM_RADIUS, 0.22D, 0.12D, 0.62D, 0.01D)), 1.8F, 5, false);
         style("monorail_pipe", "track", PipeStyleShape.MONORAIL, "monorail_basic", BEAM_TRACK, List.of(
                 parameter(PARAM_WIDTH, 0.36D, 0.18D, 1.10D, 0.02D),
                 parameter(PARAM_HEIGHT, 0.32D, 0.14D, 1.00D, 0.02D),
-                parameter(PARAM_EDGE_WIDTH, 0.060D, 0.025D, 0.18D, 0.005D)
-        ), 2.0F, 5, false);
+                parameter(PARAM_EDGE_WIDTH, 0.060D, 0.025D, 0.18D, 0.005D)), 2.0F, 5, false);
         style("covered_tube", "tech", PipeStyleShape.COVERED, "covered_half", BASE_CANOPY, List.of(
                 parameter(PARAM_WIDTH, 1.25D, 1.05D, 1.95D, 0.02D),
                 parameter(PARAM_HEIGHT, 2.00D, 1.88D, 3.00D, 0.02D),
-                parameter(PARAM_RIM_WIDTH, 0.070D, 0.035D, 0.22D, 0.005D)
-        ), 2.1F, 4, true);
+                parameter(PARAM_RIM_WIDTH, 0.070D, 0.035D, 0.22D, 0.005D)), 2.1F, 4, true);
     }
 
     private static void registerVariants() {

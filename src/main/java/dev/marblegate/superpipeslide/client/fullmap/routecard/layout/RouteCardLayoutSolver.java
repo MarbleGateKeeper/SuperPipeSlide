@@ -20,8 +20,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 
 public final class RouteCardLayoutSolver {
@@ -44,8 +42,7 @@ public final class RouteCardLayoutSolver {
             new Vec2(-1.0D, 0.0D),
             new Vec2(-SQRT_HALF, -SQRT_HALF),
             new Vec2(0.0D, -1.0D),
-            new Vec2(SQRT_HALF, -SQRT_HALF)
-    );
+            new Vec2(SQRT_HALF, -SQRT_HALF));
 
     public RouteCardVisualGraph solve(RouteCardSemanticGraph graph) {
         return this.solvePractical(graph);
@@ -148,8 +145,7 @@ public final class RouteCardLayoutSolver {
             Map<RouteCardNodeId, RouteCardNode> nodeById,
             Map<String, RouteCardEdge> edgeById,
             Map<RouteCardNodeId, Integer> canonicalSegmentIndexByNode,
-            RouteCardSpacing spacing
-    ) {
+            RouteCardSpacing spacing) {
         List<SegmentBody> bodies = new ArrayList<>();
         for (RouteCardSegment segment : graph.segments().stream().sorted(Comparator.comparingInt(RouteCardSegment::index)).toList()) {
             List<RouteCardNode> nodes = segment.nodeIds().stream()
@@ -452,8 +448,7 @@ public final class RouteCardLayoutSolver {
             for (int lane : boundaryPortLanes()) {
                 Vec2 candidate = new Vec2(
                         context.base().x() + direction.x() * distance + tangent.x() * lane * spacing.boundaryPortSpacing(),
-                        context.base().y() + direction.y() * distance + tangent.y() * lane * spacing.boundaryPortSpacing()
-                );
+                        context.base().y() + direction.y() * distance + tangent.y() * lane * spacing.boundaryPortSpacing());
                 double score = Math.abs(rotation) * 32.0D + Math.abs(lane) * 14.0D + candidate.distanceTo(context.base()) * 0.06D;
                 if (anchorBounds.inflate(7.0D).contains(candidate.x(), candidate.y())) {
                     score += 250.0D;
@@ -582,8 +577,7 @@ public final class RouteCardLayoutSolver {
                 Vec2 anchor = anchors.get(node.id());
                 positions.put(node.id(), new Vec2(
                         position.x() + delta.x() + (anchor.x() - position.x()) * 0.10D,
-                        position.y() + delta.y() + (anchor.y() - position.y()) * 0.10D
-                ));
+                        position.y() + delta.y() + (anchor.y() - position.y()) * 0.10D));
             }
         }
     }
@@ -600,8 +594,7 @@ public final class RouteCardLayoutSolver {
                 bodyBounds.minX(),
                 bodyBounds.minY() - DIMENSION_CHIP_HEIGHT - 8.0D,
                 bodyBounds.minX() + DIMENSION_CHIP_WIDTH,
-                bodyBounds.minY() - 8.0D
-        );
+                bodyBounds.minY() - 8.0D);
         return bodyBounds.include(labels).include(chip).inflate(SEGMENT_BODY_PADDING);
     }
 
@@ -1120,8 +1113,8 @@ public final class RouteCardLayoutSolver {
         double stationSpacing = mode == RouteCardSolveMode.SCHEMATIC
                 ? DEFAULT_STATION_SPACING
                 : distances.isEmpty()
-                ? DEFAULT_STATION_SPACING
-                : clamp(median(distances), MIN_STATION_SPACING, MAX_STATION_SPACING);
+                        ? DEFAULT_STATION_SPACING
+                        : clamp(median(distances), MIN_STATION_SPACING, MAX_STATION_SPACING);
         return new RouteCardSpacing(
                 mode,
                 stationSpacing,
@@ -1131,8 +1124,7 @@ public final class RouteCardLayoutSolver {
                 clamp(stationSpacing * 1.05D, 96.0D, 168.0D),
                 clamp(stationSpacing * 0.18D, 18.0D, 30.0D),
                 clamp(stationSpacing * 0.25D, 26.0D, 42.0D),
-                clamp(stationSpacing * 0.18D, 18.0D, 30.0D)
-        );
+                clamp(stationSpacing * 0.18D, 18.0D, 30.0D));
     }
 
     private static void addStationDistance(List<Double> distances, RouteCardNode first, RouteCardNode second) {
@@ -1173,8 +1165,7 @@ public final class RouteCardLayoutSolver {
             RouteCardEdge edge,
             int segmentIndex,
             Map<RouteCardNodeId, RouteCardNode> nodeById,
-            Map<RouteCardNodeId, Integer> canonicalSegmentIndexByNode
-    ) {
+            Map<RouteCardNodeId, Integer> canonicalSegmentIndexByNode) {
         return isCanonicalInSegment(edge.from(), segmentIndex, nodeById, canonicalSegmentIndexByNode)
                 && isCanonicalInSegment(edge.to(), segmentIndex, nodeById, canonicalSegmentIndexByNode);
     }
@@ -1183,8 +1174,7 @@ public final class RouteCardLayoutSolver {
             RouteCardNodeId nodeId,
             int segmentIndex,
             Map<RouteCardNodeId, RouteCardNode> nodeById,
-            Map<RouteCardNodeId, Integer> canonicalSegmentIndexByNode
-    ) {
+            Map<RouteCardNodeId, Integer> canonicalSegmentIndexByNode) {
         RouteCardNode node = nodeById.get(nodeId);
         if (node == null || node.kind() != RouteCardNodeKind.STATION) {
             return true;
@@ -1247,14 +1237,12 @@ public final class RouteCardLayoutSolver {
                 point.x() + radius + 7.0D,
                 point.y() - height * 0.5D,
                 point.x() + radius + 7.0D + width,
-                point.y() + height * 0.5D
-        );
+                point.y() + height * 0.5D);
         Aabb2 top = new Aabb2(
                 point.x() - width * 0.5D,
                 point.y() - radius - height - 7.0D,
                 point.x() + width * 0.5D,
-                point.y() - radius - 7.0D
-        );
+                point.y() - radius - 7.0D);
         return right.include(top).inflate(SEGMENT_LABEL_PADDING);
     }
 
@@ -1329,8 +1317,7 @@ public final class RouteCardLayoutSolver {
                 Math.toRadians(90.0D), Math.toRadians(-90.0D),
                 Math.toRadians(120.0D), Math.toRadians(-120.0D),
                 Math.toRadians(150.0D), Math.toRadians(-150.0D),
-                Math.PI
-        );
+                Math.PI);
     }
 
     private static List<Double> gapMultipliers() {
@@ -1347,8 +1334,7 @@ public final class RouteCardLayoutSolver {
                 Math.toRadians(18.0D), Math.toRadians(-18.0D),
                 Math.toRadians(34.0D), Math.toRadians(-34.0D),
                 Math.toRadians(55.0D), Math.toRadians(-55.0D),
-                Math.toRadians(82.0D), Math.toRadians(-82.0D)
-        );
+                Math.toRadians(82.0D), Math.toRadians(-82.0D));
     }
 
     private static List<Integer> boundaryPortLanes() {
@@ -1612,8 +1598,7 @@ public final class RouteCardLayoutSolver {
         double uy = (b.y() - a.y()) / length;
         return List.of(
                 new Vec2(a.x() + ux * trimA, a.y() + uy * trimA),
-                new Vec2(b.x() - ux * trimB, b.y() - uy * trimB)
-        );
+                new Vec2(b.x() - ux * trimB, b.y() - uy * trimB));
     }
 
     private static Vec2 pointAtDistance(List<Vec2> points, double target) {
@@ -1738,9 +1723,7 @@ public final class RouteCardLayoutSolver {
             List<RouteCardVisualEdge> localVisualEdges,
             Aabb2 footprint,
             RouteCardNode entryNode,
-            RouteCardNode exitNode
-    ) {
-    }
+            RouteCardNode exitNode) {}
 
     private record PlacedSegmentBody(SegmentBody body, double offsetX, double offsetY) {
         private Vec2 positionOf(RouteCardNodeId nodeId) {
@@ -1757,14 +1740,11 @@ public final class RouteCardLayoutSolver {
         }
     }
 
-    private record PlacementCandidate(PlacedSegmentBody placed, double score, double overlapScore) {
-    }
+    private record PlacementCandidate(PlacedSegmentBody placed, double score, double overlapScore) {}
 
-    private record SegmentPlacement(List<PlacedSegmentBody> placed, boolean fallback) {
-    }
+    private record SegmentPlacement(List<PlacedSegmentBody> placed, boolean fallback) {}
 
-    private record RoutedEdge(RouteCardEdge edge, List<Vec2> points) {
-    }
+    private record RoutedEdge(RouteCardEdge edge, List<Vec2> points) {}
 
     private enum RouteCardSolveMode {
         PRACTICAL,
@@ -1780,12 +1760,9 @@ public final class RouteCardLayoutSolver {
             double segmentPlacementGap,
             double localNodeGap,
             double routeEdgeClearance,
-            double routeEdgeSeparation
-    ) {
-    }
+            double routeEdgeSeparation) {}
 
-    private record BoundaryPortContext(Vec2 base, Vec2 direction) {
-    }
+    private record BoundaryPortContext(Vec2 base, Vec2 direction) {}
 
     private static final class MutablePlacement {
         private final SegmentBody body;

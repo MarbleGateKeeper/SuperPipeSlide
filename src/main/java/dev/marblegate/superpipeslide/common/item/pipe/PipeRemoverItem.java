@@ -3,6 +3,8 @@ package dev.marblegate.superpipeslide.common.item.pipe;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRaycast;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
+import java.util.Optional;
+import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -15,9 +17,6 @@ import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-
-import java.util.Optional;
-import java.util.function.Consumer;
 
 public class PipeRemoverItem extends Item {
     private static final double REMOVE_REACH = 8.0D;
@@ -48,8 +47,7 @@ public class PipeRemoverItem extends Item {
                 eye,
                 player.getLookAngle(),
                 REMOVE_REACH,
-                PIPE_PICK_RADIUS
-        );
+                PIPE_PICK_RADIUS);
         if (target.isEmpty()) {
             player.sendOverlayMessage(Component.translatable("message.superpipeslide.no_pipe_connection_targeted").withStyle(ChatFormatting.RED));
             return InteractionResult.FAIL;

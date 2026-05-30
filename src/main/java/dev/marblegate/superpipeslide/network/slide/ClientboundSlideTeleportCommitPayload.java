@@ -1,6 +1,8 @@
 package dev.marblegate.superpipeslide.network.slide;
 
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -11,9 +13,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 
-import java.util.Optional;
-import java.util.UUID;
-
 public record ClientboundSlideTeleportCommitPayload(
         UUID sessionId,
         ResourceKey<Level> targetLevel,
@@ -23,8 +22,8 @@ public record ClientboundSlideTeleportCommitPayload(
         Optional<UUID> targetConnectionId,
         int direction,
         double distanceOnConnection,
-        double speed
-) implements CustomPacketPayload {
+        double speed) implements CustomPacketPayload {
+
     public static final Type<ClientboundSlideTeleportCommitPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "slide_teleport_commit"));
     public static final StreamCodec<RegistryFriendlyByteBuf, ClientboundSlideTeleportCommitPayload> STREAM_CODEC = StreamCodec.composite(
             UUIDUtil.STREAM_CODEC,
@@ -45,9 +44,7 @@ public record ClientboundSlideTeleportCommitPayload(
             ClientboundSlideTeleportCommitPayload::distanceOnConnection,
             ByteBufCodecs.DOUBLE.cast(),
             ClientboundSlideTeleportCommitPayload::speed,
-            ClientboundSlideTeleportCommitPayload::new
-    );
-
+            ClientboundSlideTeleportCommitPayload::new);
     public ClientboundSlideTeleportCommitPayload {
         targetConnectionId = targetConnectionId == null ? Optional.empty() : targetConnectionId;
         direction = direction < 0 ? -1 : 1;

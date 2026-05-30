@@ -2,14 +2,13 @@ package dev.marblegate.superpipeslide.common.core.route.model.layout;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
-
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 public record RouteLayout(
         UUID id,
@@ -21,8 +20,8 @@ public record RouteLayout(
         List<RouteLayoutSectionRef> orderedSectionRefs,
         boolean bidirectional,
         boolean loop,
-        boolean nameAsSectionName
-) {
+        boolean nameAsSectionName) {
+
     private static final int MAX_TRANSLATED_NAMES = 1;
     private static final int MAX_STOPS = 512;
     private static final int MAX_SECTIONS = 512;
@@ -37,8 +36,7 @@ public record RouteLayout(
             RouteLayoutSectionRef.CODEC.listOf().optionalFieldOf("ordered_section_refs", List.of()).forGetter(RouteLayout::orderedSectionRefs),
             Codec.BOOL.optionalFieldOf("bidirectional", false).forGetter(RouteLayout::bidirectional),
             Codec.BOOL.optionalFieldOf("loop", false).forGetter(RouteLayout::loop),
-            Codec.BOOL.optionalFieldOf("name_as_section_name", false).forGetter(RouteLayout::nameAsSectionName)
-    ).apply(instance, RouteLayout::new));
+            Codec.BOOL.optionalFieldOf("name_as_section_name", false).forGetter(RouteLayout::nameAsSectionName)).apply(instance, RouteLayout::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, RouteLayout> STREAM_CODEC = StreamCodec.composite(
             UUIDUtil.STREAM_CODEC,
@@ -61,9 +59,7 @@ public record RouteLayout(
             RouteLayout::loop,
             ByteBufCodecs.BOOL,
             RouteLayout::nameAsSectionName,
-            RouteLayout::new
-    );
-
+            RouteLayout::new);
     public RouteLayout {
         translatedNames = translatedNames.stream().filter(name -> !name.isBlank()).limit(MAX_TRANSLATED_NAMES).toList();
         orderedPlatformStops = List.copyOf(orderedPlatformStops);
@@ -78,4 +74,3 @@ public record RouteLayout(
         return new RouteLayout(this.id, this.routeLineId, displayName, translatedNames, this.terminalStationGroupId, this.orderedPlatformStops, this.orderedSectionRefs, bidirectional, loop, nameAsSectionName);
     }
 }
-

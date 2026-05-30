@@ -84,8 +84,7 @@ public final class ClientSlideFeedbackController {
     private static final List<TrailParticle> TRAILS = new ArrayList<>();
     private static final Map<Integer, RemoteSlideState> REMOTE_STATES = new LinkedHashMap<>();
 
-    private ClientSlideFeedbackController() {
-    }
+    private ClientSlideFeedbackController() {}
 
     public static void tick(Minecraft minecraft, LocalPlayer player) {
         Optional<ClientSlideFeedbackSnapshot> snapshot = ClientSlideController.slideFeedbackSnapshot(player);
@@ -169,8 +168,7 @@ public final class ClientSlideFeedbackController {
                 motionPhase,
                 fovBoost(),
                 edgeIntensity(),
-                next.ticksSliding()
-        );
+                next.ticksSliding());
 
         spawnTrails(next);
         lastSpeed = next.speed();
@@ -270,8 +268,7 @@ public final class ClientSlideFeedbackController {
                     particle.length * (0.72D + life * 0.36D),
                     withAlpha(particle.color, alpha),
                     particle.age / (double) particle.lifetime,
-                    particle.kind
-            ));
+                    particle.kind));
         }
     }
 
@@ -403,8 +400,7 @@ public final class ClientSlideFeedbackController {
                 downBlend,
                 accelerationPulse,
                 1.0D,
-                MAX_TRAILS
-        );
+                MAX_TRAILS);
     }
 
     private static void spawnFrameTrails(List<TrailParticle> particles, Vec3 position, Vec3 frameTangent, double frameSpeed01, boolean frameHighway, boolean frameStationSlow, double frameAlpha, double framePerceptualSpeed, double frameAccelerationBlend, double frameHighwayBlend, double framePlatformBlend, double frameVerticalBlend, double frameUpBlend, double frameDownBlend, double frameAccelerationPulse, double densityScale, int maxTrails) {
@@ -608,8 +604,7 @@ public final class ClientSlideFeedbackController {
         private boolean previousAcceleration;
         private boolean previousHighway;
 
-        private RemoteSlideState() {
-        }
+        private RemoteSlideState() {}
 
         private void tick(Minecraft minecraft, Player remotePlayer, Vec3 observerPosition) {
             tickTrailParticles(this.trails);
@@ -685,8 +680,7 @@ public final class ClientSlideFeedbackController {
                     this.motionPhase,
                     0.0D,
                     0.0D,
-                    this.ticksSliding
-            );
+                    this.ticksSliding);
 
             double distance = remotePlayer.position().distanceTo(observerPosition);
             double density = remoteTrailDensity(distance);
@@ -707,8 +701,7 @@ public final class ClientSlideFeedbackController {
                     this.downBlend,
                     this.accelerationPulse,
                     density,
-                    MAX_REMOTE_TRAILS_PER_PLAYER
-            );
+                    MAX_REMOTE_TRAILS_PER_PLAYER);
 
             this.previousConnectionId = next.connection().id();
             this.previousDistanceOnConnection = next.distanceOnConnection();
@@ -782,8 +775,7 @@ public final class ClientSlideFeedbackController {
                     safeNormalize(bestTangent, new Vec3(0.0D, 0.0D, 1.0D)),
                     step,
                     speed01,
-                    bestRules
-            ));
+                    bestRules));
         }
 
         private void tickUnavailable() {
@@ -837,7 +829,6 @@ public final class ClientSlideFeedbackController {
         private boolean isExpired() {
             return this.frame == null && this.trails.isEmpty() && this.previousPosition == null;
         }
-
     }
 
     public record Frame(
@@ -867,8 +858,7 @@ public final class ClientSlideFeedbackController {
             double motionPhase,
             double fovBoost,
             double edgeIntensity,
-            int ticksSliding
-    ) {
+            int ticksSliding) {
         private static Frame interpolate(Frame previous, Frame current, double partialTick) {
             double t = Mth.clamp(partialTick, 0.0D, 1.0D);
             if (t <= 0.0D) {
@@ -904,8 +894,7 @@ public final class ClientSlideFeedbackController {
                     lerpUnit(previous.motionPhase, current.motionPhase, t),
                     lerp(previous.fovBoost, current.fovBoost, t),
                     lerp(previous.edgeIntensity, current.edgeIntensity, t),
-                    current.ticksSliding
-            );
+                    current.ticksSliding);
         }
 
         private Frame withFeedback(double nextAlpha, double nextSpeed01, double nextPerceptualSpeed, double nextAccelerationBlend, double nextHighwayBlend, double nextPlatformBlend, double nextVerticalBlend, double nextUpBlend, double nextDownBlend, double nextTurnBlend, double nextSignedTurn, double nextTurnPreviewBlend, double nextSignedTurnPreview, double nextAccelerationPulse, double nextMotionPhase, double nextFovBoost, double nextEdgeIntensity) {
@@ -936,8 +925,7 @@ public final class ClientSlideFeedbackController {
                     nextMotionPhase,
                     nextFovBoost,
                     nextEdgeIntensity,
-                    this.ticksSliding
-            );
+                    this.ticksSliding);
         }
 
         private static double lerp(double from, double to, double t) {
@@ -966,11 +954,9 @@ public final class ClientSlideFeedbackController {
         }
     }
 
-    public record TrailParticleSnapshot(Vec3 position, Vec3 direction, double width, double length, int color, double age01, int kind) {
-    }
+    public record TrailParticleSnapshot(Vec3 position, Vec3 direction, double width, double length, int color, double age01, int kind) {}
 
-    private record TurnSample(double intensity, double signedIntensity) {
-    }
+    private record TurnSample(double intensity, double signedIntensity) {}
 
     private static final class VisualFacingTracker {
         private static final double HORIZONTAL_UPDATE_THRESHOLD = 0.08D;
@@ -1218,11 +1204,9 @@ public final class ClientSlideFeedbackController {
         }
     }
 
-    private record TurnHistorySample(Vec3 position, Vec3 tangent, double pathDistance) {
-    }
+    private record TurnHistorySample(Vec3 position, Vec3 tangent, double pathDistance) {}
 
-    private record RemoteSample(PipeConnection connection, double distanceOnConnection, Vec3 position, Vec3 tangent, double speed, double speed01, ResolvedPipeSpeedRules rules) {
-    }
+    private record RemoteSample(PipeConnection connection, double distanceOnConnection, Vec3 position, Vec3 tangent, double speed, double speed01, ResolvedPipeSpeedRules rules) {}
 
     private static double remoteTrailDensity(double distance) {
         if (distance <= REMOTE_TRAIL_FULL_DISTANCE) {

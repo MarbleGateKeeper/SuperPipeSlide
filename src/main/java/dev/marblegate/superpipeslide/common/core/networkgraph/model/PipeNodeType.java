@@ -1,10 +1,9 @@
 package dev.marblegate.superpipeslide.common.core.networkgraph.model;
 
-
-import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
-import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
+import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
+import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.util.StringRepresentable;
@@ -44,5 +43,4 @@ public enum PipeNodeType implements StringRepresentable {
             case FOLD_ANCHOR -> FoldAnchorNode.STREAM_CODEC;
         };
     }
-
 }

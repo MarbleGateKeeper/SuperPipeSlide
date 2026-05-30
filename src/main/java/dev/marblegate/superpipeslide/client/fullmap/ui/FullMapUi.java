@@ -1,18 +1,15 @@
 package dev.marblegate.superpipeslide.client.fullmap.ui;
 
-
-import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
+import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
+import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 
-import java.util.List;
-
 public final class FullMapUi {
-    private FullMapUi() {
-    }
+    private FullMapUi() {}
 
     public static void cardFrame(GuiGraphicsExtractor graphics, SPSGui.Rect bounds, boolean active) {
         graphics.fill(bounds.x() + 2, bounds.y() + 3, bounds.right() + 2, bounds.bottom() + 3, FullMapTheme.SHADOW);
@@ -145,5 +142,4 @@ public final class FullMapUi {
             graphics.fill(chip.x(), y1, chip.x() + 5, y2, normalized.get(i));
         }
     }
-
 }

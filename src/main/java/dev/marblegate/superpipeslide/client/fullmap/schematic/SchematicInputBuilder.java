@@ -61,8 +61,7 @@ public final class SchematicInputBuilder {
                 edges,
                 this.graph.transferHints(),
                 this.graph.routeRevision(),
-                this.graph.pipeRevision()
-        );
+                this.graph.pipeRevision());
     }
 
     private SchematicInputGraph buildPureLineDiagram() {
@@ -101,8 +100,7 @@ public final class SchematicInputBuilder {
                 edges,
                 List.of(),
                 this.graph.routeRevision(),
-                this.graph.pipeRevision()
-        );
+                this.graph.pipeRevision());
     }
 
     private void addPureSection(SectionKey key, List<EdgePart> parts, Map<NodeId, SchematicNode> nodes, Map<SchematicEdgeKey, SchematicEdgeAccumulator> accumulators) {
@@ -186,8 +184,7 @@ public final class SchematicInputBuilder {
                 existing.clusterId(),
                 existing.anchorWeight(),
                 existing.maxDisplacement(),
-                existing.importance()
-        ));
+                existing.importance()));
     }
 
     private NodeId portalNodeId(MapNode station, String targetKey) {
@@ -219,8 +216,7 @@ public final class SchematicInputBuilder {
                 Optional.empty(),
                 1.2D,
                 80.0D,
-                420
-        );
+                420);
     }
 
     private static void collectEndpoint(MapNode node, List<MapNode> stations, List<MapNode> boundaries) {
@@ -326,12 +322,10 @@ public final class SchematicInputBuilder {
         if (Math.abs(aux * bux + auy * buy) < parallelDot) {
             return false;
         }
-        double distance = (
-                distanceToInfiniteLine(b1.worldX(), b1.worldZ(), a1.worldX(), a1.worldZ(), aux, auy)
-                        + distanceToInfiniteLine(b2.worldX(), b2.worldZ(), a1.worldX(), a1.worldZ(), aux, auy)
-                        + distanceToInfiniteLine(a1.worldX(), a1.worldZ(), b1.worldX(), b1.worldZ(), bux, buy)
-                        + distanceToInfiniteLine(a2.worldX(), a2.worldZ(), b1.worldX(), b1.worldZ(), bux, buy)
-        ) * 0.25D;
+        double distance = (distanceToInfiniteLine(b1.worldX(), b1.worldZ(), a1.worldX(), a1.worldZ(), aux, auy)
+                + distanceToInfiniteLine(b2.worldX(), b2.worldZ(), a1.worldX(), a1.worldZ(), aux, auy)
+                + distanceToInfiniteLine(a1.worldX(), a1.worldZ(), b1.worldX(), b1.worldZ(), bux, buy)
+                + distanceToInfiniteLine(a2.worldX(), a2.worldZ(), b1.worldX(), b1.worldZ(), bux, buy)) * 0.25D;
         double distanceThreshold = switch (this.config.layoutMode()) {
             case PHYSICAL -> 44.0D;
             case GEOGRAPHIC -> 44.0D;
@@ -410,11 +404,9 @@ public final class SchematicInputBuilder {
         return (x - originX) * ux + (y - originY) * uy;
     }
 
-    private record SectionKey(UUID routeLineId, UUID routeLayoutId, UUID routeSectionId, int layoutIndex) {
-    }
+    private record SectionKey(UUID routeLineId, UUID routeLayoutId, UUID routeSectionId, int layoutIndex) {}
 
-    private record EdgePart(MapEdge edge, MapEdgeOccurrence occurrence, MapNode from, MapNode to) {
-    }
+    private record EdgePart(MapEdge edge, MapEdgeOccurrence occurrence, MapNode from, MapNode to) {}
 
     private record SchematicEdgeKey(NodeId from, NodeId to, SemanticEdgeKind kind) {
         static SchematicEdgeKey of(NodeId first, NodeId second, SemanticEdgeKind kind) {

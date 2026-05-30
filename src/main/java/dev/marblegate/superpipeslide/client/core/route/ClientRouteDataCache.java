@@ -1,7 +1,6 @@
 package dev.marblegate.superpipeslide.client.core.route;
 
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
-import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
 import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
@@ -9,12 +8,10 @@ import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformSt
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSection;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionPath;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionPathRecord;
-import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationTransferLink;
 import dev.marblegate.superpipeslide.common.core.route.service.RouteChoiceResolver;
 import dev.marblegate.superpipeslide.common.core.route.service.RouteLayoutNavigator;
-import dev.marblegate.superpipeslide.common.core.slide.traversal.TraversalContext;
 import dev.marblegate.superpipeslide.common.core.slide.traversal.TraversalContext.RouteChoiceSelection;
 import dev.marblegate.superpipeslide.network.sync.route.ClientboundRouteDataDeltaPayload;
 import dev.marblegate.superpipeslide.network.sync.route.ClientboundRouteDataSnapshotChunkPayload;
@@ -49,8 +46,7 @@ public final class ClientRouteDataCache {
     private static long revision = -1L;
     private static long pipeRevisionUsed = -1L;
 
-    private ClientRouteDataCache() {
-    }
+    private ClientRouteDataCache() {}
 
     public static void handleSnapshotStart(ClientboundRouteDataSnapshotStartPayload payload) {
         if (payload.revision() < revision) {
@@ -510,8 +506,7 @@ public final class ClientRouteDataCache {
             List<RouteSection> routeSections,
             List<RouteSectionPathRecord> routeSectionPaths,
             List<StationTransferLink> stationTransferLinks,
-            Set<Integer> receivedChunkIndexes
-    ) {
+            Set<Integer> receivedChunkIndexes) {
         private SnapshotBuffer(long revision, long pipeRevisionUsed, int expectedStationGroups, int expectedPlatformStops, int expectedRouteLines, int expectedRouteLayouts, int expectedRouteSections, int expectedRouteSectionPaths, int expectedStationTransferLinks, int expectedChunks) {
             this(revision, pipeRevisionUsed, expectedStationGroups, expectedPlatformStops, expectedRouteLines, expectedRouteLayouts, expectedRouteSections, expectedRouteSectionPaths, expectedStationTransferLinks, expectedChunks, new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new HashSet<>());
         }
@@ -554,4 +549,3 @@ public final class ClientRouteDataCache {
         INVALID
     }
 }
-

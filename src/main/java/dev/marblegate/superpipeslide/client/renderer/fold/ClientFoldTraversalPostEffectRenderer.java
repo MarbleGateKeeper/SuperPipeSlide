@@ -19,6 +19,12 @@ import com.mojang.blaze3d.textures.GpuTexture;
 import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.fold.ClientFoldTraversalEffectController;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
+import java.nio.ByteBuffer;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import javax.annotation.Nullable;
 import net.minecraft.client.renderer.DynamicUniformStorage;
 import net.minecraft.client.renderer.LevelTargetBundle;
 import net.minecraft.client.renderer.RenderPipelines;
@@ -28,13 +34,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.RegisterRenderPipelinesEvent;
 import org.joml.Vector4f;
-
-import javax.annotation.Nullable;
-import java.nio.ByteBuffer;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.OptionalDouble;
-import java.util.OptionalInt;
 
 public final class ClientFoldTraversalPostEffectRenderer {
     private static final int SPACE_PRIMARY = 0xFF8FF6FF;
@@ -62,8 +61,7 @@ public final class ClientFoldTraversalPostEffectRenderer {
             .withUniform("FoldTraversal", UniformType.UNIFORM_BUFFER)
             .build();
 
-    private static final FoldTraversalPostEffectExtension.Scope NOOP_SCOPE = () -> {
-    };
+    private static final FoldTraversalPostEffectExtension.Scope NOOP_SCOPE = () -> {};
     private static volatile FoldTraversalPostEffectExtension renderExtension = FoldTraversalPostEffectExtension.NONE;
 
     @Nullable
@@ -73,8 +71,7 @@ public final class ClientFoldTraversalPostEffectRenderer {
     @Nullable
     private static TextureTarget postEffectSource;
 
-    private ClientFoldTraversalPostEffectRenderer() {
-    }
+    private ClientFoldTraversalPostEffectRenderer() {}
 
     public static void registerRenderExtension(FoldTraversalPostEffectExtension extension) {
         renderExtension = Objects.requireNonNull(extension, "extension");
@@ -173,8 +170,7 @@ public final class ClientFoldTraversalPostEffectRenderer {
                 output.getColorTextureView(),
                 OptionalInt.empty(),
                 output.useDepth ? output.getDepthTextureView() : null,
-                OptionalDouble.empty()
-        )) {
+                OptionalDouble.empty())) {
             try (FoldTraversalPostEffectExtension.Scope ignored = renderExtension.pipelineOverrideScope()) {
                 renderPass.setPipeline(DISTORTION_PIPELINE);
             }
@@ -252,8 +248,7 @@ public final class ClientFoldTraversalPostEffectRenderer {
                 secondary[0],
                 secondary[1],
                 secondary[2],
-                vignette
-        );
+                vignette);
     }
 
     private static float postIntensity(ClientFoldTraversalEffectController.Snapshot effect) {
@@ -288,7 +283,7 @@ public final class ClientFoldTraversalPostEffectRenderer {
     }
 
     private static float[] color(int argb) {
-        return new float[]{
+        return new float[] {
                 ((argb >> 16) & 0xFF) / 255.0F,
                 ((argb >> 8) & 0xFF) / 255.0F,
                 (argb & 0xFF) / 255.0F
@@ -367,8 +362,7 @@ public final class ClientFoldTraversalPostEffectRenderer {
             float secondaryR,
             float secondaryG,
             float secondaryB,
-            float vignette
-    ) implements DynamicUniformStorage.DynamicUniform {
+            float vignette) implements DynamicUniformStorage.DynamicUniform {
         @Override
         public void write(ByteBuffer byteBuffer) {
             Std140Builder.intoBuffer(byteBuffer)
@@ -382,18 +376,14 @@ public final class ClientFoldTraversalPostEffectRenderer {
         }
     }
 
-    private record ProjectedFold(float focusX, float focusY, float axisX, float axisY, float visible, float front) {
-    }
+    private record ProjectedFold(float focusX, float focusY, float axisX, float axisY, float visible, float front) {}
 
-    private record ProjectedPoint(float x, float y, boolean visible, boolean front) {
-    }
+    private record ProjectedPoint(float x, float y, boolean visible, boolean front) {}
 
-    private record PendingPostEffect(FoldTraversalUniform uniform) {
-    }
+    private record PendingPostEffect(FoldTraversalUniform uniform) {}
 
     public interface FoldTraversalPostEffectExtension {
-        FoldTraversalPostEffectExtension NONE = new FoldTraversalPostEffectExtension() {
-        };
+        FoldTraversalPostEffectExtension NONE = new FoldTraversalPostEffectExtension() {};
 
         default boolean deferUntilExternalFinalPass() {
             return false;

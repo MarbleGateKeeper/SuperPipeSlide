@@ -17,6 +17,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 
 public class BranchAnchorBlock extends Block {
     private static final VoxelShape SHAPE = Shapes.box(0.25, 0.125, 0.25, 0.75, 0.875, 0.75);
+
     public BranchAnchorBlock(BlockBehaviour.Properties properties) {
         super(properties);
     }

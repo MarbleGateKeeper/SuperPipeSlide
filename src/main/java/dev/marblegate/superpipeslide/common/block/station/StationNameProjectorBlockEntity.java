@@ -2,10 +2,14 @@ package dev.marblegate.superpipeslide.common.block.station;
 
 import dev.marblegate.superpipeslide.common.core.projection.layout.AppliedProjectionLayout;
 import dev.marblegate.superpipeslide.common.core.projection.template.ProjectionTemplates;
-import dev.marblegate.superpipeslide.network.station.ClientboundStationNameProjectorConfigPayload;
-import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
+import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.registry.SPSBlockEntities;
+import dev.marblegate.superpipeslide.network.station.ClientboundStationNameProjectorConfigPayload;
+import java.util.Comparator;
+import java.util.Optional;
+import java.util.UUID;
+import javax.annotation.Nullable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.UUIDUtil;
@@ -16,17 +20,12 @@ import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.neoforge.network.PacketDistributor;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
-
-import javax.annotation.Nullable;
-import java.util.Comparator;
-import java.util.Optional;
-import java.util.UUID;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 public class StationNameProjectorBlockEntity extends BlockEntity {
     private static final double CONFIG_SYNC_DISTANCE_SQR = 192.0D * 192.0D;
@@ -140,7 +139,6 @@ public class StationNameProjectorBlockEntity extends BlockEntity {
                 input.getFloatOr("offset_y", defaults.offsetY()),
                 input.getBooleanOr("show_exit", defaults.showExit()),
                 input.getStringOr("exit_label", defaults.exitLabel()),
-                input.getBooleanOr("backside_projection", defaults.backsideProjection())
-        );
+                input.getBooleanOr("backside_projection", defaults.backsideProjection()));
     }
 }

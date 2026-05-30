@@ -4,6 +4,7 @@ import com.mojang.serialization.MapCodec;
 import dev.marblegate.superpipeslide.common.event.ServerEvents;
 import dev.marblegate.superpipeslide.common.registry.SPSItems;
 import dev.marblegate.superpipeslide.network.platform.ClientboundOpenPlatformProjectorPayload;
+import javax.annotation.Nullable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -33,8 +34,6 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.network.PacketDistributor;
-
-import javax.annotation.Nullable;
 
 public class PlatformProjectorBlock extends Block implements EntityBlock {
     public static final EnumProperty<Direction> FACING = BlockStateProperties.HORIZONTAL_FACING;

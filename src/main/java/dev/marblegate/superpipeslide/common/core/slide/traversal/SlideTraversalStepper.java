@@ -4,26 +4,23 @@ import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkView;
 import dev.marblegate.superpipeslide.config.Config;
-import net.minecraft.util.Mth;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import net.minecraft.util.Mth;
 
 public final class SlideTraversalStepper {
     private static final double MIN_TRAVERSAL_CONNECTION_LENGTH = 0.25D;
     private static final int ABSOLUTE_MAX_TOPOLOGY_STEPS = 96;
 
-    private SlideTraversalStepper() {
-    }
+    private SlideTraversalStepper() {}
 
     public static TraversalResult advance(
             PipeNetworkView pipeNetwork,
             TraversalContext context,
             TraversalCursor start,
             double distanceBudget,
-            StationCheckpointPolicy stationPolicy
-    ) {
+            StationCheckpointPolicy stationPolicy) {
         Optional<PipeConnection> startingConnection = pipeNetwork.connection(start.connectionId());
         if (startingConnection.isEmpty()) {
             TraversalEvent barrier = TraversalEvent.atCursor(TraversalEventType.INVALID_TOPOLOGY, start);
@@ -110,5 +107,4 @@ public final class SlideTraversalStepper {
     public interface StationCheckpointPolicy {
         Optional<StationCheckpoint> nextStationCheckpoint(PipeConnection connection, double startDistance, int direction, double travelDistance);
     }
-
 }

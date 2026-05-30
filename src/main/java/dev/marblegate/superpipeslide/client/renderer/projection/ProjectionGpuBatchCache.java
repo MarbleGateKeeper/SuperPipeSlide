@@ -13,13 +13,21 @@ import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.renderer.MultiBufferSource;
 import dev.marblegate.superpipeslide.mixin.client.RenderSetupAccessor;
 import dev.marblegate.superpipeslide.mixin.client.RenderTypeAccessor;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import java.util.function.Consumer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.block.MovingBlockRenderState;
 import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
@@ -43,20 +51,10 @@ import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.jspecify.annotations.Nullable;
 
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.OptionalDouble;
-import java.util.OptionalInt;
-import java.util.function.Consumer;
-
 final class ProjectionGpuBatchCache {
     private static final int INITIAL_BYTES = 4096;
 
-    private ProjectionGpuBatchCache() {
-    }
+    private ProjectionGpuBatchCache() {}
 
     static GpuBatches compile(Consumer<SubmitNodeCollector> recorder) {
         RecordingCollector collector = new RecordingCollector();
@@ -141,48 +139,37 @@ final class ProjectionGpuBatchCache {
         }
 
         @Override
-        public void submitShadow(PoseStack poseStack, float radius, List<EntityRenderState.ShadowPiece> pieces) {
-        }
+        public void submitShadow(PoseStack poseStack, float radius, List<EntityRenderState.ShadowPiece> pieces) {}
 
         @Override
-        public void submitNameTag(PoseStack poseStack, @Nullable Vec3 nameTagAttachment, int offset, Component name, boolean seeThrough, int lightCoords, double distanceToCameraSq, CameraRenderState camera) {
-        }
+        public void submitNameTag(PoseStack poseStack, @Nullable Vec3 nameTagAttachment, int offset, Component name, boolean seeThrough, int lightCoords, double distanceToCameraSq, CameraRenderState camera) {}
 
         @Override
-        public void submitFlame(PoseStack poseStack, EntityRenderState renderState, Quaternionf rotation) {
-        }
+        public void submitFlame(PoseStack poseStack, EntityRenderState renderState, Quaternionf rotation) {}
 
         @Override
-        public void submitLeash(PoseStack poseStack, EntityRenderState.LeashState leashState) {
-        }
+        public void submitLeash(PoseStack poseStack, EntityRenderState.LeashState leashState) {}
 
         @Override
-        public <S> void submitModel(Model<? super S> model, S state, PoseStack poseStack, RenderType renderType, int lightCoords, int overlayCoords, int tintedColor, @Nullable TextureAtlasSprite sprite, int outlineColor, ModelFeatureRenderer.@Nullable CrumblingOverlay crumblingOverlay) {
-        }
+        public <S> void submitModel(Model<? super S> model, S state, PoseStack poseStack, RenderType renderType, int lightCoords, int overlayCoords, int tintedColor, @Nullable TextureAtlasSprite sprite, int outlineColor, ModelFeatureRenderer.@Nullable CrumblingOverlay crumblingOverlay) {}
 
         @Override
-        public void submitModelPart(ModelPart modelPart, PoseStack poseStack, RenderType renderType, int lightCoords, int overlayCoords, @Nullable TextureAtlasSprite sprite, boolean sheeted, boolean hasFoil, int tintedColor, ModelFeatureRenderer.@Nullable CrumblingOverlay crumblingOverlay, int outlineColor) {
-        }
+        public void submitModelPart(ModelPart modelPart, PoseStack poseStack, RenderType renderType, int lightCoords, int overlayCoords, @Nullable TextureAtlasSprite sprite, boolean sheeted, boolean hasFoil, int tintedColor, ModelFeatureRenderer.@Nullable CrumblingOverlay crumblingOverlay, int outlineColor) {}
 
         @Override
-        public void submitMovingBlock(PoseStack poseStack, MovingBlockRenderState movingBlockRenderState) {
-        }
+        public void submitMovingBlock(PoseStack poseStack, MovingBlockRenderState movingBlockRenderState) {}
 
         @Override
-        public void submitBlockModel(PoseStack poseStack, RenderType renderType, List<BlockStateModelPart> parts, int[] tintLayers, int lightCoords, int overlayCoords, int outlineColor) {
-        }
+        public void submitBlockModel(PoseStack poseStack, RenderType renderType, List<BlockStateModelPart> parts, int[] tintLayers, int lightCoords, int overlayCoords, int outlineColor) {}
 
         @Override
-        public void submitBreakingBlockModel(PoseStack poseStack, BlockStateModel model, long seed, int progress) {
-        }
+        public void submitBreakingBlockModel(PoseStack poseStack, BlockStateModel model, long seed, int progress) {}
 
         @Override
-        public void submitItem(PoseStack poseStack, ItemDisplayContext displayContext, int lightCoords, int overlayCoords, int outlineColor, int[] tintLayers, List<BakedQuad> quads, ItemStackRenderState.FoilType foilType) {
-        }
+        public void submitItem(PoseStack poseStack, ItemDisplayContext displayContext, int lightCoords, int overlayCoords, int outlineColor, int[] tintLayers, List<BakedQuad> quads, ItemStackRenderState.FoilType foilType) {}
 
         @Override
-        public void submitParticleGroup(ParticleGroupRenderer particleGroupRenderer) {
-        }
+        public void submitParticleGroup(ParticleGroupRenderer particleGroupRenderer) {}
     }
 
     private static final class RecordingBufferSource implements MultiBufferSource {
@@ -224,8 +211,7 @@ final class ProjectionGpuBatchCache {
                 GpuBuffer vertexBuffer = RenderSystem.getDevice().createBuffer(
                         () -> "SuperPipeSlide projection " + this.renderType,
                         GpuBuffer.USAGE_COPY_DST | GpuBuffer.USAGE_VERTEX,
-                        vertices
-                );
+                        vertices);
                 return new GpuBatch(this.renderType, vertexBuffer, mesh.drawState().indexCount());
             } finally {
                 mesh.close();
@@ -268,8 +254,7 @@ final class ProjectionGpuBatchCache {
                         RenderSystem.getModelViewMatrix(),
                         new Vector4f(1.0F, 1.0F, 1.0F, 1.0F),
                         new Vector3f(),
-                        textureTransform.getMatrix()
-                );
+                        textureTransform.getMatrix());
                 RenderTarget target = this.renderType.outputTarget().getRenderTarget();
                 var colorTexture = RenderSystem.outputColorTextureOverride != null ? RenderSystem.outputColorTextureOverride : target.getColorTextureView();
                 var depthTexture = target.useDepth
@@ -281,8 +266,7 @@ final class ProjectionGpuBatchCache {
                         colorTexture,
                         OptionalInt.empty(),
                         depthTexture,
-                        OptionalDouble.empty()
-                )) {
+                        OptionalDouble.empty())) {
                     renderPass.setPipeline(this.renderType.pipeline());
                     ScissorState scissorState = RenderSystem.getScissorStateForRenderTypeDraws();
                     if (scissorState.enabled()) {

@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.network;
 
-
 import dev.marblegate.superpipeslide.network.editor.ClientboundEditorResultPayload;
 import dev.marblegate.superpipeslide.network.fold.ClientboundOpenFoldAnchorEditorPayload;
 import dev.marblegate.superpipeslide.network.fold.ServerboundFoldAnchorSavePayload;
@@ -45,8 +44,7 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 public final class SPSNetworking {
     private static final String NETWORK_VERSION = "1";
 
-    private SPSNetworking() {
-    }
+    private SPSNetworking() {}
 
     public static void register(RegisterPayloadHandlersEvent event) {
         event.registrar(NETWORK_VERSION)

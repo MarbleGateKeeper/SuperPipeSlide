@@ -7,6 +7,7 @@ import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetwor
 import dev.marblegate.superpipeslide.common.event.ServerEvents;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeAppearanceToolItem;
 import dev.marblegate.superpipeslide.common.registry.SPSDataComponents;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -19,15 +20,13 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-import java.util.UUID;
-
 public record ServerboundPipeAppearanceApplyPayload(
         UUID requestId,
         long baseAppearanceRevision,
         int targetConnectionKey,
         PipeAppearanceProfile profile,
-        String scope
-) implements CustomPacketPayload {
+        String scope) implements CustomPacketPayload {
+
     public static final String SCOPE_DRAFT = "draft";
     public static final String SCOPE_SINGLE = "single";
     public static final String SCOPE_CONNECTED = "connected";
@@ -44,9 +43,7 @@ public record ServerboundPipeAppearanceApplyPayload(
             ServerboundPipeAppearanceApplyPayload::profile,
             ByteBufCodecs.STRING_UTF8,
             ServerboundPipeAppearanceApplyPayload::scope,
-            ServerboundPipeAppearanceApplyPayload::new
-    );
-
+            ServerboundPipeAppearanceApplyPayload::new);
     public ServerboundPipeAppearanceApplyPayload(long baseAppearanceRevision, int targetConnectionKey, PipeAppearanceProfile profile, String scope) {
         this(UUID.randomUUID(), baseAppearanceRevision, targetConnectionKey, profile, scope);
     }

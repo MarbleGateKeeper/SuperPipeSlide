@@ -8,6 +8,8 @@ import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetwor
 import dev.marblegate.superpipeslide.common.event.ServerEvents;
 import dev.marblegate.superpipeslide.common.registry.SPSDataComponents;
 import dev.marblegate.superpipeslide.network.pipe.appearance.ClientboundOpenPipeAppearanceEditorPayload;
+import java.util.Optional;
+import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -21,9 +23,6 @@ import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.PacketDistributor;
-
-import java.util.Optional;
-import java.util.function.Consumer;
 
 public class PipeAppearanceToolItem extends Item {
     private static final double TOOL_REACH = 8.0D;
@@ -61,8 +60,7 @@ public class PipeAppearanceToolItem extends Item {
                 player.getEyePosition(),
                 player.getLookAngle(),
                 TOOL_REACH,
-                PIPE_PICK_RADIUS
-        );
+                PIPE_PICK_RADIUS);
         PipeAppearanceSavedData appearances = PipeAppearanceSavedData.get(serverLevel);
         ItemStack stack = player.getItemInHand(hand);
         PipeAppearanceProfile draft = Optional.ofNullable(stack.get(SPSDataComponents.PIPE_APPEARANCE_DRAFT.get()))
@@ -100,7 +98,6 @@ public class PipeAppearanceToolItem extends Item {
                 PipeConnection.TRANSIENT_CONNECTION_KEY,
                 draft,
                 draft,
-                1.0D
-        ));
+                1.0D));
     }
 }

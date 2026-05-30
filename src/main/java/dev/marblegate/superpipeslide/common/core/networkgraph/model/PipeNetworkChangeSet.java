@@ -2,7 +2,6 @@ package dev.marblegate.superpipeslide.common.core.networkgraph.model;
 
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
-
 import java.util.List;
 import java.util.UUID;
 
@@ -12,8 +11,7 @@ public record PipeNetworkChangeSet(
         List<PipeAnchorId> addedOrUpdatedNodeIds,
         List<PipeAnchorId> removedNodeIds,
         List<UUID> addedOrUpdatedConnectionIds,
-        List<PipeConnectionRef> removedConnectionRefs
-) {
+        List<PipeConnectionRef> removedConnectionRefs) {
     public PipeNetworkChangeSet {
         addedOrUpdatedNodeIds = List.copyOf(addedOrUpdatedNodeIds);
         removedNodeIds = List.copyOf(removedNodeIds);

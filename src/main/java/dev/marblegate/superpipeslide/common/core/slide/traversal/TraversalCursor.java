@@ -1,8 +1,7 @@
 package dev.marblegate.superpipeslide.common.core.slide.traversal;
 
-import net.minecraft.util.Mth;
-
 import java.util.UUID;
+import net.minecraft.util.Mth;
 
 public record TraversalCursor(UUID connectionId, int direction, double distanceOnConnection) {
     public TraversalCursor {

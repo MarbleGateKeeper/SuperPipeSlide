@@ -5,6 +5,10 @@ import com.mojang.math.Axis;
 import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideFeedbackController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlidePoseController;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.player.PlayerModel;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
@@ -15,11 +19,6 @@ import net.neoforged.neoforge.client.event.RenderPlayerEvent;
 import net.neoforged.neoforge.client.event.ViewportEvent;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
 
 public final class ClientSlideFeedbackPlayerRenderer {
     private static final Vec3 WORLD_UP = new Vec3(0.0D, 1.0D, 0.0D);
@@ -58,8 +57,7 @@ public final class ClientSlideFeedbackPlayerRenderer {
     private static int pushedSlidePosePlayerId = Integer.MIN_VALUE;
     private static boolean slideLegOffsetsDirty;
 
-    private ClientSlideFeedbackPlayerRenderer() {
-    }
+    private ClientSlideFeedbackPlayerRenderer() {}
 
     public static void onComputeFov(ViewportEvent.ComputeFov event) {
         if (ClientSafetyOptions.reduceMotionSicknessRisk()) {
@@ -401,8 +399,7 @@ public final class ClientSlideFeedbackPlayerRenderer {
                 (float) Math.acos(dot),
                 (float) normalizedAxis.x,
                 (float) normalizedAxis.y,
-                (float) normalizedAxis.z
-        );
+                (float) normalizedAxis.z);
         Vector3f rotated = new Vector3f((float) value.x, (float) value.y, (float) value.z).rotate(rotation);
         return new Vec3(rotated.x, rotated.y, rotated.z);
     }
@@ -456,8 +453,7 @@ public final class ClientSlideFeedbackPlayerRenderer {
         Vec3 value = new Vec3(
                 from.x + (to.x - from.x) * t,
                 from.y + (to.y - from.y) * t,
-                from.z + (to.z - from.z) * t
-        );
+                from.z + (to.z - from.z) * t);
         return safeNormalize(value, to);
     }
 

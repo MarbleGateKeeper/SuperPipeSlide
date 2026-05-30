@@ -26,8 +26,7 @@ public record ClientRouteHudSnapshot(
         double stopDwellProgress,
         Optional<NavigationStopContext> navigationStopContext,
         List<TransferLine> focusTransfers,
-        boolean loop
-) {
+        boolean loop) {
     public ClientRouteHudSnapshot {
         routeTranslatedNames = List.copyOf(routeTranslatedNames);
         routeColors = List.copyOf(routeColors);
@@ -70,8 +69,7 @@ public record ClientRouteHudSnapshot(
             NavigationStopKind kind,
             UUID platformStopId,
             UUID stationGroupId,
-            List<Integer> colors
-    ) {
+            List<Integer> colors) {
         public NavigationStopContext(NavigationStopKind kind, UUID platformStopId, List<Integer> colors) {
             this(kind, platformStopId, platformStopId, colors);
         }
@@ -90,8 +88,7 @@ public record ClientRouteHudSnapshot(
             int travelIndex,
             int layoutIndex,
             boolean focus,
-            boolean terminal
-    ) {
+            boolean terminal) {
         public Station {
             translatedNames = List.copyOf(translatedNames);
         }

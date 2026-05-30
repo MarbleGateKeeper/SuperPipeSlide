@@ -4,11 +4,14 @@ import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRaycast;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
-import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
+import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.event.ServerEvents;
 import dev.marblegate.superpipeslide.common.registry.SPSDataComponents;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -22,10 +25,6 @@ import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-
-import java.util.Optional;
-import java.util.UUID;
-import java.util.function.Consumer;
 
 public class PlatformClaimerItem extends Item {
     private static final double CLAIM_REACH = 8.0D;
@@ -77,8 +76,7 @@ public class PlatformClaimerItem extends Item {
                 eye,
                 player.getLookAngle(),
                 CLAIM_REACH,
-                PIPE_PICK_RADIUS
-        );
+                PIPE_PICK_RADIUS);
         if (target.isEmpty()) {
             player.sendOverlayMessage(Component.translatable("message.superpipeslide.no_pipe_connection_targeted").withStyle(ChatFormatting.RED));
             return InteractionResult.FAIL;
@@ -106,8 +104,7 @@ public class PlatformClaimerItem extends Item {
             player.sendOverlayMessage(Component.translatable(
                     "message.superpipeslide.platform_unclaimed",
                     claimedStationName,
-                    platformStop.platformNumber()
-            ).withStyle(ChatFormatting.YELLOW));
+                    platformStop.platformNumber()).withStyle(ChatFormatting.YELLOW));
             return InteractionResult.SUCCESS_SERVER;
         }
 
@@ -123,9 +120,7 @@ public class PlatformClaimerItem extends Item {
                 "message.superpipeslide.platform_claimed",
                 stationGroup.primaryName(),
                 platformStop.platformNumber(),
-                String.format("%.1f", platformStop.length())
-        ).withStyle(ChatFormatting.GREEN));
+                String.format("%.1f", platformStop.length())).withStyle(ChatFormatting.GREEN));
         return InteractionResult.SUCCESS_SERVER;
     }
 }
-

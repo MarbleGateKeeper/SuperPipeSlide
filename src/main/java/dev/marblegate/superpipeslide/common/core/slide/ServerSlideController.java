@@ -21,8 +21,7 @@ public final class ServerSlideController {
     private static final float OBSTRUCTION_DAMAGE = 2.0F;
     private static final Map<UUID, ServerSlideModeState> SLIDING_PLAYERS = new HashMap<>();
 
-    private ServerSlideController() {
-    }
+    private ServerSlideController() {}
 
     public static void tick(ServerPlayer player) {
         ServerSlideModeState state = SLIDING_PLAYERS.get(player.getUUID());
@@ -83,8 +82,7 @@ public final class ServerSlideController {
                 payload.targetConnectionId(),
                 payload.direction(),
                 payload.distanceOnConnection(),
-                payload.speed()
-        ));
+                payload.speed()));
         if (payload.targetConnectionId().isEmpty()) {
             clear(player, payload.sessionId());
         }

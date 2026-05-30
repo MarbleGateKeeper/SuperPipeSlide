@@ -3,13 +3,12 @@ package dev.marblegate.superpipeslide.client.fullmap.schematic.visual;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicQualityReport;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.level.Level;
-
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 public record VisualRouteMapGraph(
         ResourceKey<Level> levelKey,
@@ -22,8 +21,7 @@ public record VisualRouteMapGraph(
         Aabb2 visualBounds,
         long routeRevision,
         long pipeRevision,
-        int solverVersion
-) {
+        int solverVersion) {
     public VisualRouteMapGraph {
         nodes = nodes.stream().sorted(Comparator.comparing(VisualNode::id)).toList();
         nodesById = Map.copyOf(nodesById);

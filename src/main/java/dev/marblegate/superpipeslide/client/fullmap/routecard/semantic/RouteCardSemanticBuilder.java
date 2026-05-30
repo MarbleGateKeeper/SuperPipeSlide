@@ -95,8 +95,7 @@ public final class RouteCardSemanticBuilder {
                 this.crossDimensionCount,
                 this.stationInternalCount,
                 layout.bidirectional(),
-                layout.loop()
-        );
+                layout.loop());
         return new RouteCardSemanticGraph(line.id(), layout.id(), this.nodes.values().stream().toList(), this.edges, this.buildSegments(), this.diagnostics, summary);
     }
 
@@ -134,8 +133,7 @@ public final class RouteCardSemanticBuilder {
                 this.crossDimensionCount,
                 this.stationInternalCount,
                 layout.bidirectional(),
-                layout.loop()
-        );
+                layout.loop());
         return new RouteCardSemanticGraph(line.id(), layout.id(), this.nodes.values().stream().toList(), this.edges, this.buildSegments(), this.diagnostics, summary);
     }
 
@@ -225,8 +223,7 @@ public final class RouteCardSemanticBuilder {
                     position.z(),
                     position.y(),
                     platformLevel ? platformLabel(station, platformStop, nodeOccurrence) : stationLabel(station, nodeOccurrence),
-                    routeLineIdsForStation(station.id())
-            );
+                    routeLineIdsForStation(station.id()));
             this.nodes.putIfAbsent(nodeId, node);
             stopNodes.add(node);
         }
@@ -414,8 +411,7 @@ public final class RouteCardSemanticBuilder {
                 anchorId.blockPos().getZ() + 0.5D,
                 anchorId.blockPos().getY() + 0.5D,
                 "Fold boundary",
-                List.of()
-        ));
+                List.of()));
     }
 
     private RouteCardNode ensureSchematicPortalBoundary(RouteCardNode station, RouteCardNode target, UUID sectionId, int layoutIndex, int side) {
@@ -435,8 +431,7 @@ public final class RouteCardSemanticBuilder {
                 station.worldZ() + direction.y() * distance,
                 station.worldY(),
                 target.levelKey().identifier().toString(),
-                List.of()
-        ));
+                List.of()));
     }
 
     private RouteCardNode ensureMissingPathBoundary(RouteCardNode station, RouteCardNode other, UUID sectionId, int layoutIndex, int side) {
@@ -456,8 +451,7 @@ public final class RouteCardSemanticBuilder {
                 station.worldZ() + direction.y() * distance,
                 station.worldY(),
                 "Missing path",
-                List.of()
-        ));
+                List.of()));
     }
 
     private void addMissingPathBoundaryEdges(RouteLayout layout, UUID sectionId, int layoutIndex, RouteCardNode from, RouteCardNode to, RouteSectionStatus status) {
@@ -598,8 +592,7 @@ public final class RouteCardSemanticBuilder {
                     edge.loopBack(),
                     edge.status(),
                     edge.backingPathSlice(),
-                    edge.themeColors()
-            ));
+                    edge.themeColors()));
         }
     }
 
@@ -636,8 +629,7 @@ public final class RouteCardSemanticBuilder {
         return new NodePosition(
                 station.stationBlockPos().getX() + Math.cos(angle) * radius,
                 station.stationBlockPos().getY(),
-                station.stationBlockPos().getZ() + Math.sin(angle) * radius
-        );
+                station.stationBlockPos().getZ() + Math.sin(angle) * radius);
     }
 
     private static String stationLabel(StationGroup station, int occurrence) {
@@ -671,14 +663,11 @@ public final class RouteCardSemanticBuilder {
         return (Math.floorMod(mixed, 65_536L) / 65_536.0D) * Math.PI * 2.0D;
     }
 
-    private record FoldTransition(PipeAnchorId localAnchor, PipeAnchorId peerAnchor) {
-    }
+    private record FoldTransition(PipeAnchorId localAnchor, PipeAnchorId peerAnchor) {}
 
-    private record PathFoldEvent(PipeAnchorId localAnchor, PipeAnchorId peerAnchor, List<PipeConnectionRef> slice) {
-    }
+    private record PathFoldEvent(PipeAnchorId localAnchor, PipeAnchorId peerAnchor, List<PipeConnectionRef> slice) {}
 
-    private record NodePosition(double x, double y, double z) {
-    }
+    private record NodePosition(double x, double y, double z) {}
 
     private static final class SegmentAccumulator {
         private final int index;

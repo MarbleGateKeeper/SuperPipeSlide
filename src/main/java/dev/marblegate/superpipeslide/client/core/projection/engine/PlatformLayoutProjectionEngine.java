@@ -4,11 +4,10 @@ import dev.marblegate.superpipeslide.common.core.projection.component.Projection
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionOverflowMode;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionTextAlign;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
-import net.minecraft.network.chat.Component;
-
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import net.minecraft.network.chat.Component;
 
 public final class PlatformLayoutProjectionEngine {
     private static final int FALLBACK_LINE_COLOR = 0xFF3366FF;
@@ -34,8 +33,7 @@ public final class PlatformLayoutProjectionEngine {
     private static final int LAYER_TRANSFER = 72;
     private static final int LAYER_TEXT = 100;
 
-    private PlatformLayoutProjectionEngine() {
-    }
+    private PlatformLayoutProjectionEngine() {}
 
     public static Layout build(Data data, ProjectionComponentSettings.PlatformLayoutMap settings, long timeMillis) {
         Data safe = data == null ? Data.sample() : data;
@@ -605,11 +603,9 @@ public final class PlatformLayoutProjectionEngine {
         EDITOR
     }
 
-    private record LabelPolicy(int fullLabelLimit, float rotationDegrees, boolean stagger, int maxLabels) {
-    }
+    private record LabelPolicy(int fullLabelLimit, float rotationDegrees, boolean stagger, int maxLabels) {}
 
-    private record EditorWindow(int startIndex, int endIndex, float offset) {
-    }
+    private record EditorWindow(int startIndex, int endIndex, float offset) {}
 
     public record Data(String layoutName, RouteData route, List<StopData> stops, int currentIndex, boolean bidirectional, boolean loop, RouteSectionStatus loopStatus, boolean reverseOrder) {
         public Data {
@@ -637,8 +633,7 @@ public final class PlatformLayoutProjectionEngine {
                     new StopData("Copper", "", "2", false, false, true, List.of(new TransferData("Gold", List.of(0xFFFFB021), "2", "", false)), RouteSectionStatus.VALID, false, 34.0D, 18.0D),
                     new StopData("Block Plaza", "", "1", true, false, false, List.of(), RouteSectionStatus.VALID, false, 78.0D, 20.0D),
                     new StopData("Market", "", "1", false, false, true, List.of(new TransferData("End Loop", List.of(0xFF7D4AE8), "3", "Market", true)), RouteSectionStatus.INCOMPLETE, false, 120.0D, -4.0D),
-                    new StopData("End", "", "1", false, true, false, List.of(), RouteSectionStatus.VALID, false, 160.0D, 26.0D)
-            );
+                    new StopData("End", "", "1", false, true, false, List.of(), RouteSectionStatus.VALID, false, 160.0D, 26.0D));
             return new Data("Local", new RouteData("Redstone", List.of(0xFFE24B3B)), stops, 2, true, false, RouteSectionStatus.VALID, false);
         }
     }
@@ -684,15 +679,13 @@ public final class PlatformLayoutProjectionEngine {
         }
     }
 
-    public record Layout(List<Primitive> primitives) {
-    }
+    public record Layout(List<Primitive> primitives) {}
 
     public sealed interface Primitive permits Rect, Band, Capsule, Circle, Ring, Line, Text {
         int layer();
     }
 
-    public record Rect(float x, float y, float width, float height, int color, int layer) implements Primitive {
-    }
+    public record Rect(float x, float y, float width, float height, int color, int layer) implements Primitive {}
 
     public record Band(float x, float y, float width, float height, List<Integer> colors, boolean horizontal, int layer) implements Primitive {
         public Band {
@@ -700,23 +693,17 @@ public final class PlatformLayoutProjectionEngine {
         }
     }
 
-    public record Capsule(float x, float y, float width, float height, int color, int layer) implements Primitive {
-    }
+    public record Capsule(float x, float y, float width, float height, int color, int layer) implements Primitive {}
 
-    public record Circle(float x, float y, float radius, int color, int layer) implements Primitive {
-    }
+    public record Circle(float x, float y, float radius, int color, int layer) implements Primitive {}
 
-    public record Ring(float x, float y, float radius, float thickness, int color, int layer) implements Primitive {
-    }
+    public record Ring(float x, float y, float radius, float thickness, int color, int layer) implements Primitive {}
 
-    public record Line(float x1, float y1, float x2, float y2, float width, int color, int layer) implements Primitive {
-    }
+    public record Line(float x1, float y1, float x2, float y2, float width, int color, int layer) implements Primitive {}
 
-    public record Text(float x, float y, float width, float height, String value, int color, float fontSize, ProjectionTextAlign align, ProjectionOverflowMode overflow, float rotationDegrees, int layer) implements Primitive {
-    }
+    public record Text(float x, float y, float width, float height, String value, int color, float fontSize, ProjectionTextAlign align, ProjectionOverflowMode overflow, float rotationDegrees, int layer) implements Primitive {}
 
-    public record Point(float x, float y) {
-    }
+    public record Point(float x, float y) {}
 
     private static final class LayoutBuilder {
         private final List<Primitive> primitives = new ArrayList<>();

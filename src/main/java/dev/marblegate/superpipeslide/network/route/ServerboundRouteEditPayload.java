@@ -2,10 +2,14 @@ package dev.marblegate.superpipeslide.network.route;
 
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.ServerPipeNetworkView;
-import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
+import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.event.ServerEvents;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -16,11 +20,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 public record ServerboundRouteEditPayload(
         UUID requestId,
@@ -33,8 +32,8 @@ public record ServerboundRouteEditPayload(
         List<UUID> platformStopIds,
         boolean bidirectional,
         boolean loop,
-        boolean nameAsSectionName
-) implements CustomPacketPayload {
+        boolean nameAsSectionName) implements CustomPacketPayload {
+
     private static final int MAX_TRANSLATED_NAMES = 1;
     private static final int MAX_THEME_COLORS = 3;
     private static final int MAX_STOPS = 512;
@@ -73,9 +72,7 @@ public record ServerboundRouteEditPayload(
             ServerboundRouteEditPayload::loop,
             ByteBufCodecs.BOOL,
             ServerboundRouteEditPayload::nameAsSectionName,
-            ServerboundRouteEditPayload::new
-    );
-
+            ServerboundRouteEditPayload::new);
     public ServerboundRouteEditPayload(String action, long baseRouteRevision, Optional<UUID> targetId, String name, List<String> translatedNames, List<Integer> themeColors, List<UUID> platformStopIds, boolean bidirectional, boolean loop) {
         this(UUID.randomUUID(), action, baseRouteRevision, targetId, name, translatedNames, themeColors, platformStopIds, bidirectional, loop, true);
     }
@@ -145,8 +142,7 @@ public record ServerboundRouteEditPayload(
             String dimension,
             BlockPos position,
             Optional<UUID> targetId,
-            String targetSummary
-    ) {
+            String targetSummary) {
         private static DeletionAudit capture(ServerboundRouteEditPayload payload, RouteNetworkSavedData routes, ServerPlayer player) {
             if (!DELETE_LINE.equals(payload.action()) && !DELETE_LAYOUT.equals(payload.action())) {
                 return NONE;
@@ -163,8 +159,7 @@ public record ServerboundRouteEditPayload(
                     player.level().dimension().identifier().toString(),
                     player.blockPosition(),
                     payload.targetId(),
-                    summary
-            );
+                    summary);
         }
 
         private void log(boolean accepted, long currentRevision) {
@@ -186,8 +181,7 @@ public record ServerboundRouteEditPayload(
                     this.baseRevision,
                     currentRevision,
                     this.targetId.map(UUID::toString).orElse("<none>"),
-                    this.targetSummary
-            );
+                    this.targetSummary);
         }
 
         private static String lineSummary(RouteNetworkSavedData routes, UUID routeLineId) {

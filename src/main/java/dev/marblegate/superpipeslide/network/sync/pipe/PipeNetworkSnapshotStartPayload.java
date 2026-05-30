@@ -1,6 +1,7 @@
 package dev.marblegate.superpipeslide.network.sync.pipe;
 
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -8,9 +9,8 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 
-import java.util.UUID;
-
 public record PipeNetworkSnapshotStartPayload(UUID snapshotId, long revision, int totalNodes, int totalConnections, int chunkCount) implements CustomPacketPayload {
+
     public static final Type<PipeNetworkSnapshotStartPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "pipe_network_snapshot_start"));
     public static final StreamCodec<RegistryFriendlyByteBuf, PipeNetworkSnapshotStartPayload> STREAM_CODEC = StreamCodec.composite(
             UUIDUtil.STREAM_CODEC,
@@ -23,9 +23,7 @@ public record PipeNetworkSnapshotStartPayload(UUID snapshotId, long revision, in
             PipeNetworkSnapshotStartPayload::totalConnections,
             ByteBufCodecs.VAR_INT.cast(),
             PipeNetworkSnapshotStartPayload::chunkCount,
-            PipeNetworkSnapshotStartPayload::new
-    );
-
+            PipeNetworkSnapshotStartPayload::new);
     public PipeNetworkSnapshotStartPayload {
         if (snapshotId == null) {
             throw new IllegalArgumentException("Pipe network snapshot id cannot be null");

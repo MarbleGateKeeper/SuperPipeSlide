@@ -21,8 +21,8 @@ import dev.marblegate.superpipeslide.client.core.projection.render.ProjectionTex
 import dev.marblegate.superpipeslide.client.core.projection.render.ProjectionWorldTextRenderer;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
+import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.block.station.StationNameProjectorBlock;
-import dev.marblegate.superpipeslide.common.block.station.StationNameProjectorBlockEntity;
 import dev.marblegate.superpipeslide.common.block.station.StationNameProjectorConfig;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionBuiltinIcon;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponent;
@@ -36,7 +36,6 @@ import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
 import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
-import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.config.ClientConfig;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -45,15 +44,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
-import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -109,12 +108,10 @@ public final class StationNameProjectorRenderer {
             .build();
     private static final RenderType PROJECTION_TRANSLUCENT_QUADS = RenderType.create(
             "superpipeslide_station_name_projector_translucent_quads",
-            RenderSetup.builder(PROJECTION_TRANSLUCENT_PIPELINE).bufferSize(4096).createRenderSetup()
-    );
+            RenderSetup.builder(PROJECTION_TRANSLUCENT_PIPELINE).bufferSize(4096).createRenderSetup());
     private static final Map<Identifier, RenderType> PROJECTION_TEXTURE_QUADS = new LinkedHashMap<>();
 
-    private StationNameProjectorRenderer() {
-    }
+    private StationNameProjectorRenderer() {}
 
     public static void registerPipelines(RegisterRenderPipelinesEvent event) {
         event.registerPipeline(PROJECTION_TRANSLUCENT_PIPELINE);
@@ -276,8 +273,7 @@ public final class StationNameProjectorRenderer {
                 projector.layout(),
                 projector.stationInfo(),
                 ClientRouteDataCache.revision(),
-                networkImageStates(projector.layout(), true)
-        );
+                networkImageStates(projector.layout(), true));
     }
 
     private static DynamicProjectionKey dynamicKey(ProjectorData projector, boolean frontSide, float width, float height) {
@@ -295,8 +291,7 @@ public final class StationNameProjectorRenderer {
                 projector.layout(),
                 projector.stationInfo(),
                 ClientRouteDataCache.revision(),
-                phases
-        );
+                phases);
     }
 
     private static boolean hasStaticRenderableContent(AppliedProjectionLayout layout, StationRenderInfo info, StationNameProjectorConfig config) {
@@ -455,8 +450,7 @@ public final class StationNameProjectorRenderer {
                 center.z - safeRadius,
                 center.x + safeRadius,
                 center.y + safeRadius,
-                center.z + safeRadius
-        );
+                center.z + safeRadius);
         return frustum.isVisible(bounds);
     }
 
@@ -573,10 +567,8 @@ public final class StationNameProjectorRenderer {
             }
             case BUILTIN_ICON -> renderBuiltinIconChrome(pose, buffer, transform, rect, (ProjectionComponentSettings.BuiltinIcon) settings, brightness, z, pass);
             case NETWORK_IMAGE -> renderNetworkImageChrome(pose, buffer, transform, rect, (ProjectionComponentSettings.NetworkImage) settings, brightness, z, pass);
-            case STATION_TITLE_GROUP, STATION_NAME_TEXT, TRANSLATION_TEXT, CUSTOM_TEXT -> {
-            }
-            case ROUTE_TEXT -> {
-            }
+            case STATION_TITLE_GROUP, STATION_NAME_TEXT, TRANSLATION_TEXT, CUSTOM_TEXT -> {}
+            case ROUTE_TEXT -> {}
         }
     }
 
@@ -723,8 +715,7 @@ public final class StationNameProjectorRenderer {
                     RenderSetup.builder(PROJECTION_TEXTURE_PIPELINE)
                             .withTexture("Sampler0", id)
                             .bufferSize(4096)
-                            .createRenderSetup()
-            ));
+                            .createRenderSetup()));
         }
     }
 
@@ -889,8 +880,7 @@ public final class StationNameProjectorRenderer {
             case ROUTE_ICONS, ROUTE_OUTLINE_ICONS -> renderRouteIconText(poseStack, collector, font, info.routes(), rect, (ProjectionComponentSettings.RouteIcon) settings, component.type() == ProjectionComponentType.ROUTE_OUTLINE_ICONS, brightness);
             case ROUTE_CAPSULES -> renderRouteCapsuleText(poseStack, collector, font, info.routes(), rect, (ProjectionComponentSettings.RouteCapsules) settings, brightness);
             case NETWORK_IMAGE -> drawNetworkImageStatusText(poseStack, collector, font, rect, (ProjectionComponentSettings.NetworkImage) settings, brightness);
-            default -> {
-            }
+            default -> {}
         }
         poseStack.popPose();
     }
@@ -1619,8 +1609,7 @@ public final class StationNameProjectorRenderer {
                 false,
                 group.primaryName(),
                 group.translatedNames().isEmpty() ? "" : group.translatedNames().getFirst(),
-                routesForStation(group.id())
-        );
+                routesForStation(group.id()));
     }
 
     private static List<RouteChip> routesForStation(UUID stationGroupId) {
@@ -1761,8 +1750,7 @@ public final class StationNameProjectorRenderer {
                 transform.centerX() + dx * cos - dy * sin,
                 transform.centerY() + dx * sin + dy * cos,
                 vertex.u(),
-                vertex.v()
-        );
+                vertex.v());
     }
 
     private static void emitClippedColorQuad(Matrix4f matrix, VertexConsumer buffer, float z, int color, List<ProjectionQuadClipper.Vertex> vertices) {
@@ -1867,8 +1855,7 @@ public final class StationNameProjectorRenderer {
         private static final RenderData EMPTY = new RenderData(List.of(), Vec3.ZERO);
     }
 
-    private record ProjectorData(BlockPos pos, Direction facing, StationNameProjectorConfig config, AppliedProjectionLayout layout, StationRenderInfo stationInfo) {
-    }
+    private record ProjectorData(BlockPos pos, Direction facing, StationNameProjectorConfig config, AppliedProjectionLayout layout, StationRenderInfo stationInfo) {}
 
     private record StationRenderInfo(boolean missing, String primaryName, String translation, List<RouteChip> routes) {
         static StationRenderInfo unbound() {
@@ -1882,14 +1869,11 @@ public final class StationNameProjectorRenderer {
         }
     }
 
-    private record RouteChip(String name, List<Integer> colors) {
-    }
+    private record RouteChip(String name, List<Integer> colors) {}
 
-    private record RouteWindow<T>(List<T> items, int hidden) {
-    }
+    private record RouteWindow<T>(List<T> items, int hidden) {}
 
-    private record TexturedComponent(Identifier textureId, ComponentTransform transform, ComponentRect rect, float z, int color, float u0, float v0, float u1, float v1) {
-    }
+    private record TexturedComponent(Identifier textureId, ComponentTransform transform, ComponentRect rect, float z, int color, float u0, float v0, float u1, float v1) {}
 
     private record StaticProjectionKey(
             BlockPos pos,
@@ -1901,9 +1885,7 @@ public final class StationNameProjectorRenderer {
             AppliedProjectionLayout layout,
             StationRenderInfo info,
             long routeRevision,
-            List<NetworkImageStateKey> networkImages
-    ) {
-    }
+            List<NetworkImageStateKey> networkImages) {}
 
     private record DynamicProjectionKey(
             BlockPos pos,
@@ -1915,12 +1897,9 @@ public final class StationNameProjectorRenderer {
             AppliedProjectionLayout layout,
             StationRenderInfo info,
             long routeRevision,
-            List<DynamicComponentPhase> phases
-    ) {
-    }
+            List<DynamicComponentPhase> phases) {}
 
-    private record NetworkImageStateKey(String url, ProjectionNetworkImageCache.Status status, Identifier textureId, int width, int height) {
-    }
+    private record NetworkImageStateKey(String url, ProjectionNetworkImageCache.Status status, Identifier textureId, int width, int height) {}
 
     private record DynamicComponentPhase(UUID componentId, long phase, String url, ProjectionNetworkImageCache.Status status, Identifier textureId, int width, int height) {
         private static DynamicComponentPhase phase(UUID componentId, long phase) {
@@ -1952,8 +1931,7 @@ public final class StationNameProjectorRenderer {
         }
     }
 
-    private record ComponentTransform(float centerX, float centerY, float radians, CanvasBounds canvasBounds) {
-    }
+    private record ComponentTransform(float centerX, float centerY, float radians, CanvasBounds canvasBounds) {}
 
     private record CanvasBounds(float minX, float minY, float maxX, float maxY, Matrix4f worldToCanvas) {
         private static CanvasBounds of(float width, float height) {

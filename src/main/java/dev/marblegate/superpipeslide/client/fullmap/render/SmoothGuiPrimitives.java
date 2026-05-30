@@ -3,6 +3,8 @@ package dev.marblegate.superpipeslide.client.fullmap.render;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
@@ -16,14 +18,10 @@ import org.joml.Matrix3x2f;
 import org.joml.Matrix3x2fc;
 import org.jspecify.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public final class SmoothGuiPrimitives {
     private static final double EDGE_AA_PX = 0.9D;
 
-    private SmoothGuiPrimitives() {
-    }
+    private SmoothGuiPrimitives() {}
 
     public static void line(GuiGraphicsExtractor graphics, Vec2 a, Vec2 b, double width, int color) {
         if (a == null || b == null || alpha(color) <= 0 || width <= 0.0D) {
@@ -142,8 +140,7 @@ public final class SmoothGuiPrimitives {
                     quad.a().x(), quad.a().y(), quad.c1(),
                     quad.b().x(), quad.b().y(), quad.c2(),
                     quad.c().x(), quad.c().y(), quad.c3(),
-                    quad.d().x(), quad.d().y(), quad.c4()
-            );
+                    quad.d().x(), quad.d().y(), quad.c4());
         }
         builder.submit(graphics);
     }
@@ -189,8 +186,7 @@ public final class SmoothGuiPrimitives {
                 pose,
                 quad,
                 scissor,
-                bounds
-        ));
+                bounds));
     }
 
     private static int alpha(int color) {
@@ -290,8 +286,7 @@ public final class SmoothGuiPrimitives {
                 double omt = 1.0D - t;
                 addPoint(result, new Vec2(
                         omt * omt * curveStart.x() + 2.0D * omt * t * corner.x() + t * t * curveEnd.x(),
-                        omt * omt * curveStart.y() + 2.0D * omt * t * corner.y() + t * t * curveEnd.y()
-                ));
+                        omt * omt * curveStart.y() + 2.0D * omt * t * corner.y() + t * t * curveEnd.y()));
             }
         }
         addPoint(result, points.getLast());
@@ -304,14 +299,11 @@ public final class SmoothGuiPrimitives {
         }
     }
 
-    private record Quad(double x1, double y1, int c1, double x2, double y2, int c2, double x3, double y3, int c3, double x4, double y4, int c4) {
-    }
+    private record Quad(double x1, double y1, int c1, double x2, double y2, int c2, double x3, double y3, int c3, double x4, double y4, int c4) {}
 
-    public record GradientQuad(Vec2 a, Vec2 b, Vec2 c, Vec2 d, int c1, int c2, int c3, int c4) {
-    }
+    public record GradientQuad(Vec2 a, Vec2 b, Vec2 c, Vec2 d, int c1, int c2, int c3, int c4) {}
 
-    private record TexturedQuad(double x1, double y1, float u1, float v1, double x2, double y2, float u2, float v2, double x3, double y3, float u3, float v3, double x4, double y4, float u4, float v4, int color) {
-    }
+    private record TexturedQuad(double x1, double y1, float u1, float v1, double x2, double y2, float u2, float v2, double x3, double y3, float u3, float v3, double x4, double y4, float u4, float v4, int color) {}
 
     private static final class PrimitiveBuilder {
         private final List<Quad> quads = new ArrayList<>();
@@ -335,8 +327,7 @@ public final class SmoothGuiPrimitives {
                     a.x() + nx, a.y() + ny, color,
                     b.x() + nx, b.y() + ny, color,
                     b.x() - nx, b.y() - ny, color,
-                    a.x() - nx, a.y() - ny, color
-            );
+                    a.x() - nx, a.y() - ny, color);
             this.circle(a, radius, color);
             this.circle(b, radius, color);
         }
@@ -362,8 +353,7 @@ public final class SmoothGuiPrimitives {
                         a.x() + nx, a.y() + ny, color,
                         b.x() + nx, b.y() + ny, color,
                         b.x() - nx, b.y() - ny, color,
-                        a.x() - nx, a.y() - ny, color
-                );
+                        a.x() - nx, a.y() - ny, color);
                 drewSegment = true;
             }
             if (!drewSegment) {
@@ -408,8 +398,7 @@ public final class SmoothGuiPrimitives {
                         center.x() + x0, center.y() - y0, color,
                         center.x() + x1, center.y() - y1, color,
                         center.x() + x1, center.y() + y1, color,
-                        center.x() + x0, center.y() + y0, color
-                );
+                        center.x() + x0, center.y() + y0, color);
             }
         }
 
@@ -449,8 +438,7 @@ public final class SmoothGuiPrimitives {
                         center.x() - span0, center.y() + y0, color,
                         center.x() + span0, center.y() + y0, color,
                         center.x() + span1, center.y() + y1, color,
-                        center.x() - span1, center.y() + y1, color
-                );
+                        center.x() - span1, center.y() + y1, color);
             }
         }
 
@@ -495,8 +483,7 @@ public final class SmoothGuiPrimitives {
             Matrix3x2fc pose,
             List<Quad> quads,
             @Nullable ScreenRectangle scissorArea,
-            @Nullable ScreenRectangle bounds
-    ) implements GuiElementRenderState {
+            @Nullable ScreenRectangle bounds) implements GuiElementRenderState {
         @Override
         public void buildVertices(VertexConsumer vertexConsumer) {
             for (Quad quad : this.quads) {
@@ -514,8 +501,7 @@ public final class SmoothGuiPrimitives {
             Matrix3x2fc pose,
             TexturedQuad quad,
             @Nullable ScreenRectangle scissorArea,
-            @Nullable ScreenRectangle bounds
-    ) implements GuiElementRenderState {
+            @Nullable ScreenRectangle bounds) implements GuiElementRenderState {
         @Override
         public void buildVertices(VertexConsumer vertexConsumer) {
             vertexConsumer.addVertexWith2DPose(this.pose, (float) this.quad.x1(), (float) this.quad.y1()).setUv(this.quad.u1(), this.quad.v1()).setColor(this.quad.color());

@@ -28,8 +28,7 @@ public final class AutoCurveSolver {
     private static final double MAX_LENGTH_RATIO = 3.4D;
     private static final double MAX_SEGMENT_REVERSAL_DOT = -0.72D;
 
-    private AutoCurveSolver() {
-    }
+    private AutoCurveSolver() {}
 
     public static Map<UUID, CurveSpec> recomputeAutoCurvesAround(PipeNetworkView view, Set<PipeAnchorId> anchors) {
         return recomputeAutoCurveSpecs(view, affectedAutoCurveIdsAround(view, anchors));
@@ -427,6 +426,5 @@ public final class AutoCurveSolver {
         return Vec3.atCenterOf(anchorId.blockPos());
     }
 
-    private record EndpointPlan(Vec3 tangent, Vec3 side, double handleLength, double reliefRadius, double forwardBias, boolean hairpin) {
-    }
+    private record EndpointPlan(Vec3 tangent, Vec3 side, double handleLength, double reliefRadius, double forwardBias, boolean hairpin) {}
 }

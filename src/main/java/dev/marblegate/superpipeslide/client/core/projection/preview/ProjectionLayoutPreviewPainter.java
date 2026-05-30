@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.client.core.projection.preview;
 
-
 import dev.marblegate.superpipeslide.client.core.projection.cache.ProjectionBuiltinIconTextureCache;
 import dev.marblegate.superpipeslide.client.core.projection.cache.ProjectionNetworkImageCache;
 import dev.marblegate.superpipeslide.client.core.projection.engine.PlatformLayoutProjectionEngine;
@@ -29,8 +28,7 @@ import net.minecraft.network.chat.Component;
 public final class ProjectionLayoutPreviewPainter {
     private static final int FALLBACK_ROUTE_COLOR = 0xFF3366FF;
 
-    private ProjectionLayoutPreviewPainter() {
-    }
+    private ProjectionLayoutPreviewPainter() {}
 
     public static void draw(GuiGraphicsExtractor graphics, Font font, ProjectionLayoutDefinition layout, SPSGui.Rect rect, boolean selected) {
         draw(graphics, font, layout, rect, selected, ProjectionPreviewScenario.standard());
@@ -1187,6 +1185,5 @@ public final class ProjectionLayoutPreviewPainter {
         return withAlpha(color, Math.round(((color >>> 24) & 0xFF) * Math.max(0.0F, Math.min(1.0F, multiplier))));
     }
 
-    private record RouteWindow<T>(List<T> items, int hidden) {
-    }
+    private record RouteWindow<T>(List<T> items, int hidden) {}
 }

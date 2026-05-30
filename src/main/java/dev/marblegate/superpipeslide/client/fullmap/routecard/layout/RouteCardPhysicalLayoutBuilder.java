@@ -16,7 +16,6 @@ import dev.marblegate.superpipeslide.client.fullmap.routecard.visual.RouteCardVi
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -295,8 +294,7 @@ public final class RouteCardPhysicalLayoutBuilder {
             ResourceKey<Level> levelKey,
             Set<RouteCardNodeId> nodeIds,
             Set<String> edgeIds,
-            Aabb2 bounds
-    ) {
+            Aabb2 bounds) {
         private static PhysicalSegmentGroup from(RouteCardVisualSegment visualSegment) {
             RouteCardSegment segment = visualSegment.segment();
             return new PhysicalSegmentGroup(
@@ -304,8 +302,7 @@ public final class RouteCardPhysicalLayoutBuilder {
                     segment.levelKey(),
                     new LinkedHashSet<>(segment.nodeIds()),
                     new LinkedHashSet<>(segment.edgeIds()),
-                    visualSegment.bounds()
-            );
+                    visualSegment.bounds());
         }
 
         private PhysicalSegmentGroup merge(PhysicalSegmentGroup other) {
@@ -318,8 +315,7 @@ public final class RouteCardPhysicalLayoutBuilder {
                     this.levelKey,
                     mergedNodes,
                     mergedEdges,
-                    this.bounds.include(other.bounds)
-            );
+                    this.bounds.include(other.bounds));
         }
 
         private RouteCardVisualSegment toVisualSegment() {
@@ -328,8 +324,7 @@ public final class RouteCardPhysicalLayoutBuilder {
                     this.index,
                     this.levelKey,
                     this.nodeIds.stream().toList(),
-                    this.edgeIds.stream().toList()
-            );
+                    this.edgeIds.stream().toList());
             return new RouteCardVisualSegment(segment, this.bounds);
         }
 

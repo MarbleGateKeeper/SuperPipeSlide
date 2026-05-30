@@ -52,8 +52,7 @@ public final class FullMapNavigationOverlayRenderer {
             ViewportState viewport,
             SPSGui.Rect mapRect,
             ClientNavigationController.NavigationPlan plan,
-            int activeSegmentIndex
-    ) {
+            int activeSegmentIndex) {
         if (graph == null || plan == null || plan.segments().isEmpty()) {
             return;
         }
@@ -72,8 +71,7 @@ public final class FullMapNavigationOverlayRenderer {
             ViewportState viewport,
             SPSGui.Rect mapRect,
             ClientNavigationController.NavigationPlan plan,
-            int activeSegmentIndex
-    ) {
+            int activeSegmentIndex) {
         if (graph == null || plan == null || plan.segments().isEmpty()) {
             return;
         }
@@ -89,8 +87,7 @@ public final class FullMapNavigationOverlayRenderer {
             ViewportState viewport,
             SPSGui.Rect mapRect,
             ClientNavigationController.NavigationPlan plan,
-            int activeSegmentIndex
-    ) {
+            int activeSegmentIndex) {
         Map<String, MapEdge> rawEdges = graph.edges().stream().collect(HashMap::new, (map, edge) -> map.put(edge.id(), edge), HashMap::putAll);
         boolean pureSchematic = FullRouteMapCache.layoutMode() == FullRouteMapLayoutMode.SCHEMATIC;
         List<ProjectedPiece> pieces = new ArrayList<>();
@@ -123,8 +120,7 @@ public final class FullMapNavigationOverlayRenderer {
             ViewportState viewport,
             SPSGui.Rect mapRect,
             ClientNavigationController.NavigationPlan plan,
-            int activeSegmentIndex
-    ) {
+            int activeSegmentIndex) {
         List<ProjectedPiece> pieces = new ArrayList<>();
         for (ClientNavigationController.NavigationSegment segment : plan.segments()) {
             SegmentMatcher matcher = new SegmentMatcher(segment);
@@ -144,8 +140,7 @@ public final class FullMapNavigationOverlayRenderer {
             ViewportState viewport,
             SPSGui.Rect mapRect,
             ClientNavigationController.NavigationPlan plan,
-            int activeSegmentIndex
-    ) {
+            int activeSegmentIndex) {
         List<ProjectedPiece> pieces = new ArrayList<>();
         for (ClientNavigationController.NavigationSegment segment : plan.segments()) {
             SegmentMatcher matcher = new SegmentMatcher(segment);
@@ -173,8 +168,7 @@ public final class FullMapNavigationOverlayRenderer {
         }
         return Optional.of(List.of(
                 FullRouteMapRenderer.worldToScreen(from.worldX(), from.worldZ(), viewport, mapRect),
-                FullRouteMapRenderer.worldToScreen(to.worldX(), to.worldZ(), viewport, mapRect)
-        ));
+                FullRouteMapRenderer.worldToScreen(to.worldX(), to.worldZ(), viewport, mapRect)));
     }
 
     private static void addPiece(List<ProjectedPiece> pieces, ClientNavigationController.NavigationSegment segment, int order, List<Vec2> path, int activeSegmentIndex) {
@@ -189,8 +183,7 @@ public final class FullMapNavigationOverlayRenderer {
                 order,
                 cleaned,
                 normalizeColors(segment.colors()),
-                segment.index() == activeSegmentIndex ? NavigationPhase.ACTIVE : segment.index() < activeSegmentIndex ? NavigationPhase.COMPLETE : NavigationPhase.UPCOMING
-        ));
+                segment.index() == activeSegmentIndex ? NavigationPhase.ACTIVE : segment.index() < activeSegmentIndex ? NavigationPhase.COMPLETE : NavigationPhase.UPCOMING));
     }
 
     private static void renderStrokes(GuiGraphicsExtractor graphics, List<ProjectedPiece> pieces) {
@@ -372,8 +365,7 @@ public final class FullMapNavigationOverlayRenderer {
             SPSGui.Rect mapRect,
             UUID stationGroupId,
             int color,
-            MarkerKind kind
-    ) {
+            MarkerKind kind) {
         stationScreen(graph, visualGraph, viewport, mapRect, stationGroupId).ifPresent(screen -> renderMarker(graphics, screen, color, kind));
     }
 
@@ -384,8 +376,7 @@ public final class FullMapNavigationOverlayRenderer {
             SPSGui.Rect mapRect,
             UUID stationGroupId,
             int color,
-            MarkerKind kind
-    ) {
+            MarkerKind kind) {
         physicalStationScreen(graph, viewport, mapRect, stationGroupId).ifPresent(screen -> renderMarker(graphics, screen, color, kind));
     }
 
@@ -433,8 +424,7 @@ public final class FullMapNavigationOverlayRenderer {
                     stationScreen(graph, visualGraph, viewport, mapRect, instruction.destinationStationGroupId()),
                     instruction.kind(),
                     instruction.fromLevelKey(),
-                    instruction.destinationLevelKey()
-            ));
+                    instruction.destinationLevelKey()));
         }
     }
 
@@ -454,8 +444,7 @@ public final class FullMapNavigationOverlayRenderer {
                     physicalStationScreen(graph, viewport, mapRect, instruction.destinationStationGroupId()),
                     instruction.kind(),
                     instruction.fromLevelKey(),
-                    instruction.destinationLevelKey()
-            ));
+                    instruction.destinationLevelKey()));
         }
     }
 
@@ -466,8 +455,7 @@ public final class FullMapNavigationOverlayRenderer {
             Optional<Vec2> to,
             ClientNavigationController.TransferKind kind,
             ResourceKey<Level> fromLevel,
-            ResourceKey<Level> toLevel
-    ) {
+            ResourceKey<Level> toLevel) {
         Optional<Vec2> visibleFrom = fromLevel.equals(levelKey) ? from : Optional.empty();
         Optional<Vec2> visibleTo = toLevel.equals(levelKey) ? to : Optional.empty();
         if (kind == ClientNavigationController.TransferKind.SAME_STATION) {
@@ -633,12 +621,10 @@ public final class FullMapNavigationOverlayRenderer {
         }
 
         private boolean matches(List<MapEdgeOccurrence> occurrences) {
-            return occurrences.stream().anyMatch(occurrence ->
-                    this.segment.routeLineId().equals(occurrence.routeLineId())
-                            && this.segment.layoutId().equals(occurrence.routeLayoutId())
-                            && this.matchesDirection(occurrence.routeDirection(), occurrence.bidirectional())
-                            && this.matchesSection(occurrence.routeSectionId(), occurrence.layoutIndex())
-            );
+            return occurrences.stream().anyMatch(occurrence -> this.segment.routeLineId().equals(occurrence.routeLineId())
+                    && this.segment.layoutId().equals(occurrence.routeLayoutId())
+                    && this.matchesDirection(occurrence.routeDirection(), occurrence.bidirectional())
+                    && this.matchesSection(occurrence.routeSectionId(), occurrence.layoutIndex()));
         }
 
         private boolean matchesDirection(int edgeDirection, boolean bidirectional) {

@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.client.core.slide;
 
-
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeAppearanceCache;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.common.core.appearance.model.PipeAppearanceProfile;
@@ -30,8 +29,7 @@ public final class ClientSlidePoseController {
     @Nullable
     private static LocalDismount localDismount;
 
-    private ClientSlidePoseController() {
-    }
+    private ClientSlidePoseController() {}
 
     public static void tick(Minecraft minecraft, LocalPlayer player) {
         if (localDismount != null) {
@@ -116,8 +114,7 @@ public final class ClientSlidePoseController {
                 DismountKind.NONE,
                 mount,
                 0.0D,
-                Mth.clamp(frame.alpha(), 0.0D, 1.0D)
-        );
+                Mth.clamp(frame.alpha(), 0.0D, 1.0D));
     }
 
     private static RidePoseDescriptor descriptorFor(ClientSlideFeedbackController.Frame frame) {
@@ -150,8 +147,7 @@ public final class ClientSlidePoseController {
                     1.05D,
                     0.18D,
                     0.78D,
-                    1.00D
-            );
+                    1.00D);
             case FACETED -> new RidePoseDescriptor(
                     RidePoseFamily.INLINE,
                     geometry.shape(),
@@ -164,8 +160,7 @@ public final class ClientSlidePoseController {
                     1.00D,
                     0.17D,
                     0.74D,
-                    0.96D
-            );
+                    0.96D);
             case BOX, TRIANGLE -> new RidePoseDescriptor(
                     RidePoseFamily.INLINE,
                     geometry.shape(),
@@ -178,8 +173,7 @@ public final class ClientSlidePoseController {
                     0.88D,
                     0.12D,
                     0.58D,
-                    0.82D
-            );
+                    0.82D);
             case RAIL -> new RidePoseDescriptor(
                     RidePoseFamily.SPLIT_RAIL,
                     geometry.shape(),
@@ -192,8 +186,7 @@ public final class ClientSlidePoseController {
                     0.86D,
                     clamp((geometry.gauge() - 0.26D) / 0.58D, 0.18D, 1.00D),
                     0.54D,
-                    0.72D
-            );
+                    0.72D);
             case SLIDE -> new RidePoseDescriptor(
                     RidePoseFamily.CRADLE,
                     geometry.shape(),
@@ -206,8 +199,7 @@ public final class ClientSlidePoseController {
                     0.70D,
                     0.24D,
                     0.42D,
-                    0.56D
-            );
+                    0.56D);
             case MONORAIL -> new RidePoseDescriptor(
                     RidePoseFamily.MONORAIL,
                     geometry.shape(),
@@ -220,8 +212,7 @@ public final class ClientSlidePoseController {
                     1.12D,
                     0.12D,
                     0.88D,
-                    1.06D
-            );
+                    1.06D);
             case COVERED -> new RidePoseDescriptor(
                     RidePoseFamily.CRADLE,
                     geometry.shape(),
@@ -234,8 +225,7 @@ public final class ClientSlidePoseController {
                     0.64D,
                     0.28D,
                     0.34D,
-                    0.48D
-            );
+                    0.48D);
         };
     }
 
@@ -365,8 +355,7 @@ public final class ClientSlidePoseController {
                 lerpUnit(previousFrame.motionPhase(), currentFrame.motionPhase(), t),
                 lerp(previousFrame.fovBoost(), currentFrame.fovBoost(), t),
                 lerp(previousFrame.edgeIntensity(), currentFrame.edgeIntensity(), t),
-                currentFrame.ticksSliding()
-        );
+                currentFrame.ticksSliding());
         return new PoseSnapshot(
                 frame,
                 current.ride(),
@@ -375,8 +364,7 @@ public final class ClientSlidePoseController {
                 current.dismountKind(),
                 lerp(previous.mountProgress(), current.mountProgress(), t),
                 lerp(previous.dismountProgress(), current.dismountProgress(), t),
-                lerp(previous.poseAlpha(), current.poseAlpha(), t)
-        );
+                lerp(previous.poseAlpha(), current.poseAlpha(), t));
     }
 
     private static boolean shouldSnap(PoseSnapshot previous, PoseSnapshot current) {
@@ -482,9 +470,7 @@ public final class ClientSlidePoseController {
             double balanceScale,
             double railSpread,
             double verticalRideScale,
-            double wallRideScale
-    ) {
-    }
+            double wallRideScale) {}
 
     public record PoseSnapshot(
             ClientSlideFeedbackController.Frame frame,
@@ -494,8 +480,7 @@ public final class ClientSlidePoseController {
             DismountKind dismountKind,
             double mountProgress,
             double dismountProgress,
-            double poseAlpha
-    ) {
+            double poseAlpha) {
         public Vec3 position() {
             return this.frame.position();
         }
@@ -587,7 +572,5 @@ public final class ClientSlidePoseController {
             double trackAmount,
             double verticalAmount,
             double ascendAmount,
-            double descendAmount
-    ) {
-    }
+            double descendAmount) {}
 }

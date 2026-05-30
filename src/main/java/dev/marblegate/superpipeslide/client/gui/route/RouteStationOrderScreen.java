@@ -2,7 +2,6 @@ package dev.marblegate.superpipeslide.client.gui.route;
 
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
-import dev.marblegate.superpipeslide.client.fullmap.model.search.SearchResult;
 import dev.marblegate.superpipeslide.client.gui.base.RouteDataAwareScreen;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
@@ -19,13 +18,12 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
@@ -112,14 +110,13 @@ public class RouteStationOrderScreen extends RouteEditorScreenBase implements Ro
         Component stamp = hasInvalidStops
                 ? Component.translatable("screen.superpipeslide.station_order.missing_platform")
                 : this.dirty
-                ? Component.translatable("screen.superpipeslide.editor.unsaved")
-                : Component.translatable("screen.superpipeslide.station_order.stop_count", this.draftStops.size());
+                        ? Component.translatable("screen.superpipeslide.editor.unsaved")
+                        : Component.translatable("screen.superpipeslide.station_order.stop_count", this.draftStops.size());
         int stampColor = hasInvalidStops ? RouteEditorGui.DANGER : this.dirty ? RouteEditorGui.SAVE : RouteEditorGui.INK_MUTED;
         this.drawDocumentHeader(graphics, SPSGui.Icon.STATION_ORDER, List.of(
                 Component.literal(line.map(RouteLine::displayName).orElse(Component.translatable("screen.superpipeslide.route").getString())),
                 Component.literal(SPSGui.layoutName(layout.get())),
-                Component.translatable("screen.superpipeslide.station_order")
-        ), stamp, stampColor, layout.get().id().hashCode());
+                Component.translatable("screen.superpipeslide.station_order")), stamp, stampColor, layout.get().id().hashCode());
         int contentTop = this.documentBodyY();
         this.leftPane = new SPSGui.Rect(content.x(), contentTop, Math.min(172, Math.max(142, content.width() / 3)), content.bottom() - contentTop);
         this.rightPane = new SPSGui.Rect(this.leftPane.right() + 8, contentTop, content.right() - this.leftPane.right() - 8, content.bottom() - contentTop);
@@ -366,15 +363,14 @@ public class RouteStationOrderScreen extends RouteEditorScreenBase implements Ro
             return Optional.of(SectionPreview.stale(layout.bidirectional()));
         }
         RoutePathfinder.SearchResult forward = RoutePathfinder.shortestPathResult(fromConnection.get(), toConnection.get(), pipeView);
-            RoutePathfinder.SearchResult reverse = layout.bidirectional()
-                    ? RoutePathfinder.shortestPathResult(toConnection.get(), fromConnection.get(), pipeView)
-                    : new RoutePathfinder.SearchResult(RouteSectionStatus.DISABLED, Optional.empty());
+        RoutePathfinder.SearchResult reverse = layout.bidirectional()
+                ? RoutePathfinder.shortestPathResult(toConnection.get(), fromConnection.get(), pipeView)
+                : new RoutePathfinder.SearchResult(RouteSectionStatus.DISABLED, Optional.empty());
         return Optional.of(new SectionPreview(
                 forward.status(),
-                    layout.bidirectional() ? reverse.status() : RouteSectionStatus.DISABLED,
+                layout.bidirectional() ? reverse.status() : RouteSectionStatus.DISABLED,
                 forward.optionalPath().map(RoutePathfinder.PathResult::length).orElse(0.0D),
-                reverse.optionalPath().map(RoutePathfinder.PathResult::length).orElse(0.0D)
-        ));
+                reverse.optionalPath().map(RoutePathfinder.PathResult::length).orElse(0.0D)));
     }
 
     private void renderRight(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
@@ -797,14 +793,11 @@ public class RouteStationOrderScreen extends RouteEditorScreenBase implements Ro
         return true;
     }
 
-    private record RowHit(SPSGui.Rect bounds, UUID stopId, int index) {
-    }
+    private record RowHit(SPSGui.Rect bounds, UUID stopId, int index) {}
 
-    private record DragState(UUID stopId, int sourceIndex, boolean fromLeft) {
-    }
+    private record DragState(UUID stopId, int sourceIndex, boolean fromLeft) {}
 
-    private record AvailableStationCard(StationGroup station, List<PlatformStop> stops, List<RouteLine> transferLines, int height) {
-    }
+    private record AvailableStationCard(StationGroup station, List<PlatformStop> stops, List<RouteLine> transferLines, int height) {}
 
     private record SectionPreview(RouteSectionStatus forwardStatus, RouteSectionStatus reverseStatus, double forwardLength, double reverseLength) {
         static SectionPreview stale(boolean bidirectional) {
@@ -821,9 +814,9 @@ public class RouteStationOrderScreen extends RouteEditorScreenBase implements Ro
 
         private static int severity(RouteSectionStatus status) {
             return switch (status) {
-            case VALID -> 0;
-            case DISABLED -> 0;
-            case STALE -> 1;
+                case VALID -> 0;
+                case DISABLED -> 0;
+                case STALE -> 1;
                 case INCOMPLETE -> 2;
                 case AMBIGUOUS -> 3;
                 case BROKEN -> 4;
@@ -831,6 +824,5 @@ public class RouteStationOrderScreen extends RouteEditorScreenBase implements Ro
         }
     }
 
-    private record PreviewKey(UUID fromStopId, UUID toStopId, boolean bidirectional, long pipeRevision, long routeRevision, int draftVersion) {
-    }
+    private record PreviewKey(UUID fromStopId, UUID toStopId, boolean bidirectional, long pipeRevision, long routeRevision, int draftVersion) {}
 }

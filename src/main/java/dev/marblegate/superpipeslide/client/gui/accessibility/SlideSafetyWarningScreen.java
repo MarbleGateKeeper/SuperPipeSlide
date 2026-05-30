@@ -42,8 +42,7 @@ public final class SlideSafetyWarningScreen extends SPSScreen {
                 SPSGui.Icon.WARNING,
                 Component.translatable("screen.superpipeslide.slide_safety.motion.title"),
                 Component.translatable("screen.superpipeslide.slide_safety.motion.body"),
-                RouteEditorGui.WARNING
-        );
+                RouteEditorGui.WARNING);
         y += 55;
         renderWarningBlock(
                 graphics,
@@ -51,8 +50,7 @@ public final class SlideSafetyWarningScreen extends SPSScreen {
                 SPSGui.Icon.WARNING,
                 Component.translatable("screen.superpipeslide.slide_safety.photosensitivity.title"),
                 Component.translatable("screen.superpipeslide.slide_safety.photosensitivity.body"),
-                RouteEditorGui.DANGER
-        );
+                RouteEditorGui.DANGER);
         y += 56;
         SPSGui.smallText(
                 graphics,
@@ -61,8 +59,7 @@ public final class SlideSafetyWarningScreen extends SPSScreen {
                 content.x() + 4,
                 y,
                 RouteEditorGui.INK_MUTED,
-                0.72F
-        );
+                0.72F);
 
         int buttonY = content.bottom() - 26;
         int gap = 7;

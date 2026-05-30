@@ -13,8 +13,8 @@ public record ClientboundOpenPipeAppearanceEditorPayload(
         int targetConnectionKey,
         PipeAppearanceProfile currentProfile,
         PipeAppearanceProfile draftProfile,
-        double targetLength
-) implements CustomPacketPayload {
+        double targetLength) implements CustomPacketPayload {
+
     public static final Type<ClientboundOpenPipeAppearanceEditorPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "open_pipe_appearance_editor"));
     public static final StreamCodec<RegistryFriendlyByteBuf, ClientboundOpenPipeAppearanceEditorPayload> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_LONG.cast(),
@@ -27,9 +27,7 @@ public record ClientboundOpenPipeAppearanceEditorPayload(
             ClientboundOpenPipeAppearanceEditorPayload::draftProfile,
             ByteBufCodecs.DOUBLE.cast(),
             ClientboundOpenPipeAppearanceEditorPayload::targetLength,
-            ClientboundOpenPipeAppearanceEditorPayload::new
-    );
-
+            ClientboundOpenPipeAppearanceEditorPayload::new);
     @Override
     public Type<? extends CustomPacketPayload> type() {
         return TYPE;

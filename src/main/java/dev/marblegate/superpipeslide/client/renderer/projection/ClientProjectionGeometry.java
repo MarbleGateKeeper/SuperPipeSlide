@@ -8,8 +8,7 @@ import net.minecraft.world.phys.Vec3;
 public final class ClientProjectionGeometry {
     private static final double WALL_LIFT = 0.012D;
 
-    private ClientProjectionGeometry() {
-    }
+    private ClientProjectionGeometry() {}
 
     public static Vec3 projectionCenter(BlockPos pos, Direction facing, float offsetX, float offsetY) {
         return Vec3.atLowerCornerOf(pos).add(localProjectionCenter(facing, offsetX, offsetY));

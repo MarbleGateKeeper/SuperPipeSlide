@@ -1,17 +1,15 @@
 package dev.marblegate.superpipeslide.common.core.geometry;
 
-import net.minecraft.world.phys.Vec3;
-
 import java.util.Collection;
 import java.util.Optional;
+import net.minecraft.world.phys.Vec3;
 
 public final class PipeConnectionRaycast {
     private static final int MIN_SAMPLES = 12;
     private static final int MAX_SAMPLES = 96;
     private static final double SAMPLE_DENSITY = 2.0D;
 
-    private PipeConnectionRaycast() {
-    }
+    private PipeConnectionRaycast() {}
 
     public static Optional<Hit> find(Collection<PipeConnection> connections, Vec3 rayOrigin, Vec3 rayDirection, double maxRayDistance, double maxPipeDistance) {
         Vec3 direction = rayDirection.lengthSqr() < 1.0E-6D ? Vec3.ZERO : rayDirection.normalize();
@@ -91,9 +89,7 @@ public final class PipeConnectionRaycast {
         return Math.max(min, Math.min(max, value));
     }
 
-    public record Hit(PipeConnection connection, Vec3 position, double distanceOnConnection, double rayDistance, double pipeDistance) {
-    }
+    public record Hit(PipeConnection connection, Vec3 position, double distanceOnConnection, double rayDistance, double pipeDistance) {}
 
-    private record SegmentRayClosest(double segmentT, double rayDistance, Vec3 pointOnSegment, double pipeDistance) {
-    }
+    private record SegmentRayClosest(double segmentT, double rayDistance, Vec3 pointOnSegment, double pipeDistance) {}
 }

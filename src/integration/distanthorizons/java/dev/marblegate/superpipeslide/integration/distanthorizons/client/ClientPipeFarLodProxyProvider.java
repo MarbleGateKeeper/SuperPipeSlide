@@ -32,8 +32,7 @@ public final class ClientPipeFarLodProxyProvider {
 
     private static final Map<ResourceKey<Level>, PipeFarLodSnapshot> CACHE = new LinkedHashMap<>();
 
-    private ClientPipeFarLodProxyProvider() {
-    }
+    private ClientPipeFarLodProxyProvider() {}
 
     public static Optional<PipeFarLodSnapshot> snapshot(ResourceKey<Level> levelKey) {
         long networkRevision = ClientPipeNetworkCache.aggregateRevision();
@@ -150,8 +149,7 @@ public final class ClientPipeFarLodProxyProvider {
         return new Vec3(
                 from.x + (to.x - from.x) * t,
                 from.y + (to.y - from.y) * t,
-                from.z + (to.z - from.z) * t
-        );
+                from.z + (to.z - from.z) * t);
     }
 
     private static PipeFarLodBox thinBoxFor(Vec3 from, Vec3 to, double halfThickness, int argb) {
@@ -198,8 +196,7 @@ public final class ClientPipeFarLodProxyProvider {
                 ensureThicknessMax(minX, maxX),
                 ensureThicknessMax(minY, maxY),
                 ensureThicknessMax(minZ, maxZ),
-                argb
-        );
+                argb);
     }
 
     private static double ensureThicknessMin(double min, double max) {
@@ -331,7 +328,5 @@ public final class ClientPipeFarLodProxyProvider {
         return red << 16 | green << 8 | blue;
     }
 
-    private record CacheEntry(PipeFarLodSnapshot snapshot) {
-    }
-
+    private record CacheEntry(PipeFarLodSnapshot snapshot) {}
 }

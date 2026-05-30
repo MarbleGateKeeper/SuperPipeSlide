@@ -1,13 +1,13 @@
 package dev.marblegate.superpipeslide.client.core.navigation;
 
-
 import dev.marblegate.superpipeslide.client.core.route.RouteCandidate;
 import java.util.List;
 import java.util.Optional;
 
 public final class StationEntryPolicy {
-    private StationEntryPolicy() {
-    }    public static StationEntryDecision resolve(StationEntryMode mode, List<RouteCandidate> candidates) {
+    private StationEntryPolicy() {}
+
+    public static StationEntryDecision resolve(StationEntryMode mode, List<RouteCandidate> candidates) {
         if (candidates.isEmpty()) {
             return StationEntryDecision.passThrough();
         }

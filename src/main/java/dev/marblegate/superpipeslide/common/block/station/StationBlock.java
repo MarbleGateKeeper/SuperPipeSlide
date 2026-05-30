@@ -2,8 +2,8 @@ package dev.marblegate.superpipeslide.common.block.station;
 
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.ServerPipeNetworkView;
-import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
+import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.event.ServerEvents;
 import dev.marblegate.superpipeslide.network.station.ClientboundOpenStationEditorPayload;
 import net.minecraft.core.BlockPos;
@@ -24,8 +24,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
-import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.BooleanOp;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
@@ -36,7 +36,8 @@ public class StationBlock extends Block {
     public static final EnumProperty<Direction> FACING = BlockStateProperties.HORIZONTAL_FACING;
     private static final VoxelShape SHAPE_NORTH = Shapes.join(Shapes.box(0.0625, 0, 0.0625, 0.9375, 0.6875, 0.9375),
             Shapes.join(Shapes.box(0.0625, 0.6875, 0.25, 0.9375, 0.8125, 0.9375),
-                    Shapes.box(0.0625, 0.8125, 0.5, 0.9375, 0.9375, 0.9375), BooleanOp.OR), BooleanOp.OR);
+                    Shapes.box(0.0625, 0.8125, 0.5, 0.9375, 0.9375, 0.9375), BooleanOp.OR),
+            BooleanOp.OR);
     private static final VoxelShape SHAPE_EAST = rotateShape(SHAPE_NORTH, 1);
     private static final VoxelShape SHAPE_SOUTH = rotateShape(SHAPE_NORTH, 2);
     private static final VoxelShape SHAPE_WEST = rotateShape(SHAPE_NORTH, 3);
@@ -121,4 +122,3 @@ public class StationBlock extends Block {
         return InteractionResult.SUCCESS_SERVER;
     }
 }
-

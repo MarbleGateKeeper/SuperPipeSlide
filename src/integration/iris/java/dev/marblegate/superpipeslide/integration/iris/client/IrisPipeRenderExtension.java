@@ -22,8 +22,7 @@ import org.joml.Matrix4fStack;
 import org.joml.Vector3d;
 
 public final class IrisPipeRenderExtension implements ClientPipeRenderer.PipeRenderExtension {
-    private static final ClientPipeRenderer.PipeRenderExtension.Scope NOOP_SCOPE = () -> {
-    };
+    private static final ClientPipeRenderer.PipeRenderExtension.Scope NOOP_SCOPE = () -> {};
     private static boolean warningLogged;
 
     @Override

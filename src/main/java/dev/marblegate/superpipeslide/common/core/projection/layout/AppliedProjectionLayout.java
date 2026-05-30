@@ -1,19 +1,17 @@
 package dev.marblegate.superpipeslide.common.core.projection.layout;
 
-
-import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponent;
-import dev.marblegate.superpipeslide.common.core.projection.storage.ProjectionLayoutSavedData;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-
+import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponent;
+import dev.marblegate.superpipeslide.common.core.projection.storage.ProjectionLayoutSavedData;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
 
 public record AppliedProjectionLayout(
         UUID sourceLayoutId,
@@ -25,8 +23,8 @@ public record AppliedProjectionLayout(
         String appliedBy,
         long appliedAt,
         boolean invalid,
-        String errorMessage
-) {
+        String errorMessage) {
+
     public static final int MAX_APPLIED_BY_LENGTH = 32;
     public static final int MAX_ERROR_LENGTH = 96;
 
@@ -40,24 +38,22 @@ public record AppliedProjectionLayout(
             Codec.STRING.optionalFieldOf("applied_by", "").forGetter(AppliedProjectionLayout::appliedBy),
             Codec.LONG.optionalFieldOf("applied_at", 0L).forGetter(AppliedProjectionLayout::appliedAt),
             Codec.BOOL.optionalFieldOf("invalid", false).forGetter(AppliedProjectionLayout::invalid),
-            Codec.STRING.optionalFieldOf("error", "").forGetter(AppliedProjectionLayout::errorMessage)
-    ).apply(instance, AppliedProjectionLayout::new));
+            Codec.STRING.optionalFieldOf("error", "").forGetter(AppliedProjectionLayout::errorMessage)).apply(instance, AppliedProjectionLayout::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, AppliedProjectionLayout> STREAM_CODEC = StreamCodec.of(
             AppliedProjectionLayout::encode,
-            AppliedProjectionLayout::decode
-    );
-
+            AppliedProjectionLayout::decode);
     public AppliedProjectionLayout {
         sourceLayoutId = sourceLayoutId == null ? UUID.randomUUID() : sourceLayoutId;
         sourceLayoutName = normalize(sourceLayoutName, ProjectionLayoutDefinition.MAX_NAME_LENGTH, "Projection Layout");
         sourceSchemaVersion = Math.max(0, sourceSchemaVersion);
         target = target == null ? ProjectionLayoutTarget.STATION_NAME : target;
         canvas = canvas == null ? ProjectionCanvas.standardHorizontal() : canvas;
-        components = components == null ? List.of() : components.stream()
-                .sorted(Comparator.comparingInt(ProjectionComponent::layer))
-                .limit(ProjectionComponent.MAX_COMPONENTS)
-                .toList();
+        components = components == null ? List.of()
+                : components.stream()
+                        .sorted(Comparator.comparingInt(ProjectionComponent::layer))
+                        .limit(ProjectionComponent.MAX_COMPONENTS)
+                        .toList();
         appliedBy = normalize(appliedBy, MAX_APPLIED_BY_LENGTH, "");
         appliedAt = Math.max(0L, appliedAt);
         errorMessage = normalize(errorMessage, MAX_ERROR_LENGTH, "");
@@ -102,8 +98,7 @@ public record AppliedProjectionLayout(
                 ByteBufCodecs.STRING_UTF8.decode(buffer),
                 buffer.readLong(),
                 buffer.readBoolean(),
-                ByteBufCodecs.STRING_UTF8.decode(buffer)
-        );
+                ByteBufCodecs.STRING_UTF8.decode(buffer));
     }
 
     private static String normalize(String value, int maxLength, String fallback) {

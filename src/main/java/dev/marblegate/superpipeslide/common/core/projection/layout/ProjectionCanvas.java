@@ -13,13 +13,11 @@ public record ProjectionCanvas(float width, float height) {
 
     public static final Codec<ProjectionCanvas> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.FLOAT.optionalFieldOf("width", 2.75F).forGetter(ProjectionCanvas::width),
-            Codec.FLOAT.optionalFieldOf("height", 0.95F).forGetter(ProjectionCanvas::height)
-    ).apply(instance, ProjectionCanvas::new));
+            Codec.FLOAT.optionalFieldOf("height", 0.95F).forGetter(ProjectionCanvas::height)).apply(instance, ProjectionCanvas::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ProjectionCanvas> STREAM_CODEC = StreamCodec.of(
             ProjectionCanvas::encode,
-            ProjectionCanvas::decode
-    );
+            ProjectionCanvas::decode);
 
     public ProjectionCanvas {
         width = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Float.isFinite(width) ? width : 2.75F));

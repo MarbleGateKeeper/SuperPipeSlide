@@ -17,8 +17,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.ItemStack;
@@ -212,10 +212,10 @@ public class FoldAnchorEditorScreen extends SPSScreen {
         int shine = 0xFF6D7680;
         int hot = SPSGui.withAlpha(skin.accent(), 0xAA);
         int[][] corners = {
-                {frame.x() + 4, frame.y() + 4, 1, 1},
-                {frame.right() - 16, frame.y() + 4, -1, 1},
-                {frame.x() + 4, frame.bottom() - 16, 1, -1},
-                {frame.right() - 16, frame.bottom() - 16, -1, -1}
+                { frame.x() + 4, frame.y() + 4, 1, 1 },
+                { frame.right() - 16, frame.y() + 4, -1, 1 },
+                { frame.x() + 4, frame.bottom() - 16, 1, -1 },
+                { frame.right() - 16, frame.bottom() - 16, -1, -1 }
         };
         for (int[] corner : corners) {
             int x = corner[0];
@@ -270,8 +270,7 @@ public class FoldAnchorEditorScreen extends SPSScreen {
 
         SPSGui.Rect save = new SPSGui.Rect(this.panel.right() - 21, this.panel.y() + 4, 15, 15);
         this.drawIconButton(graphics, save, skin, SPSGui.Icon.SAVE, !canSave, save.contains(mouseX, mouseY), canSave ? Component.translatable("screen.superpipeslide.fold_anchor.save_calibration") : this.saveDisabledMessage());
-        this.addClick(save, canSave ? this::save : () -> {
-        }, canSave ? this.tooltip("screen.superpipeslide.fold_anchor.save_calibration", "screen.superpipeslide.fold_anchor.tooltip.save") : this.saveDisabledMessage());
+        this.addClick(save, canSave ? this::save : () -> {}, canSave ? this.tooltip("screen.superpipeslide.fold_anchor.save_calibration", "screen.superpipeslide.fold_anchor.tooltip.save") : this.saveDisabledMessage());
     }
 
     private void drawIconButton(GuiGraphicsExtractor graphics, SPSGui.Rect rect, FoldAnchorSkin skin, SPSGui.Icon icon, boolean disabled, boolean hovered, Component tooltip) {
@@ -305,8 +304,7 @@ public class FoldAnchorEditorScreen extends SPSScreen {
         SPSGui.Rect countBadge = new SPSGui.Rect(header.right() - countBadgeWidth - 7, header.y() + 27, countBadgeWidth, 14);
         this.drawTinyBadge(graphics, countBadge, skin, count, this.sourceConnectionCount == 1 ? skin.success() : skin.warning());
 
-        this.addClick(header, () -> {
-        }, this.tooltip("screen.superpipeslide.fold_anchor.tooltip.header", skin.subtitleKey()));
+        this.addClick(header, () -> {}, this.tooltip("screen.superpipeslide.fold_anchor.tooltip.header", skin.subtitleKey()));
     }
 
     private void drawAnchorModelPreview(GuiGraphicsExtractor graphics, FoldAnchorSkin skin, SPSGui.Rect rect) {
@@ -576,8 +574,7 @@ public class FoldAnchorEditorScreen extends SPSScreen {
         this.drawLinkDiagram(graphics, skin, chain, statusColor);
         SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, status, Math.round((chain.width() - 12) / 0.55F)), chain.x() + 6, chain.bottom() - 10, statusColor, 0.55F);
         this.drawCommandButton(graphics, save, skin, Component.translatable("screen.superpipeslide.fold_anchor.save_calibration"), save.contains(mouseX, mouseY), !canSave, true);
-        this.addClick(save, canSave ? this::save : () -> {
-        }, canSave ? this.tooltip("screen.superpipeslide.fold_anchor.save_calibration", "screen.superpipeslide.fold_anchor.tooltip.save") : this.saveDisabledMessage());
+        this.addClick(save, canSave ? this::save : () -> {}, canSave ? this.tooltip("screen.superpipeslide.fold_anchor.save_calibration", "screen.superpipeslide.fold_anchor.tooltip.save") : this.saveDisabledMessage());
     }
 
     private void drawLinkDiagram(GuiGraphicsExtractor graphics, FoldAnchorSkin skin, SPSGui.Rect rect, int statusColor) {
@@ -1017,8 +1014,7 @@ public class FoldAnchorEditorScreen extends SPSScreen {
                     0xFF59606A,
                     0xFFFFB84A,
                     0xFF58F0A0,
-                    "screen.superpipeslide.fold_anchor.subtitle.dimension"
-            );
+                    "screen.superpipeslide.fold_anchor.subtitle.dimension");
         }
         return new FoldAnchorSkin(
                 FoldAnchorKind.SPACE,
@@ -1033,8 +1029,7 @@ public class FoldAnchorEditorScreen extends SPSScreen {
                 0xFF59606A,
                 0xFFFFB84A,
                 0xFF58F0A0,
-                "screen.superpipeslide.fold_anchor.subtitle.space"
-        );
+                "screen.superpipeslide.fold_anchor.subtitle.space");
     }
 
     private static double easeOutCubic(double value) {
@@ -1065,7 +1060,5 @@ public class FoldAnchorEditorScreen extends SPSScreen {
             int textDisabled,
             int warning,
             int success,
-            String subtitleKey
-    ) {
-    }
+            String subtitleKey) {}
 }

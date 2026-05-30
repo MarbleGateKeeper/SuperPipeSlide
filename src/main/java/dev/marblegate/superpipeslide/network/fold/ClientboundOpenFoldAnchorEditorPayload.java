@@ -6,6 +6,9 @@ import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorDir
 import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
 import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorRef;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -13,11 +16,8 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
-
 public record ClientboundOpenFoldAnchorEditorPayload(FoldAnchorNode anchor, int sourceConnectionCount, List<Candidate> candidates) implements CustomPacketPayload {
+
     private static final int MAX_CANDIDATES = 4096;
 
     public static final Type<ClientboundOpenFoldAnchorEditorPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "open_fold_anchor_editor"));
@@ -28,9 +28,7 @@ public record ClientboundOpenFoldAnchorEditorPayload(FoldAnchorNode anchor, int 
             ClientboundOpenFoldAnchorEditorPayload::sourceConnectionCount,
             Candidate.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_CANDIDATES)).cast(),
             ClientboundOpenFoldAnchorEditorPayload::candidates,
-            ClientboundOpenFoldAnchorEditorPayload::new
-    );
-
+            ClientboundOpenFoldAnchorEditorPayload::new);
     public ClientboundOpenFoldAnchorEditorPayload {
         candidates = List.copyOf(candidates);
     }
@@ -86,7 +84,6 @@ public record ClientboundOpenFoldAnchorEditorPayload(FoldAnchorNode anchor, int 
                 Candidate::currentlySelected,
                 ByteBufCodecs.STRING_UTF8,
                 Candidate::disabledReason,
-                Candidate::new
-        );
+                Candidate::new);
     }
 }

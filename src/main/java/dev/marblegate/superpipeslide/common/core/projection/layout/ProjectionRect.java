@@ -6,20 +6,18 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 
 public record ProjectionRect(float x, float y, float width, float height) {
+
     public static final float MAX_EXTENT = 64.0F;
 
     public static final Codec<ProjectionRect> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.FLOAT.optionalFieldOf("x", 0.0F).forGetter(ProjectionRect::x),
             Codec.FLOAT.optionalFieldOf("y", 0.0F).forGetter(ProjectionRect::y),
             Codec.FLOAT.optionalFieldOf("width", 0.25F).forGetter(ProjectionRect::width),
-            Codec.FLOAT.optionalFieldOf("height", 0.12F).forGetter(ProjectionRect::height)
-    ).apply(instance, ProjectionRect::new));
+            Codec.FLOAT.optionalFieldOf("height", 0.12F).forGetter(ProjectionRect::height)).apply(instance, ProjectionRect::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ProjectionRect> STREAM_CODEC = StreamCodec.of(
             ProjectionRect::encode,
-            ProjectionRect::decode
-    );
-
+            ProjectionRect::decode);
     public ProjectionRect {
         x = finiteOr(x, 0.0F);
         y = finiteOr(y, 0.0F);

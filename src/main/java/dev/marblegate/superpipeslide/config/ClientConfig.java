@@ -39,6 +39,5 @@ public final class ClientConfig {
 
     public static final ModConfigSpec SPEC = BUILDER.build();
 
-    private ClientConfig() {
-    }
+    private ClientConfig() {}
 }

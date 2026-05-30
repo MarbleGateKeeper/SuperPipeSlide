@@ -152,8 +152,7 @@ public final class ClientPipeNetworkCache {
         }
     };
 
-    private ClientPipeNetworkCache() {
-    }
+    private ClientPipeNetworkCache() {}
 
     public static void handleSnapshotStart(PipeNetworkSnapshotStartPayload payload) {
         pendingSnapshot = new SnapshotBuilder(payload);
@@ -257,8 +256,7 @@ public final class ClientPipeNetworkCache {
         PipeRenderInvalidation invalidation = new PipeRenderInvalidation(
                 renderFullInvalidation,
                 List.copyOf(RENDER_UPDATED_CONNECTION_IDS),
-                List.copyOf(RENDER_REMOVED_CONNECTION_IDS)
-        );
+                List.copyOf(RENDER_REMOVED_CONNECTION_IDS));
         renderFullInvalidation = false;
         RENDER_UPDATED_CONNECTION_IDS.clear();
         RENDER_REMOVED_CONNECTION_IDS.clear();
@@ -464,8 +462,7 @@ public final class ClientPipeNetworkCache {
             PipeNetworkIndex index = new PipeNetworkIndex();
             index.reset(
                     nodesByLevel.getOrDefault(levelKey, List.of()),
-                    connectionsByLevel.getOrDefault(levelKey, List.of())
-            );
+                    connectionsByLevel.getOrDefault(levelKey, List.of()));
             BY_LEVEL.put(levelKey, new DimensionCache(levelKey, revision, index, DimensionCacheState.READY));
         }
     }
@@ -573,8 +570,7 @@ public final class ClientPipeNetworkCache {
         UNAVAILABLE
     }
 
-    private record DimensionCache(ResourceKey<Level> levelKey, long revision, PipeNetworkIndex index, DimensionCacheState state) {
-    }
+    private record DimensionCache(ResourceKey<Level> levelKey, long revision, PipeNetworkIndex index, DimensionCacheState state) {}
 
     private record SnapshotBuilder(PipeNetworkSnapshotStartPayload start, List<PipeNode> nodes, List<PipeConnection> connections, BitSet receivedChunks) {
         SnapshotBuilder(PipeNetworkSnapshotStartPayload start) {

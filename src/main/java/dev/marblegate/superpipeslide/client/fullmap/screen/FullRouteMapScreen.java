@@ -16,17 +16,12 @@ import dev.marblegate.superpipeslide.client.fullmap.cluster.model.ClusterCardPro
 import dev.marblegate.superpipeslide.client.fullmap.cluster.model.ClusterCardSemanticGraph;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.model.ClusterCardState;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.model.ClusterCardViewport;
-import dev.marblegate.superpipeslide.client.fullmap.cluster.render.ClusterCardRenderer;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.render.ClusterCardRenderResult;
+import dev.marblegate.superpipeslide.client.fullmap.cluster.render.ClusterCardRenderer;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.semantic.ClusterCardSemanticBuilder;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.visual.ClusterCardVisualGraph;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapLayoutMode;
-import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
-import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
-import dev.marblegate.superpipeslide.client.fullmap.model.geom.ViewportState;
-import dev.marblegate.superpipeslide.client.fullmap.model.hit.HitKind;
-import dev.marblegate.superpipeslide.client.fullmap.model.hit.HitTarget;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapCluster;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapDimensionGraph;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapEdge;
@@ -35,6 +30,11 @@ import dev.marblegate.superpipeslide.client.fullmap.model.MapNode;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapTransferHint;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeKind;
+import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
+import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
+import dev.marblegate.superpipeslide.client.fullmap.model.geom.ViewportState;
+import dev.marblegate.superpipeslide.client.fullmap.model.hit.HitKind;
+import dev.marblegate.superpipeslide.client.fullmap.model.hit.HitTarget;
 import dev.marblegate.superpipeslide.client.fullmap.model.search.SearchKind;
 import dev.marblegate.superpipeslide.client.fullmap.model.search.SearchResult;
 import dev.marblegate.superpipeslide.client.fullmap.navigation.FullMapNavigationOverlayRenderer;
@@ -56,8 +56,8 @@ import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardNod
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardSemanticGraph;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardViewMode;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardViewport;
-import dev.marblegate.superpipeslide.client.fullmap.routecard.render.RouteLineCardRenderer;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.render.RouteLineCardRenderResult;
+import dev.marblegate.superpipeslide.client.fullmap.routecard.render.RouteLineCardRenderer;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.render.RouteLineCardState;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.semantic.RouteCardSemanticBuilder;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.visual.RouteCardVisualGraph;
@@ -92,15 +92,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import net.minecraft.client.gui.components.EditBox;
+import javax.annotation.Nullable;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
-import javax.annotation.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScreen {
@@ -276,8 +276,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     viewport,
                     this.mapRect,
                     plan,
-                    this.navigationActiveSegmentIndex(plan)
-            ));
+                    this.navigationActiveSegmentIndex(plan)));
         } else if (graph.isPresent()) {
             ViewportState viewport = this.viewportFor(graph.get());
             List<SchematicLegendRow> schematicLegendRows = this.schematicLegendRows(graph.get(), visualGraph.orElse(null), viewport);
@@ -293,8 +292,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     viewport,
                     this.mapRect,
                     plan,
-                    this.navigationActiveSegmentIndex(plan)
-            ));
+                    this.navigationActiveSegmentIndex(plan)));
         } else {
             FullRouteMapRenderer.drawMapBackground(graphics, this.mapRect, 0.0D, 0.0D, FullRouteMapConfig.BASE_SCALE, FullRouteMapCache.layoutMode());
             SPSGui.centeredText(graphics, this.font, Component.translatable("screen.superpipeslide.full_map.no_data"), this.width / 2, this.height / 2, FullRouteMapConfig.MAP_LABEL_MUTED);
@@ -619,8 +617,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             this.deferredCardOverlays.add(() -> result.tooltipOverride()
                     .ifPresentOrElse(
                             tooltip -> FullMapTooltipCard.renderComponent(graphics, this.font, this.screenBounds(), mouseX, mouseY, tooltip),
-                            () -> this.routeLineCardRenderer.renderHoverTooltip(graphics, this.font, hoverGraph, visualGraph, result.hover(), this.screenBounds(), List.of(), mouseX, mouseY)
-                    ));
+                            () -> this.routeLineCardRenderer.renderHoverTooltip(graphics, this.font, hoverGraph, visualGraph, result.hover(), this.screenBounds(), List.of(), mouseX, mouseY)));
         }
     }
 
@@ -630,8 +627,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 ClientPipeNetworkCache.aggregateRevision(),
                 line.id(),
                 layout.id(),
-                viewMode
-        );
+                viewMode);
         return this.routeCardGraphCache.computeIfAbsent(key, ignored -> this.buildRouteCardGraph(line, layout, viewMode));
     }
 
@@ -742,8 +738,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 bounds,
                 title,
                 meta,
-                active
-        );
+                active);
         int pad = FullMapTheme.CARD_PADDING;
         int mapTop = bounds.y() + FullMapUi.cardHeaderHeight(title, meta) + 6;
         SPSGui.Rect map = new SPSGui.Rect(bounds.x() + pad, mapTop, bounds.width() - pad * 2, Math.max(72, bounds.bottom() - mapTop - 30));
@@ -793,8 +788,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 bounds,
                 title,
                 meta,
-                active
-        );
+                active);
 
         int pad = FullMapTheme.CARD_PADDING;
         int mapTop = bounds.y() + FullMapUi.cardHeaderHeight(title, meta) + 6;
@@ -925,8 +919,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 bounds,
                 stationName,
                 meta,
-                active
-        );
+                active);
         SPSGui.Rect transferEdit = new SPSGui.Rect(bounds.right() - 22, bounds.y() + 5, 16, 16);
         SPSGui.Rect navigate = new SPSGui.Rect(bounds.right() - 42, bounds.y() + 5, 16, 16);
         FullMapUi.iconButton(graphics, navigate, hoverable && navigate.contains(mouseX, mouseY), false, false, SPSGui.Icon.LOCATE);
@@ -1023,13 +1016,11 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (FullRouteMapCache.layoutMode().physical()) {
             this.physicalFoldNodeForAnchor(peerId).ifPresentOrElse(
                     target -> SPSGui.smallText(graphics, this.font, dimensionLabel(peerId.levelKey()) + " " + target.label(), bounds.x() + 8, bounds.y() + headerHeight + 3, SPSGui.TEXT_SECONDARY, FullMapTheme.TYPE_META),
-                    () -> SPSGui.smallText(graphics, this.font, dimensionLabel(peerId.levelKey()) + " " + peerId.blockPos().toShortString(), bounds.x() + 8, bounds.y() + headerHeight + 3, SPSGui.TEXT_SECONDARY, FullMapTheme.TYPE_META)
-            );
+                    () -> SPSGui.smallText(graphics, this.font, dimensionLabel(peerId.levelKey()) + " " + peerId.blockPos().toShortString(), bounds.x() + 8, bounds.y() + headerHeight + 3, SPSGui.TEXT_SECONDARY, FullMapTheme.TYPE_META));
         } else {
             this.displayNodeForFoldAnchor(peerId).ifPresentOrElse(
                     target -> SPSGui.smallText(graphics, this.font, dimensionLabel(peerId.levelKey()) + " " + FullMapText.primaryName(target), bounds.x() + 8, bounds.y() + headerHeight + 3, FullMapTheme.TEXT_SECONDARY, FullMapTheme.TYPE_META),
-                    () -> SPSGui.smallText(graphics, this.font, dimensionLabel(peerId.levelKey()) + " " + peerId.blockPos().toShortString(), bounds.x() + 8, bounds.y() + headerHeight + 3, SPSGui.TEXT_SECONDARY, FullMapTheme.TYPE_META)
-            );
+                    () -> SPSGui.smallText(graphics, this.font, dimensionLabel(peerId.levelKey()) + " " + peerId.blockPos().toShortString(), bounds.x() + 8, bounds.y() + headerHeight + 3, SPSGui.TEXT_SECONDARY, FullMapTheme.TYPE_META));
         }
 
         int previewTop = bounds.y() + headerHeight + 15;
@@ -1123,8 +1114,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         FullMapNavigationViewModel.DestinationCard model = FullMapNavigationViewModel.destinationCard(
                 this.minecraft.player,
                 result,
-                result.stationGroupId().equals(this.selectedNavigationStationGroupId)
-        );
+                result.stationGroupId().equals(this.selectedNavigationStationGroupId));
         boolean hovered = row.contains(mouseX, mouseY);
         int accent = this.navigationChipColor(model.statusTone());
         graphics.fill(row.x(), row.y(), row.right(), row.bottom(), model.selected() ? SPSGui.withAlpha(SPSGui.INFO, 0x18) : hovered ? FullMapTheme.HIGHLIGHT_SOFT : FullMapTheme.SURFACE_CARD_ACTIVE);
@@ -1902,8 +1892,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         return Component.translatable(
                 "screen.superpipeslide.full_map.camera.tooltip",
                 String.format(Locale.ROOT, "%.0f", viewport.pitchDegrees()),
-                String.format(Locale.ROOT, "%.0f", viewport.bearingDegrees())
-        );
+                String.format(Locale.ROOT, "%.0f", viewport.bearingDegrees()));
     }
 
     private SPSGui.Rect computeSchematicLegendBounds() {
@@ -2278,7 +2267,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     }
 
     private static double niceScaleLength(double targetBlocks) {
-        double[] nice = {4.0D, 8.0D, 16.0D, 32.0D, 64.0D, 128.0D, 256.0D, 512.0D, 1024.0D, 2048.0D, 4096.0D};
+        double[] nice = { 4.0D, 8.0D, 16.0D, 32.0D, 64.0D, 128.0D, 256.0D, 512.0D, 1024.0D, 2048.0D, 4096.0D };
         double best = nice[0];
         double bestDistance = Double.POSITIVE_INFINITY;
         for (double value : nice) {
@@ -2379,8 +2368,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             ClusterCardHit hover,
             SPSGui.Rect boundary,
             int mouseX,
-            int mouseY
-    ) {
+            int mouseY) {
         if (hover.kind() != ClusterCardHitKind.NODE || hover.nodeId().isEmpty()) {
             return List.of();
         }
@@ -2405,8 +2393,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             ClusterCardVisualGraph visualGraph,
             ClusterCardViewport viewport,
             SPSGui.Rect map,
-            PipeAnchorId peerId
-    ) {
+            PipeAnchorId peerId) {
         return semanticGraph.nodes().stream()
                 .filter(candidate -> candidate.kind() == ClusterCardNodeKind.MEMBER_FOLD_ANCHOR)
                 .filter(candidate -> candidate.foldAnchorId().filter(peerId::equals).isPresent())
@@ -2421,8 +2408,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         double scale = ClusterCardRenderer.scale(viewport);
         return new Vec2(
                 map.x() + map.width() * 0.5D + (point.x() - viewport.centerX()) * scale,
-                map.y() + map.height() * 0.5D + (point.y() - viewport.centerY()) * scale
-        );
+                map.y() + map.height() * 0.5D + (point.y() - viewport.centerY()) * scale);
     }
 
     private List<SPSGui.Rect> renderClusterCardFoldPreview(GuiGraphicsExtractor graphics, PipeAnchorId peerId, SPSGui.Rect boundary, int mouseX, int mouseY) {
@@ -2578,8 +2564,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                                 Component.translatable("screen.superpipeslide.full_map.tooltip_card.portal_target", schematicPortalTargetLabel(portal)).getString(),
                                 List.of(),
                                 List.of(),
-                                FullMapTheme.BORDER_SELECTED
-                        ));
+                                FullMapTheme.BORDER_SELECTED));
                 return;
             }
             this.renderNodeTooltip(graphics, node, mouseX, mouseY);
@@ -2634,8 +2619,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                         List.of(
                                 tooltipRow("screen.superpipeslide.full_map.tooltip_field.platform", node.label()),
                                 tooltipRow("screen.superpipeslide.full_map.tooltip_field.dimension", dimensionLabel(node.levelKey())),
-                                tooltipRow("screen.superpipeslide.full_map.tooltip_field.position", (int) node.worldX() + ", " + (int) node.worldY() + ", " + (int) node.worldZ())
-                        ),
+                                tooltipRow("screen.superpipeslide.full_map.tooltip_field.position", (int) node.worldX() + ", " + (int) node.worldY() + ", " + (int) node.worldZ())),
                         node.stationGroupId().stream()
                                 .flatMap(stationId -> ClientRouteDataCache.platformStopsInStation(stationId).stream())
                                 .flatMap(platform -> ClientRouteDataCache.routeLayoutIdsForPlatformStop(platform.id()).stream())
@@ -2654,8 +2638,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                                 .flatMap(Optional::stream)
                                 .map(RouteLayout::routeLineId)
                                 .distinct()
-                                .toList())
-                );
+                                .toList()));
                 return;
             }
             String peerDimension = node.foldAnchorId()
@@ -2670,8 +2653,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     Component.translatable("screen.superpipeslide.full_map.tooltip_card.fold_anchor").getString(),
                     List.of(tooltipRow("screen.superpipeslide.full_map.tooltip_field.peer_dimension", peerDimension)),
                     List.of(),
-                    FullRouteMapConfig.MAP_FOLD_MULTI_LINE
-            );
+                    FullRouteMapConfig.MAP_FOLD_MULTI_LINE);
             return;
         }
         if (this.hover.physicalEdgeId().isPresent()) {
@@ -2688,11 +2670,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     Component.translatable("screen.superpipeslide.full_map.tooltip_card.physical_edge").getString(),
                     List.of(
                             tooltipRow("screen.superpipeslide.full_map.tooltip_field.length", Component.translatable("screen.superpipeslide.full_map.tooltip_card.blocks", (int) Math.round(edge.metadata().lengthBlocks())).getString()),
-                            tooltipRow("screen.superpipeslide.full_map.tooltip_field.dimension", dimensionLabel(edge.levelKey()))
-                    ),
+                            tooltipRow("screen.superpipeslide.full_map.tooltip_field.dimension", dimensionLabel(edge.levelKey()))),
                     routeChips(routeLineIds),
-                    primaryRouteColor(routeLineIds)
-            );
+                    primaryRouteColor(routeLineIds));
             return;
         }
         if (this.hover.missingCrossDimensionHintId().isPresent()) {
@@ -2910,8 +2890,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     current.x() + (int) Math.round(dragX),
                     current.y() + (int) Math.round(dragY),
                     this.navigationDrawerBounds.width() <= 0 ? current.width() : this.navigationDrawerBounds.width(),
-                    this.navigationDrawerBounds.height() <= 0 ? current.height() : this.navigationDrawerBounds.height()
-            ));
+                    this.navigationDrawerBounds.height() <= 0 ? current.height() : this.navigationDrawerBounds.height()));
             this.navigationDrawerUserBounds = moved;
             this.navigationDrawerUserXRatio = moved.x() / (double) Math.max(1, this.width - moved.width());
             this.navigationDrawerUserYRatio = moved.y() / (double) Math.max(1, this.height - moved.height());
@@ -2940,8 +2919,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                         bounds.x() + (int) Math.round(dragX),
                         bounds.y() + (int) Math.round(dragY),
                         bounds.width(),
-                        bounds.height()
-                )));
+                        bounds.height())));
                 return true;
             }
             this.draggingCardKey = Optional.empty();
@@ -3256,8 +3234,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                             FullMapText.displayNameStack(line.get()),
                             subtitle,
                             routeLineColors(line.get()),
-                            () -> this.pushCard(MapCard.routeLine(line.get().id(), Optional.of(layout.id()), levelKey))
-                    );
+                            () -> this.pushCard(MapCard.routeLine(line.get().id(), Optional.of(layout.id()), levelKey)));
                 })
                 .filter(row -> row != null)
                 .toList();
@@ -3278,10 +3255,8 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                         () -> {
                             this.clearContextPicker();
                             this.selectNavigationDestination(stationId, true);
-                        }
-                )),
-                routeRows
-        ));
+                        })),
+                routeRows));
     }
 
     private void openEdgePicker(MapEdge edge, ResourceKey<Level> levelKey, int anchorX, int anchorY, SPSGui.Rect boundary, RouteCardViewMode viewMode) {
@@ -3340,8 +3315,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 FullMapText.displayNameStack(line),
                 subtitle,
                 routeLineColors(line),
-                () -> this.pushCard(MapCard.routeLine(line.id(), layoutId, levelKey, viewMode))
-        );
+                () -> this.pushCard(MapCard.routeLine(line.id(), layoutId, levelKey, viewMode)));
     }
 
     private void openRoutePicker(String title, String subtitle, int anchorX, int anchorY, SPSGui.Rect boundary, List<ContextPickerRow> rows) {
@@ -3518,11 +3492,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     Component.translatable("screen.superpipeslide.full_map.tooltip_card.fold_anchor").getString(),
                     List.of(
                             tooltipRow("screen.superpipeslide.full_map.tooltip_field.dimension", dimensionLabel(node.levelKey())),
-                            tooltipRow("screen.superpipeslide.full_map.tooltip_field.peer_dimension", node.foldPeerId().map(peer -> dimensionLabel(peer.levelKey())).orElse("?"))
-                    ),
+                            tooltipRow("screen.superpipeslide.full_map.tooltip_field.peer_dimension", node.foldPeerId().map(peer -> dimensionLabel(peer.levelKey())).orElse("?"))),
                     routeChips(node.routeLineIds()),
-                    FullRouteMapConfig.MAP_FOLD_MULTI_LINE
-            );
+                    FullRouteMapConfig.MAP_FOLD_MULTI_LINE);
             case CLUSTER -> this.renderTooltipCard(
                     graphics,
                     mouseX,
@@ -3532,11 +3504,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     List.of(
                             tooltipRow("screen.superpipeslide.full_map.tooltip_field.dimension", dimensionLabel(node.levelKey())),
                             tooltipRow("screen.superpipeslide.full_map.tooltip_field.stations", Integer.toString(node.stationGroupIds().size())),
-                            tooltipRow("screen.superpipeslide.full_map.tooltip_field.routes", Integer.toString(node.routeLineIds().size()))
-                    ),
+                            tooltipRow("screen.superpipeslide.full_map.tooltip_field.routes", Integer.toString(node.routeLineIds().size()))),
                     routeChips(node.routeLineIds()),
-                    primaryRouteColor(node.routeLineIds())
-            );
+                    primaryRouteColor(node.routeLineIds()));
             case DEEP_CLUSTER -> this.renderTooltipCard(
                     graphics,
                     mouseX,
@@ -3545,8 +3515,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     Component.translatable("screen.superpipeslide.full_map.tooltip_card.deep_cluster").getString() + " · " + dimensionLabel(node.levelKey()),
                     List.of(tooltipRow("screen.superpipeslide.full_map.tooltip_field.stations", Integer.toString(node.stationGroupIds().size()))),
                     routeChips(node.routeLineIds()),
-                    FullRouteMapConfig.MAP_CLUSTER_OUTLINE
-            );
+                    FullRouteMapConfig.MAP_CLUSTER_OUTLINE);
             case STATION -> this.renderTooltipCard(
                     graphics,
                     mouseX,
@@ -3557,11 +3526,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                             tooltipRow("screen.superpipeslide.full_map.tooltip_field.dimension", dimensionLabel(node.levelKey())),
                             tooltipRow("screen.superpipeslide.full_map.tooltip_field.position", (int) node.worldX() + ", " + (int) node.worldY() + ", " + (int) node.worldZ()),
                             tooltipRow("screen.superpipeslide.full_map.tooltip_field.routes", Integer.toString(node.routeLineIds().size())),
-                            tooltipRow("screen.superpipeslide.full_map.tooltip_field.transfers", Integer.toString(node.stationGroupIds().stream().findFirst().map(id -> ClientRouteDataCache.stationTransferLinksForStation(id).size()).orElse(0)))
-                    ),
+                            tooltipRow("screen.superpipeslide.full_map.tooltip_field.transfers", Integer.toString(node.stationGroupIds().stream().findFirst().map(id -> ClientRouteDataCache.stationTransferLinksForStation(id).size()).orElse(0)))),
                     routeChips(node.routeLineIds()),
-                    primaryRouteColor(node.routeLineIds())
-            );
+                    primaryRouteColor(node.routeLineIds()));
         }
     }
 
@@ -3574,8 +3541,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 Component.translatable("screen.superpipeslide.full_map.tooltip_card.edge_subtitle", routeLineIds.size()).getString(),
                 List.of(tooltipRow("screen.superpipeslide.full_map.tooltip_field.routes", Integer.toString(routeLineIds.size()))),
                 routeChips(routeLineIds),
-                primaryRouteColor(routeLineIds)
-        );
+                primaryRouteColor(routeLineIds));
     }
 
     private void renderTransferHintTooltip(GuiGraphicsExtractor graphics, MapDimensionGraph graph, MapTransferHint hint, int mouseX, int mouseY) {
@@ -3597,11 +3563,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 List.of(
                         tooltipRow("screen.superpipeslide.full_map.tooltip_field.distance", Component.translatable("screen.superpipeslide.full_map.tooltip_card.blocks", Math.round(hint.distance())).getString()),
                         tooltipRow("screen.superpipeslide.full_map.tooltip_field.from_routes", routeLineNames(from.routeLineIds())),
-                        tooltipRow("screen.superpipeslide.full_map.tooltip_field.to_routes", routeLineNames(to.routeLineIds()))
-                ),
+                        tooltipRow("screen.superpipeslide.full_map.tooltip_field.to_routes", routeLineNames(to.routeLineIds()))),
                 routeChips(routes),
-                FullRouteMapConfig.MAP_TRANSFER_HINT
-        );
+                FullRouteMapConfig.MAP_TRANSFER_HINT);
     }
 
     private void renderMissingCrossDimensionPathTooltip(GuiGraphicsExtractor graphics, UUID routeLineId, UUID routeLayoutId, ResourceKey<Level> targetLevelKey, int mouseX, int mouseY) {
@@ -3615,11 +3579,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 Component.translatable("screen.superpipeslide.full_map.tooltip_card.missing_path").getString(),
                 List.of(
                         tooltipRow("screen.superpipeslide.layout", layoutName.isBlank() ? "-" : layoutName),
-                        tooltipRow("screen.superpipeslide.full_map.tooltip_field.target_dimension", dimensionLabel(targetLevelKey))
-                ),
+                        tooltipRow("screen.superpipeslide.full_map.tooltip_field.target_dimension", dimensionLabel(targetLevelKey))),
                 routeChips(List.of(routeLineId)),
-                primaryRouteColor(List.of(routeLineId))
-        );
+                primaryRouteColor(List.of(routeLineId)));
     }
 
     private void renderTooltipCard(
@@ -3630,8 +3592,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             String subtitle,
             List<FullMapTooltipCard.Row> rows,
             List<FullMapTooltipCard.RouteChip> chips,
-            int accentColor
-    ) {
+            int accentColor) {
         FullMapTooltipCard.render(graphics, this.font, this.mapRect, this.hoverOverlayAvoidRects, mouseX, mouseY, title, subtitle, rows, chips, accentColor);
     }
 
@@ -3643,8 +3604,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             String subtitle,
             List<FullMapTooltipCard.Row> rows,
             List<FullMapTooltipCard.RouteChip> chips,
-            int accentColor
-    ) {
+            int accentColor) {
         FullMapTooltipCard.render(graphics, this.font, this.mapRect, this.hoverOverlayAvoidRects, mouseX, mouseY, title, subtitle, rows, chips, accentColor);
     }
 
@@ -4143,23 +4103,17 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         this.contextPickerMaxScroll = 0.0D;
     }
 
-    private record ContextPicker(DisplayNameStack title, String subtitle, int anchorX, int anchorY, SPSGui.Rect boundary, List<ContextPickerAction> actions, List<ContextPickerRow> rows) {
-    }
+    private record ContextPicker(DisplayNameStack title, String subtitle, int anchorX, int anchorY, SPSGui.Rect boundary, List<ContextPickerAction> actions, List<ContextPickerRow> rows) {}
 
-    private record ContextPickerAction(SPSGui.Icon icon, Component tooltip, Runnable action) {
-    }
+    private record ContextPickerAction(SPSGui.Icon icon, Component tooltip, Runnable action) {}
 
-    private record ContextPickerRow(DisplayNameStack title, String subtitle, List<Integer> colors, Runnable action) {
-    }
+    private record ContextPickerRow(DisplayNameStack title, String subtitle, List<Integer> colors, Runnable action) {}
 
-    private record NavigationStationDisplay(String label, boolean placeholder, boolean endpoint) {
-    }
+    private record NavigationStationDisplay(String label, boolean placeholder, boolean endpoint) {}
 
-    private record RouteCardGraphCacheKey(long routeRevision, long pipeRevision, UUID routeLineId, UUID routeLayoutId, RouteCardViewMode viewMode) {
-    }
+    private record RouteCardGraphCacheKey(long routeRevision, long pipeRevision, UUID routeLineId, UUID routeLayoutId, RouteCardViewMode viewMode) {}
 
-    private record RouteCardGraphBundle(RouteCardSemanticGraph stopListGraph, RouteCardSemanticGraph semanticGraph, RouteCardVisualGraph visualGraph) {
-    }
+    private record RouteCardGraphBundle(RouteCardSemanticGraph stopListGraph, RouteCardSemanticGraph semanticGraph, RouteCardVisualGraph visualGraph) {}
 
     private void bringCardToFront(String key) {
         for (int i = 0; i < this.cardStack.size(); i++) {
@@ -4244,8 +4198,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         return portal.label().isBlank() || portal.label().startsWith("fold:") ? "?" : dimensionLabel(portal.label());
     }
 
-    private record SchematicLegendRow(RouteLine line, double visibleLength, int pathCount, Optional<UUID> layoutId) {
-    }
+    private record SchematicLegendRow(RouteLine line, double visibleLength, int pathCount, Optional<UUID> layoutId) {}
 
     private static final class SchematicLegendAccumulator {
         private final UUID routeLineId;
@@ -4257,5 +4210,4 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             this.routeLineId = routeLineId;
         }
     }
-
 }

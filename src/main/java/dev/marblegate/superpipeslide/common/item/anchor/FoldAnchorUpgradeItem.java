@@ -4,6 +4,7 @@ import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorKind;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
 import dev.marblegate.superpipeslide.common.registry.SPSBlocks;
+import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -17,8 +18,6 @@ import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
-
-import java.util.function.Consumer;
 
 public class FoldAnchorUpgradeItem extends Item {
     private final FoldAnchorKind kind;

@@ -11,8 +11,9 @@ import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteHudSnapshot;
 import dev.marblegate.superpipeslide.client.core.route.RouteCandidate;
-import dev.marblegate.superpipeslide.client.gui.accessibility.SlideSafetyWarningScreen;
 import dev.marblegate.superpipeslide.client.core.sync.ClientDataResyncRequests;
+import dev.marblegate.superpipeslide.client.gui.accessibility.SlideSafetyWarningScreen;
+import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.gaze.GazeChoice;
 import dev.marblegate.superpipeslide.common.core.gaze.GazeChoiceExpireCondition;
 import dev.marblegate.superpipeslide.common.core.gaze.GazeChoiceExpireType;
@@ -42,7 +43,6 @@ import dev.marblegate.superpipeslide.common.core.slide.traversal.TraversalCursor
 import dev.marblegate.superpipeslide.common.core.slide.traversal.TraversalEvent;
 import dev.marblegate.superpipeslide.common.core.slide.traversal.TraversalEventType;
 import dev.marblegate.superpipeslide.common.core.slide.traversal.TraversalResult;
-import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.config.Config;
 import dev.marblegate.superpipeslide.network.slide.ClientboundSlideNoticePayload;
 import dev.marblegate.superpipeslide.network.slide.ClientboundSlideTeleportCommitPayload;
@@ -129,8 +129,7 @@ public final class ClientSlideController {
     private static final Map<UUID, RouteCandidate> openStationCandidates = new HashMap<>();
     private static final Set<NoticeKey> localNotices = new HashSet<>();
 
-    private ClientSlideController() {
-    }
+    private ClientSlideController() {}
 
     public static void tick(Minecraft minecraft, LocalPlayer player) {
         if (minecraft.level == null || player.isSpectator() || player.getAbilities().flying || !player.isAlive() || player.isPassenger()) {
@@ -199,8 +198,8 @@ public final class ClientSlideController {
                     boolean stationSlow = platformConnection
                             && activeRouteLayoutId != null
                             && (pendingStationCenterAction != null
-                            || openStationPlatformStopId != null
-                            || active.speed() <= stationSlowMaxSpeed(connection) + 0.004D);
+                                    || openStationPlatformStopId != null
+                                    || active.speed() <= stationSlowMaxSpeed(connection) + 0.004D);
                     return new ClientSlideFeedbackSnapshot(
                             active.sessionId(),
                             connection.id(),
@@ -215,8 +214,7 @@ public final class ClientSlideController {
                             platformConnection,
                             stationSlow,
                             activeRouteLayoutId != null,
-                            active.ticksSliding()
-                    );
+                            active.ticksSliding());
                 });
     }
 
@@ -234,8 +232,7 @@ public final class ClientSlideController {
         preview.add(new SlidePreviewConnection(
                 currentConnection,
                 active.direction(),
-                Mth.clamp(active.distanceOnConnection(), 0.0D, currentConnection.length())
-        ));
+                Mth.clamp(active.distanceOnConnection(), 0.0D, currentConnection.length())));
 
         if (activeRouteSectionId == null || preview.size() >= maxConnections) {
             return List.copyOf(preview);
@@ -308,8 +305,7 @@ public final class ClientSlideController {
         Optional<ClientRouteHudSnapshot.NavigationStopContext> navigationStopContext = routeHudNavigationStopContext(
                 activeLayout.id(),
                 hudStations.focusPlatformStopId(),
-                stopFocused
-        );
+                stopFocused);
 
         return Optional.of(new ClientRouteHudSnapshot(
                 active.sessionId(),
@@ -333,8 +329,7 @@ public final class ClientSlideController {
                 stopTiming.progress(),
                 navigationStopContext,
                 transfers,
-                activeLayout.loop()
-        ));
+                activeLayout.loop()));
     }
 
     public static void clear(LocalPlayer player) {
@@ -624,8 +619,7 @@ public final class ClientSlideController {
                 traversalContext(routeProgress),
                 new TraversalCursor(state.connectionId(), state.direction(), state.distanceOnConnection()),
                 Config.MAX_STEP_DISTANCE.getAsDouble(),
-                ClientSlideController::nextStationCheckpoint
-        );
+                ClientSlideController::nextStationCheckpoint);
         if (result.barrier().isPresent() && isStationCheckpoint(result.barrier().get().type())) {
             TraversalCursor cursor = result.barrier().get().cursor();
             Optional<PipeConnection> connection = ClientPipeNetworkCache.globalConnection(cursor.connectionId());
@@ -683,8 +677,7 @@ public final class ClientSlideController {
                 traversalContext(routeProgress),
                 new TraversalCursor(state.connectionId(), state.direction(), state.distanceOnConnection()),
                 remaining,
-                ClientSlideController::nextStationCheckpoint
-        );
+                ClientSlideController::nextStationCheckpoint);
         TraversalCursor cursor = result.cursor();
         Optional<PipeConnection> finalConnection = ClientPipeNetworkCache.globalConnection(cursor.connectionId());
         if (finalConnection.isEmpty() || !finalConnection.get().levelKey().equals(player.level().dimension())) {
@@ -985,8 +978,7 @@ public final class ClientSlideController {
                 routeProgress.connectionIndex(),
                 Optional.ofNullable(pendingBranchChoiceId),
                 true,
-                routeProgress::routeChoiceForCurrentStep
-        );
+                routeProgress::routeChoiceForCurrentStep);
     }
 
     private static Optional<TraversalContext.RouteChoiceSelection> routeChoiceForCurrentStep(UUID layoutId, int routeDirection, Optional<UUID> currentPlatformStopId, Optional<UUID> currentRouteSectionId, int routeConnectionIndex, UUID currentConnectionId, UUID branchNodeId) {
@@ -1175,8 +1167,7 @@ public final class ClientSlideController {
                 choices,
                 defaultChoiceId,
                 BRANCH_REQUIRED_FOCUS_TICKS,
-                new GazeChoiceExpireCondition(GazeChoiceExpireType.PASS_BRANCH_NODE, BRANCH_SESSION_TTL_TICKS)
-        );
+                new GazeChoiceExpireCondition(GazeChoiceExpireType.PASS_BRANCH_NODE, BRANCH_SESSION_TTL_TICKS));
         openBranchNodeId = branch.id();
         openBranchSessionId = session.sessionId();
         ClientGazeChoiceController.openLocal(session);
@@ -1197,8 +1188,7 @@ public final class ClientSlideController {
                 directionLabel(localDirection),
                 defaultChoice ? List.of(DEFAULT_BRANCH_EXIT_COLOR, 0xFF7CCBFF) : List.of(BRANCH_EXIT_COLOR),
                 defaultChoice,
-                Math.cos(Math.toRadians(12.0D))
-        );
+                Math.cos(Math.toRadians(12.0D)));
     }
 
     private static void openStationChoice(LocalPlayer player, ClientSlideState state, PipeConnection current, int direction, PlatformStop platformStop, List<RouteCandidate> candidates, boolean holdUntilSelected) {
@@ -1226,8 +1216,7 @@ public final class ClientSlideController {
                     Component.translatable("gaze.superpipeslide.station.layout_direction_detail"),
                     colors,
                     candidate.sameRoute(preferred),
-                    Math.cos(Math.toRadians(18.0D))
-            ));
+                    Math.cos(Math.toRadians(18.0D))));
             x += 0.72D;
             if (choices.size() >= GazeChoiceSession.MAX_CHOICES) {
                 break;
@@ -1246,8 +1235,7 @@ public final class ClientSlideController {
                 choices,
                 defaultChoiceId,
                 STATION_REQUIRED_FOCUS_TICKS,
-                new GazeChoiceExpireCondition(GazeChoiceExpireType.PASS_STATION, STATION_SESSION_TTL_TICKS)
-        );
+                new GazeChoiceExpireCondition(GazeChoiceExpireType.PASS_STATION, STATION_SESSION_TTL_TICKS));
         openStationPlatformStopId = platformStop.id();
         openStationSessionId = session.sessionId();
         openStationCandidates.clear();
@@ -1278,8 +1266,7 @@ public final class ClientSlideController {
                 ClientboundSlideNoticePayload.Kind.WARNING,
                 List.of(0xFFFFB13B),
                 Component.translatable("notice.superpipeslide.slide.layout_broken", stationName(furthest)),
-                List.of()
-        ));
+                List.of()));
     }
 
     private static void correctActiveDepartureDirection(RouteCandidate selected) {
@@ -1372,8 +1359,7 @@ public final class ClientSlideController {
                 targetConnectionId,
                 direction,
                 distanceOnConnection,
-                speed
-        ));
+                speed));
     }
 
     private static void applyPendingTeleportCommit(LocalPlayer player) {
@@ -1609,8 +1595,7 @@ public final class ClientSlideController {
                     retained.kind(),
                     focusPlatformStopId,
                     retained.stationGroupId(),
-                    retained.colors()
-            ));
+                    retained.colors()));
         }
         retainedRouteHudNavigationStop = null;
         return Optional.empty();
@@ -1795,8 +1780,8 @@ public final class ClientSlideController {
         UUID focusPlatformStopId = terminal || blocked || stationFocused
                 ? currentPlatformStopId
                 : routeHudEntryAtTravelIndex(entries, focusTravelIndex, routeDirection, layout.loop())
-                .map(RouteHudStationEntry::platformStopId)
-                .orElse(currentPlatformStopId);
+                        .map(RouteHudStationEntry::platformStopId)
+                        .orElse(currentPlatformStopId);
 
         List<ClientRouteHudSnapshot.Station> stations = new ArrayList<>();
         for (int forwardIndex = 0; forwardIndex < count; forwardIndex++) {
@@ -1811,8 +1796,7 @@ public final class ClientSlideController {
                     travelIndex,
                     forwardIndex,
                     travelIndex == focusTravelIndex,
-                    terminal && travelIndex == currentTravelIndex
-            ));
+                    terminal && travelIndex == currentTravelIndex));
         }
         return new RouteHudStationSet(stations, count, currentTravelIndex, focusPlatformStopId);
     }
@@ -1868,8 +1852,7 @@ public final class ClientSlideController {
                         layout.get().routeLineId(),
                         routeLine.map(RouteLine::displayName).orElseGet(() -> routeHudLayoutName(layout.get())),
                         routeLine.map(RouteLine::translatedNames).orElse(List.of()),
-                        routeLine.map(RouteLine::themeColors).filter(colors -> !colors.isEmpty()).orElseGet(() -> themeColors(layout.get()))
-                ));
+                        routeLine.map(RouteLine::themeColors).filter(colors -> !colors.isEmpty()).orElseGet(() -> themeColors(layout.get()))));
             }
         }
         return List.copyOf(transfers.values());
@@ -1957,8 +1940,7 @@ public final class ClientSlideController {
                 candidate.layoutId(),
                 candidate.routeDirection(),
                 candidate.sectionId(),
-                reason
-        );
+                reason);
     }
 
     private static Optional<RouteStep> nextStep(RouteLayout layout, UUID platformStopId, int routeDirection) {
@@ -2374,11 +2356,9 @@ public final class ClientSlideController {
         }
     }
 
-    private record CaptureCooldown(UUID connectionId, int ticks, boolean requireExit) {
-    }
+    private record CaptureCooldown(UUID connectionId, int ticks, boolean requireExit) {}
 
-    private record NoticeKey(UUID platformStopId, UUID slideSessionId, String kind) {
-    }
+    private record NoticeKey(UUID platformStopId, UUID slideSessionId, String kind) {}
 
     private record HudStopTiming(ClientRouteHudSnapshot.StopPhase phase, double remainingSeconds, double progress) {
         static HudStopTiming moving() {
@@ -2386,8 +2366,7 @@ public final class ClientSlideController {
         }
     }
 
-    private record RetainedRouteHudNavigationStop(UUID routeLayoutId, ClientRouteHudSnapshot.NavigationStopContext context) {
-    }
+    private record RetainedRouteHudNavigationStop(UUID routeLayoutId, ClientRouteHudSnapshot.NavigationStopContext context) {}
 
     private record RouteHudStationSet(List<ClientRouteHudSnapshot.Station> stations, int stationCount, int currentTravelIndex, UUID focusPlatformStopId) {
         private RouteHudStationSet {

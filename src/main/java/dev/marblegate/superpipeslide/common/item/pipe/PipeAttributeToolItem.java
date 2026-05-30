@@ -5,9 +5,11 @@ import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionAttribut
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRaycast;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
-import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
+import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.event.ServerEvents;
+import java.util.Optional;
+import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -20,9 +22,6 @@ import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-
-import java.util.Optional;
-import java.util.function.Consumer;
 
 public class PipeAttributeToolItem extends Item {
     private static final double ATTRIBUTE_TOOL_REACH = 8.0D;
@@ -68,8 +67,7 @@ public class PipeAttributeToolItem extends Item {
                 eye,
                 look,
                 ATTRIBUTE_TOOL_REACH,
-                ATTRIBUTE_TOOL_PIPE_PICK_RADIUS
-        );
+                ATTRIBUTE_TOOL_PIPE_PICK_RADIUS);
         if (target.isEmpty()) {
             player.sendOverlayMessage(Component.translatable("message.superpipeslide.no_pipe_connection_targeted").withStyle(ChatFormatting.RED));
             return InteractionResult.FAIL;
@@ -155,4 +153,3 @@ public class PipeAttributeToolItem extends Item {
         }
     }
 }
-

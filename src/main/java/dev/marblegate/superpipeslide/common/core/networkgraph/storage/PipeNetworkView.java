@@ -1,12 +1,10 @@
 package dev.marblegate.superpipeslide.common.core.networkgraph.storage;
 
-
-import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
-import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
-
+import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
+import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;

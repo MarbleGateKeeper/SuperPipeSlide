@@ -1,10 +1,9 @@
 package dev.marblegate.superpipeslide.common.core.projection.layout;
 
-
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponentSettings;
+
 public final class ProjectionImageLayout {
-    private ProjectionImageLayout() {
-    }
+    private ProjectionImageLayout() {}
 
     public static Resolved resolve(float x, float y, float width, float height, int imageWidth, int imageHeight, ProjectionComponentSettings.ImageFitMode fitMode, ProjectionComponentSettings.ImageAnchor anchor, float padding, float cropX, float cropY, float cropW, float cropH) {
         float safeWidth = Math.max(0.0001F, width - padding * 2.0F);
@@ -111,9 +110,7 @@ public final class ProjectionImageLayout {
         return Math.max(0.0F, Math.min(1.0F, value));
     }
 
-    public record Resolved(float x, float y, float width, float height, float u0, float v0, float u1, float v1) {
-    }
+    public record Resolved(float x, float y, float width, float height, float u0, float v0, float u1, float v1) {}
 
-    public record TileGrid(float x, float y, float width, float height, float tileSize, float gap, int columns, int rows) {
-    }
+    public record TileGrid(float x, float y, float width, float height, float tileSize, float gap, int columns, int rows) {}
 }

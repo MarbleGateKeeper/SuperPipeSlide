@@ -2,15 +2,15 @@ package dev.marblegate.superpipeslide.common.core.route.model.line;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import java.util.List;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 
-import java.util.List;
-import java.util.UUID;
-
 public record RouteLine(UUID id, String displayName, List<String> translatedNames, List<Integer> themeColors, List<UUID> layoutIds, boolean visibleOnHud) {
+
     private static final int MAX_TRANSLATED_NAMES = 1;
     private static final int MAX_THEME_COLORS = 3;
     private static final int MAX_LAYOUTS = 128;
@@ -21,8 +21,7 @@ public record RouteLine(UUID id, String displayName, List<String> translatedName
             Codec.STRING.listOf().optionalFieldOf("translated_names", List.of()).forGetter(RouteLine::translatedNames),
             Codec.INT.listOf().optionalFieldOf("theme_colors", List.of(0xE03366FF)).forGetter(RouteLine::themeColors),
             UUIDUtil.STRING_CODEC.listOf().optionalFieldOf("layout_ids", List.of()).forGetter(RouteLine::layoutIds),
-            Codec.BOOL.optionalFieldOf("visible_on_hud", true).forGetter(RouteLine::visibleOnHud)
-    ).apply(instance, RouteLine::new));
+            Codec.BOOL.optionalFieldOf("visible_on_hud", true).forGetter(RouteLine::visibleOnHud)).apply(instance, RouteLine::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, RouteLine> STREAM_CODEC = StreamCodec.composite(
             UUIDUtil.STREAM_CODEC,
@@ -37,9 +36,7 @@ public record RouteLine(UUID id, String displayName, List<String> translatedName
             RouteLine::layoutIds,
             ByteBufCodecs.BOOL,
             RouteLine::visibleOnHud,
-            RouteLine::new
-    );
-
+            RouteLine::new);
     public RouteLine {
         translatedNames = translatedNames.stream().filter(name -> !name.isBlank()).limit(MAX_TRANSLATED_NAMES).toList();
         themeColors = normalizeColors(themeColors);
@@ -60,4 +57,3 @@ public record RouteLine(UUID id, String displayName, List<String> translatedName
         return List.copyOf(normalized);
     }
 }
-

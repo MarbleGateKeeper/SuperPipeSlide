@@ -14,8 +14,7 @@ public record SchematicQualityReport(
         int loopGlyphCount,
         int stationInternalEdgeCount,
         boolean timeout,
-        boolean usedPreviousLayout
-) {
+        boolean usedPreviousLayout) {
     public static SchematicQualityReport fallback(long solveTimeMillis, int edgeCount) {
         return new SchematicQualityReport(solveTimeMillis, 0, 0, 0, 0, 0.0D, 0.0D, 0, edgeCount, 0, 0, 0, false, false);
     }

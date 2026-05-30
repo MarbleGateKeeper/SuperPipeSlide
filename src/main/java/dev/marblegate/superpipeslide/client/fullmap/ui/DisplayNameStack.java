@@ -8,13 +8,14 @@ public record DisplayNameStack(String primary, String secondary, List<String> al
         secondary = secondary == null ? "" : secondary.trim();
         String safePrimary = primary;
         String safeSecondary = secondary;
-        aliases = aliases == null ? List.of() : aliases.stream()
-                .filter(name -> name != null && !name.isBlank())
-                .map(String::trim)
-                .filter(name -> !name.equalsIgnoreCase(safePrimary))
-                .filter(name -> safeSecondary.isBlank() || !name.equalsIgnoreCase(safeSecondary))
-                .distinct()
-                .toList();
+        aliases = aliases == null ? List.of()
+                : aliases.stream()
+                        .filter(name -> name != null && !name.isBlank())
+                        .map(String::trim)
+                        .filter(name -> !name.equalsIgnoreCase(safePrimary))
+                        .filter(name -> safeSecondary.isBlank() || !name.equalsIgnoreCase(safeSecondary))
+                        .distinct()
+                        .toList();
     }
 
     public static DisplayNameStack of(String primary) {

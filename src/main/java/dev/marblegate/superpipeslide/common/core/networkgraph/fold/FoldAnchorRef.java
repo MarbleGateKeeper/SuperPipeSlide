@@ -12,16 +12,14 @@ import net.minecraft.world.level.Level;
 public record FoldAnchorRef(ResourceKey<Level> levelKey, PipeAnchorId anchorId) {
     public static final Codec<FoldAnchorRef> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Level.RESOURCE_KEY_CODEC.fieldOf("level").forGetter(FoldAnchorRef::levelKey),
-            PipeAnchorId.CODEC.fieldOf("anchor_id").forGetter(FoldAnchorRef::anchorId)
-    ).apply(instance, FoldAnchorRef::new));
+            PipeAnchorId.CODEC.fieldOf("anchor_id").forGetter(FoldAnchorRef::anchorId)).apply(instance, FoldAnchorRef::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, FoldAnchorRef> STREAM_CODEC = StreamCodec.composite(
             ResourceKey.streamCodec(Registries.DIMENSION).cast(),
             FoldAnchorRef::levelKey,
             PipeAnchorId.STREAM_CODEC,
             FoldAnchorRef::anchorId,
-            FoldAnchorRef::new
-    );
+            FoldAnchorRef::new);
 
     public FoldAnchorRef {
         if (!levelKey.equals(anchorId.levelKey())) {

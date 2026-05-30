@@ -2,7 +2,6 @@ package dev.marblegate.superpipeslide.common.core.networkgraph.solver;
 
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionLengthPolicy;
-
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -15,8 +14,7 @@ import java.util.UUID;
 public record PipeConnectionPlacementPlan(
         PipeConnection candidate,
         Map<UUID, PipeConnection> affectedConnections,
-        List<LengthViolation> violations
-) {
+        List<LengthViolation> violations) {
     public PipeConnectionPlacementPlan {
         Objects.requireNonNull(candidate, "candidate");
         affectedConnections = Collections.unmodifiableMap(new LinkedHashMap<>(affectedConnections));

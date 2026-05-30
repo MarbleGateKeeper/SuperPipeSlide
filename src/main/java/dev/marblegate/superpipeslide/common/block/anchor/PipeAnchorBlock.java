@@ -40,7 +40,6 @@ public class PipeAnchorBlock extends Block {
         super.onPlace(state, level, pos, oldState, movedByPiston);
     }
 
-
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
         return SHAPE;
     }

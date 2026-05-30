@@ -1,9 +1,8 @@
 package dev.marblegate.superpipeslide.client.fullmap.routecard.model;
 
+import java.util.UUID;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
-
-import java.util.UUID;
 
 public record RouteCardNodeId(RouteCardNodeKind kind, ResourceKey<Level> levelKey, UUID primaryId, int occurrence) implements Comparable<RouteCardNodeId> {
     @Override

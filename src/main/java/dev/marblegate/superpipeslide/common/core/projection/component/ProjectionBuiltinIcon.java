@@ -1,14 +1,14 @@
 package dev.marblegate.superpipeslide.common.core.projection.component;
 
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
-import net.minecraft.resources.Identifier;
-
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import net.minecraft.resources.Identifier;
 
 public record ProjectionBuiltinIcon(String id, int row, int column, String translationKey) {
+
     public static final Identifier TEXTURE = Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "textures/gui/icons.png");
     public static final int CELL_SIZE = 16;
     public static final int TEXTURE_WIDTH = 256;
@@ -58,11 +58,9 @@ public record ProjectionBuiltinIcon(String id, int row, int column, String trans
             icon("pipe.glow", 3, 2),
             icon("pipe.backpack", 3, 3),
             icon("pipe.recommended", 3, 4),
-            icon("pipe.platform", 3, 5)
-    );
+            icon("pipe.platform", 3, 5));
     private static final Map<String, ProjectionBuiltinIcon> BY_ID = ICONS.stream().collect(Collectors.toUnmodifiableMap(ProjectionBuiltinIcon::id, Function.identity()));
     private static final ProjectionBuiltinIcon FALLBACK = BY_ID.get("ui.info");
-
     private static ProjectionBuiltinIcon icon(String id, int row, int column) {
         return new ProjectionBuiltinIcon(id, row, column, "screen.superpipeslide.projection_designer.icon." + id.replace('.', '_'));
     }

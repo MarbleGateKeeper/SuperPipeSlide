@@ -3,6 +3,8 @@ package dev.marblegate.superpipeslide.network.platform;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.event.ServerEvents;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -13,10 +15,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-import java.util.Optional;
-import java.util.UUID;
-
 public record ServerboundPlatformStopEditPayload(UUID requestId, long baseRouteRevision, UUID platformStopId, String platformNumber, Optional<String> displayName) implements CustomPacketPayload {
+
     public static final Type<ServerboundPlatformStopEditPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "platform_stop_edit"));
     public static final StreamCodec<RegistryFriendlyByteBuf, ServerboundPlatformStopEditPayload> STREAM_CODEC = StreamCodec.composite(
             UUIDUtil.STREAM_CODEC,
@@ -29,9 +29,7 @@ public record ServerboundPlatformStopEditPayload(UUID requestId, long baseRouteR
             ServerboundPlatformStopEditPayload::platformNumber,
             ByteBufCodecs.optional(ByteBufCodecs.STRING_UTF8),
             ServerboundPlatformStopEditPayload::displayName,
-            ServerboundPlatformStopEditPayload::new
-    );
-
+            ServerboundPlatformStopEditPayload::new);
     public ServerboundPlatformStopEditPayload(long baseRouteRevision, UUID platformStopId, String platformNumber, Optional<String> displayName) {
         this(UUID.randomUUID(), baseRouteRevision, platformStopId, platformNumber, displayName);
     }

@@ -64,8 +64,7 @@ public final class RouteLineCardRenderer {
             double stopListScroll,
             boolean active,
             int mouseX,
-            int mouseY
-    ) {
+            int mouseY) {
         SPSGui.colorStripe(graphics, bounds.x(), bounds.y(), bounds.height(), line.themeColors());
         DisplayNameStack lineName = FullMapText.displayNameStack(line);
         FullMapUi.drawNameStack(graphics, font, lineName, bounds.x() + 8, bounds.y() + 4, bounds.width() - 52, FullMapTheme.TEXT_PRIMARY, FullMapTheme.TEXT_MUTED, 1.0F, FullMapTheme.TYPE_META, 0);
@@ -119,8 +118,7 @@ public final class RouteLineCardRenderer {
                 semanticGraph.summary().stationCount(),
                 semanticGraph.summary().sectionCount(),
                 semanticGraph.summary().crossDimensionCount(),
-                semanticGraph.summary().stationInternalCount()
-        ).getString();
+                semanticGraph.summary().stationInternalCount()).getString();
         SPSGui.Rect locateFirst = new SPSGui.Rect(bounds.x() + 8, bounds.bottom() - 22, FullMapTheme.ICON_BUTTON_SMALL, FullMapTheme.ICON_BUTTON_SMALL);
         SPSGui.Rect locateLayout = new SPSGui.Rect(locateFirst.right() + 4, bounds.bottom() - 22, FullMapTheme.ICON_BUTTON_SMALL, FullMapTheme.ICON_BUTTON_SMALL);
         int summaryX = locateLayout.right() + 7;
@@ -151,8 +149,7 @@ public final class RouteLineCardRenderer {
         double s = scale(viewport);
         return new Vec2(
                 viewport.centerX() + (screenX - (map.x() + map.width() * 0.5D)) / s,
-                viewport.centerY() + (screenY - (map.y() + map.height() * 0.5D)) / s
-        );
+                viewport.centerY() + (screenY - (map.y() + map.height() * 0.5D)) / s);
     }
 
     public static double scale(RouteCardViewport viewport) {
@@ -197,8 +194,7 @@ public final class RouteLineCardRenderer {
         double s = scale(viewport);
         return new Vec2(
                 map.x() + map.width() * 0.5D + (point.x() - viewport.centerX()) * s,
-                map.y() + map.height() * 0.5D + (point.y() - viewport.centerY()) * s
-        );
+                map.y() + map.height() * 0.5D + (point.y() - viewport.centerY()) * s);
     }
 
     private static Aabb2 screenBounds(Aabb2 bounds, RouteCardViewport viewport, SPSGui.Rect map) {
@@ -350,8 +346,7 @@ public final class RouteLineCardRenderer {
             boolean active,
             int mouseX,
             int mouseY,
-            Set<UUID> externallyHighlightedStationGroups
-    ) {
+            Set<UUID> externallyHighlightedStationGroups) {
         graphics.fill(area.x(), area.y(), area.right(), area.bottom(), FullMapTheme.SURFACE_CONTROL_DISABLED);
         graphics.outline(area.x(), area.y(), area.width(), area.height(), FullMapTheme.BORDER);
         List<RouteCardNode> stops = semanticGraph.nodes().stream()
@@ -513,8 +508,7 @@ public final class RouteLineCardRenderer {
             double zoom,
             int mouseX,
             int mouseY,
-            List<SPSGui.Rect> labelRects
-    ) {
+            List<SPSGui.Rect> labelRects) {
         Optional<Component> tooltip = Optional.empty();
         Map<RouteCardNodeId, RouteCardVisualNode> nodeById = new LinkedHashMap<>();
         for (RouteCardVisualNode node : visualGraph.nodes()) {
@@ -610,8 +604,7 @@ public final class RouteLineCardRenderer {
             int height,
             double zoom,
             List<SPSGui.Rect> blockers,
-            List<SPSGui.Rect> placed
-    ) {
+            List<SPSGui.Rect> placed) {
         Aabb2 bounds = segment.bounds();
         List<SPSGui.Rect> candidates = dimensionChipCandidates(anchor, bounds, map, width, height, zoom);
         SPSGui.Rect best = candidates.getFirst();
@@ -695,8 +688,7 @@ public final class RouteLineCardRenderer {
                 new Vec2(rect.x(), rect.y()),
                 new Vec2(rect.right(), rect.y()),
                 new Vec2(rect.x(), rect.bottom()),
-                new Vec2(rect.right(), rect.bottom())
-        );
+                new Vec2(rect.right(), rect.bottom()));
         double best = Double.POSITIVE_INFINITY;
         for (Vec2 sample : samples) {
             best = Math.min(best, distanceToPolyline(sample, points));
@@ -733,8 +725,7 @@ public final class RouteLineCardRenderer {
                 }
                 case PORTAL_BOUNDARY -> drawPortalBoundary(graphics, position, radius, foldColor(semanticGraph, node));
                 case FOLD_BOUNDARY -> drawDiamond(graphics, position, radius, FullRouteMapConfig.MAP_FOLD_FILL, foldColor(semanticGraph, node));
-                case MISSING_PATH_BOUNDARY -> {
-                }
+                case MISSING_PATH_BOUNDARY -> {}
             }
         }
     }
@@ -827,8 +818,7 @@ public final class RouteLineCardRenderer {
             SPSGui.Rect boundary,
             List<SPSGui.Rect> avoidRects,
             int mouseX,
-            int mouseY
-    ) {
+            int mouseY) {
         if (hover.kind() == RouteLineCardHitKind.NONE) {
             return;
         }
@@ -849,8 +839,7 @@ public final class RouteLineCardRenderer {
                         Component.translatable("screen.superpipeslide.full_map.route_card.tooltip.station", FullMapText.primaryName(node), node.layoutOccurrence() + 1, dimensionLabel(node.levelKey())).getString(),
                         List.of(),
                         List.of(),
-                        FullRouteMapConfig.MAP_CARD_NODE_OUTLINE
-                );
+                        FullRouteMapConfig.MAP_CARD_NODE_OUTLINE);
                 case PORTAL_BOUNDARY -> FullMapTooltipCard.renderComponent(graphics, font, boundary, avoidRects, mouseX, mouseY, Component.translatable("screen.superpipeslide.full_map.route_card.tooltip.portal_boundary", dimensionLabel(node.label())));
                 case FOLD_BOUNDARY -> FullMapTooltipCard.renderComponent(graphics, font, boundary, avoidRects, mouseX, mouseY, Component.translatable("screen.superpipeslide.full_map.route_card.tooltip.fold_boundary"));
                 case MISSING_PATH_BOUNDARY -> FullMapTooltipCard.renderComponent(graphics, font, boundary, avoidRects, mouseX, mouseY, Component.translatable("screen.superpipeslide.full_map.route_card.tooltip.missing_path_boundary"));
@@ -902,7 +891,7 @@ public final class RouteLineCardRenderer {
         }
         return graph.edges().stream().anyMatch(edge -> isAbstractFoldBoundaryLink(graph, edge)
                 && ((edge.from().equals(hoveredNodeId) && edge.to().equals(node.id()))
-                || (edge.to().equals(hoveredNodeId) && edge.from().equals(node.id()))));
+                        || (edge.to().equals(hoveredNodeId) && edge.from().equals(node.id()))));
     }
 
     private static Set<UUID> highlightedStationGroups(RouteCardSemanticGraph graph, RouteLineCardHit hover) {
@@ -946,9 +935,9 @@ public final class RouteLineCardRenderer {
     private static Set<RouteCardNodeId> highlightedMissingPathBoundaries(RouteCardVisualGraph graph, RouteLineCardHit hover) {
         Set<RouteCardNodeId> result = new HashSet<>();
         hover.node().flatMap(nodeId -> graph.nodes().stream()
-                        .map(RouteCardVisualNode::node)
-                        .filter(node -> node.id().equals(nodeId) && node.kind() == RouteCardNodeKind.MISSING_PATH_BOUNDARY)
-                        .findFirst())
+                .map(RouteCardVisualNode::node)
+                .filter(node -> node.id().equals(nodeId) && node.kind() == RouteCardNodeKind.MISSING_PATH_BOUNDARY)
+                .findFirst())
                 .ifPresent(node -> result.add(node.id()));
         hover.edge()
                 .flatMap(edgeId -> graph.edges().stream().map(RouteCardVisualEdge::edge).filter(edge -> edge.id().equals(edgeId)).findFirst())
@@ -1192,8 +1181,7 @@ public final class RouteLineCardRenderer {
                 SmoothGuiPrimitives.circle(graphics, center, radius + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
                 SmoothGuiPrimitives.circle(graphics, center, radius + 2.0D, FullRouteMapConfig.MAP_FOCUS_RING);
             }
-            case MISSING_PATH_BOUNDARY -> {
-            }
+            case MISSING_PATH_BOUNDARY -> {}
         }
     }
 
@@ -1297,8 +1285,7 @@ public final class RouteLineCardRenderer {
                 if (alpha > 8) {
                     drawPolyline(graphics, List.of(
                             new Vec2(a.x() + ux * start, a.y() + uy * start),
-                            new Vec2(a.x() + ux * end, a.y() + uy * end)
-                    ), width, SPSGui.withAlpha(color, alpha));
+                            new Vec2(a.x() + ux * end, a.y() + uy * end)), width, SPSGui.withAlpha(color, alpha));
                 }
             }
             walked += length;
@@ -1322,8 +1309,7 @@ public final class RouteLineCardRenderer {
             double end = Math.min(length, start + dash);
             drawPolyline(graphics, List.of(
                     new Vec2(a.x() + ux * start, a.y() + uy * start),
-                    new Vec2(a.x() + ux * end, a.y() + uy * end)
-            ), width, color);
+                    new Vec2(a.x() + ux * end, a.y() + uy * end)), width, color);
         }
     }
 
@@ -1535,12 +1521,9 @@ public final class RouteLineCardRenderer {
         return first.x() < second.right() && first.right() > second.x() && first.y() < second.bottom() && first.bottom() > second.y();
     }
 
-    private record LayoutStripRenderResult(List<LayoutChipHit> chips, double maxScroll) {
-    }
+    private record LayoutStripRenderResult(List<LayoutChipHit> chips, double maxScroll) {}
 
-    private record StopListRenderResult(RouteLineCardHit hover, double maxScroll) {
-    }
+    private record StopListRenderResult(RouteLineCardHit hover, double maxScroll) {}
 
-    private record LabelBlocker(RouteCardNodeId nodeId, SPSGui.Rect bounds) {
-    }
+    private record LabelBlocker(RouteCardNodeId nodeId, SPSGui.Rect bounds) {}
 }

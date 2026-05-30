@@ -5,6 +5,7 @@ import com.mojang.blaze3d.vertex.QuadInstance;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
+import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNode;
 import dev.marblegate.superpipeslide.common.item.anchor.BranchUpgraderItem;
@@ -17,7 +18,6 @@ import dev.marblegate.superpipeslide.common.item.pipe.PipeRemoverItem;
 import dev.marblegate.superpipeslide.common.item.route.PlatformClaimerItem;
 import dev.marblegate.superpipeslide.common.registry.SPSBlocks;
 import dev.marblegate.superpipeslide.common.registry.SPSDataComponents;
-import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -30,10 +30,10 @@ import javax.annotation.Nullable;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
-import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
@@ -42,9 +42,9 @@ import net.minecraft.client.resources.model.geometry.BakedQuad;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.Identifier;
-import net.minecraft.util.context.ContextKey;
 import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.util.RandomSource;
+import net.minecraft.util.context.ContextKey;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -82,8 +82,7 @@ public final class ClientAnchorVisibilityRenderer {
                     .affectsCrumbling()
                     .sortOnUpload()
                     .setOutline(RenderSetup.OutlineProperty.AFFECTS_OUTLINE)
-                    .createRenderSetup()
-    );
+                    .createRenderSetup());
 
     private static final RandomSource MODEL_RANDOM = RandomSource.create();
     private static final Map<BlockState, List<BakedQuad>> MODEL_QUADS = new HashMap<>();
@@ -92,8 +91,7 @@ public final class ClientAnchorVisibilityRenderer {
     private static long lastExtractNanos;
     private static int frameId;
 
-    private ClientAnchorVisibilityRenderer() {
-    }
+    private ClientAnchorVisibilityRenderer() {}
 
     public static void clear() {
         MODEL_QUADS.clear();
@@ -199,8 +197,7 @@ public final class ClientAnchorVisibilityRenderer {
                 event.getSubmitNodeCollector(),
                 event.getPoseStack(),
                 renderType,
-                (pose, buffer) -> renderAnchorBatches(buffer, batches, camera)
-        );
+                (pose, buffer) -> renderAnchorBatches(buffer, batches, camera));
     }
 
     private static void renderAnchorBatches(VertexConsumer buffer, List<AnchorBatch> batches, Vec3 camera) {
@@ -434,15 +431,13 @@ public final class ClientAnchorVisibilityRenderer {
         static final AnchorStyle HIDDEN = new AnchorStyle(0.0D, NORMAL_TINT);
     }
 
-    private record AnchorVisual(PipeAnchorId anchorId, BlockState state, BlockPos pos, int color, double showProgress, int light) {
-    }
+    private record AnchorVisual(PipeAnchorId anchorId, BlockState state, BlockPos pos, int color, double showProgress, int light) {}
 
-    private record AnchorBatch(BlockState state, List<AnchorVisual> visuals) {
-    }
+    private record AnchorBatch(BlockState state, List<AnchorVisual> visuals) {}
 
     private record RenderData(List<AnchorBatch> solidBatches, List<AnchorBatch> cutoutBatches, List<AnchorBatch> translucentBatches) {
-        static final RenderData EMPTY = new RenderData(List.of(), List.of(), List.of());
 
+        static final RenderData EMPTY = new RenderData(List.of(), List.of(), List.of());
         static RenderData from(Map<BlockState, List<AnchorVisual>> solidBatches, Map<BlockState, List<AnchorVisual>> cutoutBatches, Map<BlockState, List<AnchorVisual>> translucentBatches) {
             return new RenderData(freezeBatches(solidBatches), freezeBatches(cutoutBatches), freezeBatches(translucentBatches));
         }

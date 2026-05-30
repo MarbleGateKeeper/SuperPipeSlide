@@ -1,13 +1,11 @@
 package dev.marblegate.superpipeslide.common.core.projection.layout;
 
-
 import dev.marblegate.superpipeslide.common.core.projection.template.ProjectionTemplates;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
-
-import java.util.UUID;
 
 public record ProjectionLayoutSummary(
         UUID id,
@@ -17,15 +15,13 @@ public record ProjectionLayoutSummary(
         long updatedAt,
         boolean invalid,
         String errorMessage,
-        ProjectionLayoutDefinition preview
-) {
+        ProjectionLayoutDefinition preview) {
+
     public static final int MAX_ERROR_LENGTH = 96;
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ProjectionLayoutSummary> STREAM_CODEC = StreamCodec.of(
             ProjectionLayoutSummary::encode,
-            ProjectionLayoutSummary::decode
-    );
-
+            ProjectionLayoutSummary::decode);
     public ProjectionLayoutSummary {
         name = name == null || name.isBlank() ? "Projection Layout" : name.trim();
         if (name.length() > ProjectionLayoutDefinition.MAX_NAME_LENGTH) {

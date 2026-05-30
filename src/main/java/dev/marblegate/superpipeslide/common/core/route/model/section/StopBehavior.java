@@ -24,4 +24,3 @@ public enum StopBehavior implements StringRepresentable {
         return this.serializedName;
     }
 }
-

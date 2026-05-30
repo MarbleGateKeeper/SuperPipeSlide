@@ -1,18 +1,16 @@
 package dev.marblegate.superpipeslide.common.core.route.model.section;
 
-
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.marblegate.superpipeslide.common.core.route.model.decision.RouteBranchDecision;
 import dev.marblegate.superpipeslide.common.core.route.model.decision.RouteConnectionStepDecision;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
+import java.util.List;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
-
-import java.util.List;
-import java.util.UUID;
 
 public record RouteSection(
         UUID id,
@@ -27,14 +25,12 @@ public record RouteSection(
         List<RouteBranchDecision> forwardBranchDecisions,
         List<RouteBranchDecision> reverseBranchDecisions,
         List<RouteConnectionStepDecision> forwardStepDecisions,
-        List<RouteConnectionStepDecision> reverseStepDecisions
-) {
+        List<RouteConnectionStepDecision> reverseStepDecisions) {
+
     private static final int MAX_BRANCH_DECISIONS = 512;
     private static final int MAX_STEP_DECISIONS = 2048;
-    private static final StreamCodec<RegistryFriendlyByteBuf, List<RouteBranchDecision>> BRANCH_DECISION_LIST_STREAM_CODEC =
-            RouteBranchDecision.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_BRANCH_DECISIONS));
-    private static final StreamCodec<RegistryFriendlyByteBuf, List<RouteConnectionStepDecision>> STEP_DECISION_LIST_STREAM_CODEC =
-            RouteConnectionStepDecision.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_STEP_DECISIONS));
+    private static final StreamCodec<RegistryFriendlyByteBuf, List<RouteBranchDecision>> BRANCH_DECISION_LIST_STREAM_CODEC = RouteBranchDecision.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_BRANCH_DECISIONS));
+    private static final StreamCodec<RegistryFriendlyByteBuf, List<RouteConnectionStepDecision>> STEP_DECISION_LIST_STREAM_CODEC = RouteConnectionStepDecision.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_STEP_DECISIONS));
 
     public static final Codec<RouteSection> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             UUIDUtil.STRING_CODEC.fieldOf("id").forGetter(RouteSection::id),
@@ -49,8 +45,7 @@ public record RouteSection(
             RouteBranchDecision.CODEC.listOf().optionalFieldOf("forward_branch_decisions", List.of()).forGetter(RouteSection::forwardBranchDecisions),
             RouteBranchDecision.CODEC.listOf().optionalFieldOf("reverse_branch_decisions", List.of()).forGetter(RouteSection::reverseBranchDecisions),
             RouteConnectionStepDecision.CODEC.listOf().optionalFieldOf("forward_step_decisions", List.of()).forGetter(RouteSection::forwardStepDecisions),
-            RouteConnectionStepDecision.CODEC.listOf().optionalFieldOf("reverse_step_decisions", List.of()).forGetter(RouteSection::reverseStepDecisions)
-    ).apply(instance, RouteSection::new));
+            RouteConnectionStepDecision.CODEC.listOf().optionalFieldOf("reverse_step_decisions", List.of()).forGetter(RouteSection::reverseStepDecisions)).apply(instance, RouteSection::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, RouteSection> STREAM_CODEC = new StreamCodec<>() {
         @Override
@@ -68,8 +63,7 @@ public record RouteSection(
                     BRANCH_DECISION_LIST_STREAM_CODEC.decode(buffer),
                     BRANCH_DECISION_LIST_STREAM_CODEC.decode(buffer),
                     STEP_DECISION_LIST_STREAM_CODEC.decode(buffer),
-                    STEP_DECISION_LIST_STREAM_CODEC.decode(buffer)
-            );
+                    STEP_DECISION_LIST_STREAM_CODEC.decode(buffer));
         }
 
         @Override
@@ -89,7 +83,6 @@ public record RouteSection(
             STEP_DECISION_LIST_STREAM_CODEC.encode(buffer, section.reverseStepDecisions());
         }
     };
-
     public RouteSection {
         forwardLength = Math.max(0.0D, forwardLength);
         reverseLength = Math.max(0.0D, reverseLength);
@@ -146,4 +139,3 @@ public record RouteSection(
         };
     }
 }
-

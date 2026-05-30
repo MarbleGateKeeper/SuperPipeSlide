@@ -2,15 +2,15 @@ package dev.marblegate.superpipeslide.client.fullmap.schematic.solve;
 
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapLayoutMode;
+import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
-import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
+import dev.marblegate.superpipeslide.client.fullmap.schematic.SchematicLayoutConfig;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicEdge;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicInputGraph;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicNode;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicQualityReport;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SemanticEdgeKind;
-import dev.marblegate.superpipeslide.client.fullmap.schematic.SchematicLayoutConfig;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualEdgePath;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualHitShape;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualLabel;
@@ -24,8 +24,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 public final class HeuristicGlobalSolver implements SchematicSolverBackend {
     private static final double EPSILON = 1.0E-6D;
@@ -69,8 +69,7 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
                         state.node.label(),
                         state.node.routeLineIds(),
                         state.node.importance(),
-                        false
-                ))
+                        false))
                 .toList();
         Map<NodeId, VisualNode> visualNodesById = visualNodes.stream()
                 .collect(Collectors.toMap(VisualNode::id, node -> node, (a, b) -> a, LinkedHashMap::new));
@@ -91,8 +90,7 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
                 bounds,
                 input.routeRevision(),
                 input.pipeRevision(),
-                FullRouteMapConfig.SCHEMATIC_SOLVER_VERSION
-        );
+                FullRouteMapConfig.SCHEMATIC_SOLVER_VERSION);
         return new SchematicLayoutResult(graph);
     }
 
@@ -314,8 +312,7 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
                     lanesFor(edge, routed.points),
                     new VisualHitShape(routed.points, hitRadiusBlocks(edge), bounds),
                     bounds,
-                    routed.fallback
-            ));
+                    routed.fallback));
         }
         return new RouteOutput(paths, fallbackEdges, stationInternalEdges, bendCount, loopGlyphCount);
     }
@@ -481,8 +478,7 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
                 routeOutput.loopGlyphCount,
                 routeOutput.stationInternalEdges,
                 timeout,
-                usedPrevious
-        );
+                usedPrevious);
     }
 
     private Aabb2 bounds(List<VisualNode> nodes, List<VisualEdgePath> edges, List<VisualLabel> labels) {
@@ -519,8 +515,8 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
             return new Vec2(ux, uz);
         }
         double[][] directions = mode == SchematicLayoutConfig.DirectionSetMode.ORTHOGONAL
-                ? new double[][]{{1, 0}, {0, 1}, {-1, 0}, {0, -1}}
-                : new double[][]{{1, 0}, {Math.sqrt(0.5D), Math.sqrt(0.5D)}, {0, 1}, {-Math.sqrt(0.5D), Math.sqrt(0.5D)}, {-1, 0}, {-Math.sqrt(0.5D), -Math.sqrt(0.5D)}, {0, -1}, {Math.sqrt(0.5D), -Math.sqrt(0.5D)}};
+                ? new double[][] { { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 } }
+                : new double[][] { { 1, 0 }, { Math.sqrt(0.5D), Math.sqrt(0.5D) }, { 0, 1 }, { -Math.sqrt(0.5D), Math.sqrt(0.5D) }, { -1, 0 }, { -Math.sqrt(0.5D), -Math.sqrt(0.5D) }, { 0, -1 }, { Math.sqrt(0.5D), -Math.sqrt(0.5D) } };
         double bestDot = Double.NEGATIVE_INFINITY;
         double[] best = directions[0];
         for (double[] direction : directions) {
@@ -557,12 +553,10 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
         if (Math.abs(aux * bux + auy * buy) < 0.982D) {
             return false;
         }
-        double distance = (
-                distanceToInfiniteLine(b1.x, b1.z, a1.x, a1.z, aux, auy)
-                        + distanceToInfiniteLine(b2.x, b2.z, a1.x, a1.z, aux, auy)
-                        + distanceToInfiniteLine(a1.x, a1.z, b1.x, b1.z, bux, buy)
-                        + distanceToInfiniteLine(a2.x, a2.z, b1.x, b1.z, bux, buy)
-        ) * 0.25D;
+        double distance = (distanceToInfiniteLine(b1.x, b1.z, a1.x, a1.z, aux, auy)
+                + distanceToInfiniteLine(b2.x, b2.z, a1.x, a1.z, aux, auy)
+                + distanceToInfiniteLine(a1.x, a1.z, b1.x, b1.z, bux, buy)
+                + distanceToInfiniteLine(a2.x, a2.z, b1.x, b1.z, bux, buy)) * 0.25D;
         if (distance > config.minNodeGapBlocks()) {
             return false;
         }
@@ -629,8 +623,7 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
         }
         return Math.min(
                 Math.min(distanceToSegment(a, c, d), distanceToSegment(b, c, d)),
-                Math.min(distanceToSegment(c, a, b), distanceToSegment(d, a, b))
-        );
+                Math.min(distanceToSegment(c, a, b), distanceToSegment(d, a, b)));
     }
 
     private static boolean sharesEndpoint(SchematicEdge edge, VisualEdgePath path) {
@@ -968,14 +961,11 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
         }
     }
 
-    private record RoutedPath(List<Vec2> points, boolean fallback, boolean loopGlyph) {
-    }
+    private record RoutedPath(List<Vec2> points, boolean fallback, boolean loopGlyph) {}
 
-    private record RouteOutput(List<VisualEdgePath> edgePaths, int fallbackEdges, int stationInternalEdges, int bendCount, int loopGlyphCount) {
-    }
+    private record RouteOutput(List<VisualEdgePath> edgePaths, int fallbackEdges, int stationInternalEdges, int bendCount, int loopGlyphCount) {}
 
-    private record LabelCandidate(double x, double z, LabelBox box) {
-    }
+    private record LabelCandidate(double x, double z, LabelBox box) {}
 
     private record LabelBox(double minX, double minZ, double maxX, double maxZ, int priority) {
         boolean intersects(LabelBox other) {

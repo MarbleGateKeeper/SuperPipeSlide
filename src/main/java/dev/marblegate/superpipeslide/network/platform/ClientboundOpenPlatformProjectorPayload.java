@@ -10,6 +10,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 
 public record ClientboundOpenPlatformProjectorPayload(BlockPos pos, PlatformProjectorConfig config, AppliedProjectionLayout appliedLayout) implements CustomPacketPayload {
+
     public static final Type<ClientboundOpenPlatformProjectorPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "open_platform_projector"));
     public static final StreamCodec<RegistryFriendlyByteBuf, ClientboundOpenPlatformProjectorPayload> STREAM_CODEC = StreamCodec.composite(
             BlockPos.STREAM_CODEC,
@@ -18,9 +19,7 @@ public record ClientboundOpenPlatformProjectorPayload(BlockPos pos, PlatformProj
             ClientboundOpenPlatformProjectorPayload::config,
             AppliedProjectionLayout.STREAM_CODEC,
             ClientboundOpenPlatformProjectorPayload::appliedLayout,
-            ClientboundOpenPlatformProjectorPayload::new
-    );
-
+            ClientboundOpenPlatformProjectorPayload::new);
     @Override
     public Type<? extends CustomPacketPayload> type() {
         return TYPE;

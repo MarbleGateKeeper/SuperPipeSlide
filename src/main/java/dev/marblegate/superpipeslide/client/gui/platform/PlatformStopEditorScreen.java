@@ -1,26 +1,24 @@
 package dev.marblegate.superpipeslide.client.gui.platform;
 
-
+import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.gui.base.RouteDataAwareScreen;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
 import dev.marblegate.superpipeslide.client.gui.route.RouteEditorGui;
 import dev.marblegate.superpipeslide.client.gui.route.RouteEditorScreenBase;
 import dev.marblegate.superpipeslide.client.gui.station.StationEditorScreen;
-import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
-import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
+import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
 import dev.marblegate.superpipeslide.network.platform.ServerboundPlatformStopEditPayload;
 import dev.marblegate.superpipeslide.network.route.ServerboundRouteEditPayload;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
-
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 public class PlatformStopEditorScreen extends RouteEditorScreenBase implements RouteDataAwareScreen {
     private final UUID platformStopId;
@@ -82,8 +80,7 @@ public class PlatformStopEditorScreen extends RouteEditorScreenBase implements R
                 Component.translatable("screen.superpipeslide.confirm.delete_platform.title"),
                 Component.translatable("screen.superpipeslide.confirm.delete_platform.body"),
                 Component.translatable("screen.superpipeslide.action.delete_platform"),
-                this::deletePlatform
-        ), Component.translatable("screen.superpipeslide.action.delete_platform"));
+                this::deletePlatform), Component.translatable("screen.superpipeslide.action.delete_platform"));
 
         int top = this.documentBodyY();
         SPSGui.Rect info = new SPSGui.Rect(content.x(), top, 142, content.bottom() - top);

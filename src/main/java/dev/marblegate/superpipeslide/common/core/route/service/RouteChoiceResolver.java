@@ -4,20 +4,17 @@ import dev.marblegate.superpipeslide.common.core.route.model.decision.RouteBranc
 import dev.marblegate.superpipeslide.common.core.route.model.decision.RouteConnectionStepDecision;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSection;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
-
 import java.util.Optional;
 import java.util.UUID;
 
 public final class RouteChoiceResolver {
-    private RouteChoiceResolver() {
-    }
+    private RouteChoiceResolver() {}
 
     public static Optional<UUID> routeChoiceFor(
             RouteSection routeSection,
             int routeDirection,
             UUID currentConnectionId,
-            UUID branchNodeId
-    ) {
+            UUID branchNodeId) {
         int direction = routeDirection < 0 ? -1 : 1;
         if (routeSection.statusForDirection(direction) != RouteSectionStatus.VALID) {
             return Optional.empty();
@@ -34,8 +31,7 @@ public final class RouteChoiceResolver {
             RouteSection routeSection,
             int routeDirection,
             UUID currentConnectionId,
-            UUID branchNodeId
-    ) {
+            UUID branchNodeId) {
         int direction = routeDirection < 0 ? -1 : 1;
         if (routeSection.statusForDirection(direction) != RouteSectionStatus.VALID) {
             return Optional.empty();
@@ -47,4 +43,3 @@ public final class RouteChoiceResolver {
                 .findFirst();
     }
 }
-

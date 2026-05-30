@@ -2,6 +2,7 @@ package dev.marblegate.superpipeslide.common.item.route;
 
 import dev.marblegate.superpipeslide.common.event.ServerEvents;
 import dev.marblegate.superpipeslide.network.route.ClientboundOpenRouteEditorPayload;
+import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -14,8 +15,6 @@ import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.PacketDistributor;
-
-import java.util.function.Consumer;
 
 public class RouteEditorItem extends Item {
     public RouteEditorItem(Properties properties) {

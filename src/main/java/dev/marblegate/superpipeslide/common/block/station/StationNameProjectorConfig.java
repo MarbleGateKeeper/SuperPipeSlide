@@ -1,12 +1,11 @@
 package dev.marblegate.superpipeslide.common.block.station;
 
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
 
 public record StationNameProjectorConfig(
         BindingMode bindingMode,
@@ -15,8 +14,8 @@ public record StationNameProjectorConfig(
         float offsetY,
         boolean showExit,
         String exitLabel,
-        boolean backsideProjection
-) {
+        boolean backsideProjection) {
+
     public static final float MIN_OFFSET_X = -10.0F;
     public static final float MAX_OFFSET_X = 10.0F;
     public static final float MIN_OFFSET_Y = -10.0F;
@@ -26,9 +25,7 @@ public record StationNameProjectorConfig(
 
     public static final StreamCodec<RegistryFriendlyByteBuf, StationNameProjectorConfig> STREAM_CODEC = StreamCodec.of(
             StationNameProjectorConfig::encode,
-            StationNameProjectorConfig::decode
-    );
-
+            StationNameProjectorConfig::decode);
     public StationNameProjectorConfig {
         bindingMode = bindingMode == null ? BindingMode.AUTO : bindingMode;
         stationGroupId = stationGroupId == null ? Optional.empty() : stationGroupId;
@@ -45,8 +42,7 @@ public record StationNameProjectorConfig(
                 0.82F,
                 false,
                 "",
-                false
-        );
+                false);
     }
 
     public StationNameProjectorConfig withBinding(BindingMode mode, Optional<UUID> stationGroupId) {
@@ -107,8 +103,7 @@ public record StationNameProjectorConfig(
                 buffer.readFloat(),
                 buffer.readBoolean(),
                 buffer.readUtf(MAX_EXIT_LABEL_LENGTH * 4),
-                buffer.readBoolean()
-        );
+                buffer.readBoolean());
     }
 
     public static <E extends Enum<E>> E enumByName(Class<E> type, String name, E fallback) {

@@ -25,8 +25,9 @@ public final class ClientRouteViewModelCache {
     private static long cachedRouteRevision = Long.MIN_VALUE;
     private static long cachedPipeRevision = Long.MIN_VALUE;
 
-    private ClientRouteViewModelCache() {
-    }    public static List<SPSGui.StationNode> nodesForLayout(RouteLayout layout) {
+    private ClientRouteViewModelCache() {}
+
+    public static List<SPSGui.StationNode> nodesForLayout(RouteLayout layout) {
         ensureCurrent();
         List<SPSGui.StationNode> cached = STATION_NODE_CACHE.get(layout.id());
         if (cached != null) {
@@ -35,7 +36,9 @@ public final class ClientRouteViewModelCache {
         List<SPSGui.StationNode> nodes = computeNodesForLayout(layout);
         STATION_NODE_CACHE.put(layout.id(), nodes);
         return nodes;
-    }    public static RouteSectionStatus loopStatus(RouteLayout layout) {
+    }
+
+    public static RouteSectionStatus loopStatus(RouteLayout layout) {
         ensureCurrent();
         RouteSectionStatus cached = LOOP_STATUS_CACHE.get(layout.id());
         if (cached != null) {
@@ -44,15 +47,21 @@ public final class ClientRouteViewModelCache {
         RouteSectionStatus status = computeLoopStatus(layout);
         LOOP_STATUS_CACHE.put(layout.id(), status);
         return status;
-    }    public static List<SPSGui.StationNode> representativeNodes(RouteLine line) {
+    }
+
+    public static List<SPSGui.StationNode> representativeNodes(RouteLine line) {
         return representativeLayout(line)
                 .map(ClientRouteViewModelCache::nodesForLayout)
                 .orElse(List.of());
-    }    public static Optional<RouteLayout> representativeLayout(RouteLine line) {
+    }
+
+    public static Optional<RouteLayout> representativeLayout(RouteLine line) {
         return ClientRouteDataCache.routeLayoutsForLine(line.id()).stream()
                 .max(Comparator.comparingInt(layout -> layout.orderedPlatformStops().size()))
                 .or(() -> Optional.empty());
-    }    public static SPSGui.LineSummary lineSummary(RouteLine line) {
+    }
+
+    public static SPSGui.LineSummary lineSummary(RouteLine line) {
         ensureCurrent();
         SPSGui.LineSummary cached = LINE_SUMMARY_CACHE.get(line.id());
         if (cached != null) {
@@ -72,7 +81,9 @@ public final class ClientRouteViewModelCache {
         SPSGui.LineSummary summary = new SPSGui.LineSummary(layoutCount, stationCount, problemCount, statusLabel(statuses, "Draft"));
         LINE_SUMMARY_CACHE.put(line.id(), summary);
         return summary;
-    }    public static String layoutStatus(RouteLayout layout) {
+    }
+
+    public static String layoutStatus(RouteLayout layout) {
         ensureCurrent();
         String cached = LAYOUT_STATUS_CACHE.get(layout.id());
         if (cached != null) {
@@ -177,4 +188,3 @@ public final class ClientRouteViewModelCache {
         LINE_SUMMARY_CACHE.clear();
     }
 }
-

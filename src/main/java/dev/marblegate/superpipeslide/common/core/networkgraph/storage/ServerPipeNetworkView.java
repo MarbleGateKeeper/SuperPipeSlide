@@ -1,19 +1,17 @@
 package dev.marblegate.superpipeslide.common.core.networkgraph.storage;
 
-
-import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
-import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorDirectory;
-import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.Level;
-
+import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
+import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorDirectory;
+import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.Level;
 
 public final class ServerPipeNetworkView implements PipeNetworkView {
     private final MinecraftServer server;

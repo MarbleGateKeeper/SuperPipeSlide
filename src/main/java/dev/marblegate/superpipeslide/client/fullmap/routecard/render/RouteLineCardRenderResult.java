@@ -1,14 +1,12 @@
 package dev.marblegate.superpipeslide.client.fullmap.routecard.render;
 
-
 import dev.marblegate.superpipeslide.client.fullmap.routecard.hit.LayoutChipHit;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.hit.RouteLineCardHit;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.hit.ViewModeChipHit;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
-import net.minecraft.network.chat.Component;
-
 import java.util.List;
 import java.util.Optional;
+import net.minecraft.network.chat.Component;
 
 public record RouteLineCardRenderResult(
         SPSGui.Rect layoutStripBounds,
@@ -23,8 +21,7 @@ public record RouteLineCardRenderResult(
         SPSGui.Rect locateLayoutBounds,
         double stopListMaxScroll,
         RouteLineCardHit hover,
-        Optional<Component> tooltipOverride
-) {
+        Optional<Component> tooltipOverride) {
     public RouteLineCardRenderResult {
         layoutChips = List.copyOf(layoutChips);
         viewModeChips = List.copyOf(viewModeChips);

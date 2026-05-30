@@ -24,8 +24,7 @@ public record SchematicLayoutConfig(
         double maxCorridorOffsetBlocks,
         double maxStepBlocks,
         double minEdgeLengthBlocks,
-        double maxEdgeLengthBlocks
-) {
+        double maxEdgeLengthBlocks) {
     public static SchematicLayoutConfig defaultConfig() {
         return forMode(FullRouteMapLayoutMode.PRACTICAL);
     }
@@ -56,8 +55,7 @@ public record SchematicLayoutConfig(
                     18.0D,
                     2.2D,
                     26.0D,
-                    260.0D
-            );
+                    260.0D);
             case PRACTICAL -> new SchematicLayoutConfig(
                     normalized,
                     DirectionSetMode.OCTILINEAR,
@@ -80,8 +78,7 @@ public record SchematicLayoutConfig(
                     42.0D,
                     4.1D,
                     52.0D,
-                    220.0D
-            );
+                    220.0D);
             case SCHEMATIC -> new SchematicLayoutConfig(
                     normalized,
                     DirectionSetMode.OCTILINEAR,
@@ -104,8 +101,7 @@ public record SchematicLayoutConfig(
                     36.0D,
                     4.4D,
                     48.0D,
-                    150.0D
-            );
+                    150.0D);
         };
     }
 

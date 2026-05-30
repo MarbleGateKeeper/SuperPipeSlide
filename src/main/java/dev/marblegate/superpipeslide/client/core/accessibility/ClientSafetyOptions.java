@@ -1,8 +1,8 @@
 package dev.marblegate.superpipeslide.client.core.accessibility;
 
+import dev.marblegate.superpipeslide.client.renderer.pipe.ClientPipeRenderer;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.config.ClientConfig;
-import dev.marblegate.superpipeslide.client.renderer.pipe.ClientPipeRenderer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -18,8 +18,7 @@ public final class ClientSafetyOptions {
     private static boolean slideSafetyWarningAcknowledged;
     private static boolean lastReducePhotosensitivityRisk;
 
-    private ClientSafetyOptions() {
-    }
+    private ClientSafetyOptions() {}
 
     public static void tick() {
         loadStateIfNeeded();

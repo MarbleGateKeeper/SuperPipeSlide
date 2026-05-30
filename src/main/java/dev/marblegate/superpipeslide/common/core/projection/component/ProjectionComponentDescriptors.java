@@ -26,8 +26,7 @@ public final class ProjectionComponentDescriptors {
             ProjectionVisibleCondition.HAS_OUT_OF_STATION_TRANSFERS,
             ProjectionVisibleCondition.MULTI_TRANSFER,
             ProjectionVisibleCondition.BIDIRECTIONAL_LAYOUT,
-            ProjectionVisibleCondition.LOOP_LAYOUT
-    );
+            ProjectionVisibleCondition.LOOP_LAYOUT);
 
     static {
         register(ProjectionComponentType.BACKGROUND_PANEL, ProjectionLayoutTarget.STATION_NAME, 0.12F, 0.12F, 1.40F, 0.48F, ProjectionComponentSettings.Panel.defaults(), ProjectionVisibleCondition.ALWAYS, STATION_DECOR);
@@ -65,8 +64,7 @@ public final class ProjectionComponentDescriptors {
         register(ProjectionComponentType.NETWORK_IMAGE, ProjectionLayoutTarget.PLATFORM, 0.24F, 0.24F, 0.96F, 0.58F, ProjectionComponentSettings.NetworkImage.defaults(), ProjectionVisibleCondition.ALWAYS, PLATFORM);
     }
 
-    private ProjectionComponentDescriptors() {
-    }
+    private ProjectionComponentDescriptors() {}
 
     public static ProjectionComponentDescriptor get(ProjectionComponentType type, ProjectionLayoutTarget target) {
         ProjectionComponentDescriptor descriptor = descriptorsFor(target).get(type);

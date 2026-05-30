@@ -1,7 +1,6 @@
 package dev.marblegate.superpipeslide.common.item.pipe;
 
 import com.mojang.serialization.Codec;
-
 import dev.marblegate.superpipeslide.common.core.geometry.CurveType;
 import net.minecraft.util.StringRepresentable;
 
@@ -34,5 +33,4 @@ public enum PipeConnectorMode implements StringRepresentable {
         PipeConnectorMode[] values = values();
         return values[(this.ordinal() + 1) % values.length];
     }
-
 }

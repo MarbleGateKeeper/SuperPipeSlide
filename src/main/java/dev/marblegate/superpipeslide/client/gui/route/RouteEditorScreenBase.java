@@ -1,14 +1,12 @@
 package dev.marblegate.superpipeslide.client.gui.route;
 
-
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
 import dev.marblegate.superpipeslide.client.gui.base.SPSScreen;
+import java.util.List;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
-
-import java.util.List;
 
 public abstract class RouteEditorScreenBase extends SPSScreen {
     private Component documentTooltip;

@@ -2,12 +2,11 @@ package dev.marblegate.superpipeslide.common.core.appearance.coating;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.Identifier;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public record PipeCoatingSelection(
         Identifier blockId,
@@ -17,8 +16,8 @@ public record PipeCoatingSelection(
         boolean preserveAccents,
         float textureStrength,
         float accentSensitivity,
-        float smartStrength
-) {
+        float smartStrength) {
+
     public static final Identifier DEFAULT_BLOCK_ID = Identifier.withDefaultNamespace("white_concrete");
     public static final int DEFAULT_DYE_COLOR = 0xFFFFFFFF;
     public static final int DEFAULT_SECONDARY_DYE_COLOR = 0xFF2E8CFF;
@@ -37,8 +36,7 @@ public record PipeCoatingSelection(
             Codec.BOOL.optionalFieldOf("preserve_accents", DEFAULT_PRESERVE_ACCENTS).forGetter(PipeCoatingSelection::preserveAccents),
             Codec.FLOAT.optionalFieldOf("texture_strength", DEFAULT_TEXTURE_STRENGTH).forGetter(PipeCoatingSelection::textureStrength),
             Codec.FLOAT.optionalFieldOf("accent_sensitivity", DEFAULT_ACCENT_SENSITIVITY).forGetter(PipeCoatingSelection::accentSensitivity),
-            Codec.FLOAT.optionalFieldOf("smart_strength", DEFAULT_SMART_STRENGTH).forGetter(PipeCoatingSelection::smartStrength)
-    ).apply(instance, PipeCoatingSelection::new));
+            Codec.FLOAT.optionalFieldOf("smart_strength", DEFAULT_SMART_STRENGTH).forGetter(PipeCoatingSelection::smartStrength)).apply(instance, PipeCoatingSelection::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, PipeCoatingSelection> STREAM_CODEC = new StreamCodec<>() {
         @Override
@@ -74,7 +72,6 @@ public record PipeCoatingSelection(
             buffer.writeFloat(normalized.smartStrength());
         }
     };
-
     public PipeCoatingSelection {
         blockId = blockId == null ? DEFAULT_BLOCK_ID : blockId;
         texturePick = texturePick == null ? PipeCoatingTexturePick.AUTO : texturePick;

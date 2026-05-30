@@ -3,11 +3,11 @@ package dev.marblegate.superpipeslide.client.renderer.slide;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
-import dev.marblegate.superpipeslide.client.core.fold.ClientFoldTraversalEffectController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideFeedbackController;
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
-import dev.marblegate.superpipeslide.config.ClientConfig;
+import java.util.List;
+import java.util.Random;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
@@ -15,11 +15,6 @@ import net.minecraft.util.context.ContextKey;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent;
 import net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent;
-import org.joml.Matrix4f;
-
-import java.util.List;
-import java.util.Optional;
-import java.util.Random;
 
 public final class ClientSlideFeedbackGeometryRenderer {
     private static final ContextKey<RenderData> RENDER_DATA = new ContextKey<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "slide_feedback_geometry"));
@@ -44,8 +39,7 @@ public final class ClientSlideFeedbackGeometryRenderer {
         }
     }
 
-    private ClientSlideFeedbackGeometryRenderer() {
-    }
+    private ClientSlideFeedbackGeometryRenderer() {}
 
     public static void extract(ExtractLevelRenderStateEvent event) {
         if (ClientSafetyOptions.reduceMotionSicknessRisk() || ClientSafetyOptions.reducePhotosensitivityRisk()) {

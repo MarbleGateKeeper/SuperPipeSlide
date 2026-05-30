@@ -1,22 +1,20 @@
 package dev.marblegate.superpipeslide.client.gui.base;
 
-
-import dev.marblegate.superpipeslide.client.gui.route.ClientRouteViewModelCache;
-import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
+import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
+import dev.marblegate.superpipeslide.client.gui.route.ClientRouteViewModelCache;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
 
 public final class SPSGui {
     public static final int PANEL_BASE = 0xF4F7F9FC;
@@ -39,8 +37,8 @@ public final class SPSGui {
     private static final int ICON_TEXTURE_WIDTH = 256;
     private static final int ICON_TEXTURE_HEIGHT = 64;
     private static final int COLOR_PICKER_MAX_SV_BANDS = 96;
-    private SPSGui() {
-    }
+
+    private SPSGui() {}
 
     public static void text(GuiGraphicsExtractor graphics, Font font, String text, int x, int y, int color) {
         graphics.text(font, text, x, y, color, false);
@@ -138,8 +136,7 @@ public final class SPSGui {
                 ICON_CELL_SIZE,
                 ICON_TEXTURE_WIDTH,
                 ICON_TEXTURE_HEIGHT,
-                color
-        );
+                color);
     }
 
     public static void drawIconButton(GuiGraphicsExtractor graphics, Rect rect, Icon icon, boolean disabled, boolean hovered, int color) {
@@ -641,8 +638,7 @@ public final class SPSGui {
                 field.x() + Math.round(selected.s() * (field.width() - 1)) - 2,
                 field.y() + Math.round((1.0F - selected.v()) * (field.height() - 1)) - 2,
                 5,
-                5
-        );
+                5);
         graphics.outline(svMarker.x(), svMarker.y(), svMarker.width(), svMarker.height(), 0xEEFFFFFF);
         graphics.outline(svMarker.x() + 1, svMarker.y() + 1, svMarker.width() - 2, svMarker.height() - 2, 0xAA000000);
         int hueY = hueStrip.y() + Math.round(hue * (hueStrip.height() - 1));
@@ -719,8 +715,7 @@ public final class SPSGui {
                     left0,
                     right0,
                     right1,
-                    left1
-            ));
+                    left1));
         }
 
         for (int segment = 0; segment < 6; segment++) {
@@ -739,8 +734,7 @@ public final class SPSGui {
                     top,
                     top,
                     bottom,
-                    bottom
-            ));
+                    bottom));
         }
 
         SmoothGuiPrimitives.quads(graphics, quads);
@@ -756,12 +750,36 @@ public final class SPSGui {
         float g;
         float b;
         switch (i % 6) {
-            case 0 -> { r = v; g = t; b = p; }
-            case 1 -> { r = q; g = v; b = p; }
-            case 2 -> { r = p; g = v; b = t; }
-            case 3 -> { r = p; g = q; b = v; }
-            case 4 -> { r = t; g = p; b = v; }
-            default -> { r = v; g = p; b = q; }
+            case 0 -> {
+                r = v;
+                g = t;
+                b = p;
+            }
+            case 1 -> {
+                r = q;
+                g = v;
+                b = p;
+            }
+            case 2 -> {
+                r = p;
+                g = v;
+                b = t;
+            }
+            case 3 -> {
+                r = p;
+                g = q;
+                b = v;
+            }
+            case 4 -> {
+                r = t;
+                g = p;
+                b = v;
+            }
+            default -> {
+                r = v;
+                g = p;
+                b = q;
+            }
         }
         return 0xFF000000 | ((int) (r * 255.0F) << 16) | ((int) (g * 255.0F) << 8) | (int) (b * 255.0F);
     }
@@ -803,8 +821,7 @@ public final class SPSGui {
         return new Hsv(hue, saturation, max);
     }
 
-    private record Hsv(float h, float s, float v) {
-    }
+    private record Hsv(float h, float s, float v) {}
 
     private static void fillOctagon(GuiGraphicsExtractor graphics, int x, int y, int size, int color) {
         if (size <= 4) {
@@ -1002,9 +1019,7 @@ public final class SPSGui {
         }
     }
 
-    public record TransferLine(String shortName, List<Integer> colors) {
-    }
+    public record TransferLine(String shortName, List<Integer> colors) {}
 
-    public record LineSummary(int layoutCount, int stationCount, int problemCount, String status) {
-    }
+    public record LineSummary(int layoutCount, int stationCount, int problemCount, String status) {}
 }

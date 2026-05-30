@@ -16,9 +16,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -619,7 +619,7 @@ public final class PipeCoatingSelectorScreen extends SPSScreen {
     }
 
     private static int shiftedThemeColor(int seed, int index) {
-        int[] accents = {0xFF2E8CFF, 0xFFFFD34D, 0xFFB7FF66, 0xFFFF7A7A};
+        int[] accents = { 0xFF2E8CFF, 0xFFFFD34D, 0xFFB7FF66, 0xFFFF7A7A };
         int accent = accents[Math.floorMod(index - 1, accents.length)];
         double mix = 0.34D;
         int red = clampInt((int) Math.round(((seed >>> 16) & 0xFF) * (1.0D - mix) + ((accent >>> 16) & 0xFF) * mix), 0, 255);
@@ -678,8 +678,8 @@ public final class PipeCoatingSelectorScreen extends SPSScreen {
         }
         String pick = normalized.texturePick().type() == PipeTexturePickType.FACE
                 ? normalized.texturePick().face()
-                .map(face -> Component.translatable("screen.superpipeslide.pipe_appearance.texture_pick.face." + face.getSerializedName()).getString())
-                .orElse(Component.translatable("screen.superpipeslide.pipe_appearance.texture_pick.auto").getString())
+                        .map(face -> Component.translatable("screen.superpipeslide.pipe_appearance.texture_pick.face." + face.getSerializedName()).getString())
+                        .orElse(Component.translatable("screen.superpipeslide.pipe_appearance.texture_pick.auto").getString())
                 : Component.translatable("screen.superpipeslide.pipe_appearance.texture_pick.custom").getString();
         return blockName + " / " + pick + " / " + mode;
     }
@@ -713,8 +713,7 @@ public final class PipeCoatingSelectorScreen extends SPSScreen {
                 sprite.getU(0.0015F),
                 sprite.getU(0.9985F),
                 sprite.getV(0.0015F),
-                sprite.getV(0.9985F)
-        );
+                sprite.getV(0.9985F));
         if (framed) {
             graphics.outline(rect.x(), rect.y(), rect.width(), rect.height(), PipeAppearanceTerminalGui.BORDER_MUTED);
         }
@@ -739,8 +738,7 @@ public final class PipeCoatingSelectorScreen extends SPSScreen {
                 resolved.u(0.0015F),
                 resolved.u(0.9985F),
                 resolved.v(0.0015F),
-                resolved.v(0.9985F)
-        );
+                resolved.v(0.9985F));
         if (framed) {
             graphics.outline(rect.x(), rect.y(), rect.width(), rect.height(), PipeAppearanceTerminalGui.BORDER_MUTED);
         }

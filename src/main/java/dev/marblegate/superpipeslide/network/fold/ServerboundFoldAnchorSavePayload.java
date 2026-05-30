@@ -1,13 +1,14 @@
 package dev.marblegate.superpipeslide.network.fold;
 
-
-import dev.marblegate.superpipeslide.network.editor.ClientboundEditorResultPayload;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorDirectory;
 import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorMode;
 import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorRef;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
+import dev.marblegate.superpipeslide.network.editor.ClientboundEditorResultPayload;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -19,10 +20,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-import java.util.Optional;
-import java.util.UUID;
-
 public record ServerboundFoldAnchorSavePayload(UUID requestId, PipeAnchorId anchorId, long baseConfigRevision, FoldAnchorMode mode, String displayName, Optional<FoldAnchorRef> selectedTarget) implements CustomPacketPayload {
+
     public static final Type<ServerboundFoldAnchorSavePayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "fold_anchor_save"));
     public static final StreamCodec<RegistryFriendlyByteBuf, ServerboundFoldAnchorSavePayload> STREAM_CODEC = StreamCodec.composite(
             UUIDUtil.STREAM_CODEC,
@@ -37,9 +36,7 @@ public record ServerboundFoldAnchorSavePayload(UUID requestId, PipeAnchorId anch
             ServerboundFoldAnchorSavePayload::displayName,
             ByteBufCodecs.optional(FoldAnchorRef.STREAM_CODEC).cast(),
             ServerboundFoldAnchorSavePayload::selectedTarget,
-            ServerboundFoldAnchorSavePayload::new
-    );
-
+            ServerboundFoldAnchorSavePayload::new);
     public ServerboundFoldAnchorSavePayload(PipeAnchorId anchorId, long baseConfigRevision, FoldAnchorMode mode, String displayName, Optional<FoldAnchorRef> selectedTarget) {
         this(UUID.randomUUID(), anchorId, baseConfigRevision, mode, displayName, selectedTarget);
     }

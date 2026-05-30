@@ -28,4 +28,3 @@ public enum RouteSectionStatus implements StringRepresentable {
         return this.serializedName;
     }
 }
-

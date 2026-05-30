@@ -1,16 +1,14 @@
 package dev.marblegate.superpipeslide.common.core.networkgraph.fold;
 
-
+import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNode;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
-import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.Level;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.Level;
 
 public final class FoldAnchorDirectory {
     private final MinecraftServer server;

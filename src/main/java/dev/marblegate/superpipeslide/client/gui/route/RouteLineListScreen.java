@@ -1,18 +1,16 @@
 package dev.marblegate.superpipeslide.client.gui.route;
 
-
-import dev.marblegate.superpipeslide.client.gui.base.RouteDataAwareScreen;
-import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.fullmap.screen.FullRouteMapScreen;
+import dev.marblegate.superpipeslide.client.gui.base.RouteDataAwareScreen;
+import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
+import java.util.Comparator;
+import java.util.List;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
-
-import java.util.Comparator;
-import java.util.List;
 
 public class RouteLineListScreen extends RouteEditorScreenBase implements RouteDataAwareScreen {
     private EditBox searchBox;
@@ -122,8 +120,7 @@ public class RouteLineListScreen extends RouteEditorScreenBase implements RouteD
         SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, summary, Math.round((card.width() - 22) / 0.72F)), card.x() + 10, summaryY, RouteEditorGui.INK_SECONDARY, 0.72F);
         SPSGui.representativeLayout(line).ifPresentOrElse(
                 layout -> SPSGui.stationMap(graphics, this.font, layout, line.themeColors(), new SPSGui.Rect(card.x() + 10, mapY, card.width() - 20, mapHeight), false, line.id().hashCode(), true),
-                () -> SPSGui.stationMap(graphics, this.font, List.of(), line.themeColors(), new SPSGui.Rect(card.x() + 10, mapY, card.width() - 20, mapHeight), false, line.id().hashCode(), true)
-        );
+                () -> SPSGui.stationMap(graphics, this.font, List.of(), line.themeColors(), new SPSGui.Rect(card.x() + 10, mapY, card.width() - 20, mapHeight), false, line.id().hashCode(), true));
         if (ellipsis) {
             int phase = (int) ((System.currentTimeMillis() / 120L) % 6L);
             int dotX = card.x() + card.width() / 2 - 5;

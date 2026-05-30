@@ -1,12 +1,11 @@
 package dev.marblegate.superpipeslide.client.fullmap.model;
 
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.level.Level;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 public record MapNode(
         NodeId id,
@@ -21,8 +20,7 @@ public record MapNode(
         List<UUID> routeLineIds,
         Optional<PipeAnchorId> foldAnchorId,
         Optional<PipeAnchorId> foldPeerId,
-        Optional<NodeId> clusterId
-) {
+        Optional<NodeId> clusterId) {
     public MapNode {
         stationGroupIds = List.copyOf(stationGroupIds);
         platformStopIds = List.copyOf(platformStopIds);

@@ -1,16 +1,14 @@
 package dev.marblegate.superpipeslide.common.core.networkgraph.fold;
 
-
-import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNodeData;
-import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNodeType;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
+import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNodeData;
+import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNodeType;
+import java.util.Optional;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
-
-import java.util.Optional;
 
 public record FoldAnchorNode(
         PipeAnchorId anchorId,
@@ -18,8 +16,8 @@ public record FoldAnchorNode(
         FoldAnchorMode mode,
         String displayName,
         Optional<FoldAnchorRef> boundTarget,
-        long configRevision
-) implements PipeNodeData {
+        long configRevision) implements PipeNodeData {
+
     public static final int MAX_NAME_LENGTH = 48;
 
     public static final MapCodec<FoldAnchorNode> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -28,8 +26,7 @@ public record FoldAnchorNode(
             FoldAnchorMode.CODEC.optionalFieldOf("mode", FoldAnchorMode.UNCONFIGURED).forGetter(FoldAnchorNode::mode),
             com.mojang.serialization.Codec.STRING.optionalFieldOf("display_name", "").forGetter(FoldAnchorNode::displayName),
             FoldAnchorRef.CODEC.optionalFieldOf("bound_target").forGetter(FoldAnchorNode::boundTarget),
-            com.mojang.serialization.Codec.LONG.optionalFieldOf("config_revision", 0L).forGetter(FoldAnchorNode::configRevision)
-    ).apply(instance, FoldAnchorNode::new));
+            com.mojang.serialization.Codec.LONG.optionalFieldOf("config_revision", 0L).forGetter(FoldAnchorNode::configRevision)).apply(instance, FoldAnchorNode::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, FoldAnchorNode> STREAM_CODEC = StreamCodec.composite(
             PipeAnchorId.STREAM_CODEC,
@@ -44,9 +41,7 @@ public record FoldAnchorNode(
             FoldAnchorNode::boundTarget,
             ByteBufCodecs.VAR_LONG.cast(),
             FoldAnchorNode::configRevision,
-            FoldAnchorNode::new
-    );
-
+            FoldAnchorNode::new);
     public FoldAnchorNode {
         displayName = sanitizeName(displayName);
         boundTarget = boundTarget.filter(target -> mode == FoldAnchorMode.B_END);

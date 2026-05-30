@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.common.core.appearance.style;
 
-
 import dev.marblegate.superpipeslide.common.core.appearance.storage.PipeAppearanceDefinitions;
 import java.util.Map;
 
@@ -20,8 +19,7 @@ public record PipeStyleGeometry(
         double rimWidth,
         double wallSlope,
         double floorRatio,
-        double edgeWidth
-) {
+        double edgeWidth) {
     public static PipeStyleGeometry resolve(PipeStyleDefinition style, PipeVariantDefinition variant, Map<String, Double> parameters) {
         double size = variant.sizeMultiplier();
         return switch (style.shape()) {

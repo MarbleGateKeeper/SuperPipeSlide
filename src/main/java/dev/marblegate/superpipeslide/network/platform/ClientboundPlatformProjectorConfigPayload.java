@@ -15,8 +15,7 @@ public record ClientboundPlatformProjectorConfigPayload(BlockPos pos, PlatformPr
             ClientboundPlatformProjectorConfigPayload::pos,
             PlatformProjectorConfig.STREAM_CODEC,
             ClientboundPlatformProjectorConfigPayload::config,
-            ClientboundPlatformProjectorConfigPayload::new
-    );
+            ClientboundPlatformProjectorConfigPayload::new);
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

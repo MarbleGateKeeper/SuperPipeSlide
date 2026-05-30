@@ -3,6 +3,8 @@ package dev.marblegate.superpipeslide.network.sync.pipe;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNode;
+import java.util.List;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -10,10 +12,8 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 
-import java.util.List;
-import java.util.UUID;
-
 public record PipeNetworkSnapshotChunkPayload(UUID snapshotId, long revision, int chunkIndex, List<PipeNode> nodes, List<PipeConnection> connections) implements CustomPacketPayload {
+
     private static final int MAX_NODES_PER_CHUNK = 512;
     private static final int MAX_CONNECTIONS_PER_CHUNK = 128;
 
@@ -29,9 +29,7 @@ public record PipeNetworkSnapshotChunkPayload(UUID snapshotId, long revision, in
             PipeNetworkSnapshotChunkPayload::nodes,
             PipeConnection.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_CONNECTIONS_PER_CHUNK)),
             PipeNetworkSnapshotChunkPayload::connections,
-            PipeNetworkSnapshotChunkPayload::new
-    );
-
+            PipeNetworkSnapshotChunkPayload::new);
     public PipeNetworkSnapshotChunkPayload {
         if (snapshotId == null) {
             throw new IllegalArgumentException("Pipe network snapshot id cannot be null");

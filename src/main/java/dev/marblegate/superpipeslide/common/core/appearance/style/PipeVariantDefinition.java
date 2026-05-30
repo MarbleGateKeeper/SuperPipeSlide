@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.common.core.appearance.style;
 
-
 import dev.marblegate.superpipeslide.common.core.appearance.material.MaterialSlotDefinition;
 import java.util.List;
 
@@ -15,8 +14,7 @@ public record PipeVariantDefinition(
         boolean splitCoating,
         boolean reinforced,
         boolean extraRibs,
-        boolean curved
-) {
+        boolean curved) {
     public PipeVariantDefinition {
         slots = List.copyOf(slots);
     }

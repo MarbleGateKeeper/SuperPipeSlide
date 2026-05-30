@@ -7,13 +7,13 @@ import dev.marblegate.superpipeslide.client.fullmap.cluster.model.ClusterCardNod
 import dev.marblegate.superpipeslide.client.fullmap.cluster.model.ClusterCardProfile;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.model.ClusterCardSemanticGraph;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
-import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapCluster;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapDimensionGraph;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapEdge;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapNode;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeKind;
+import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -57,8 +57,7 @@ public final class ClusterCardSemanticBuilder {
                         Optional.of(edge),
                         Optional.empty(),
                         Optional.empty(),
-                        edge.routeLineIds()
-                ));
+                        edge.routeLineIds()));
             } else if ((from != null) != (to != null)) {
                 NodeId inside = from == null ? to : from;
                 NodeId outside = from == null ? edge.from() : edge.to();
@@ -77,8 +76,7 @@ public final class ClusterCardSemanticBuilder {
                         Optional.of(edge),
                         Optional.of(inside),
                         Optional.of(outside),
-                        edge.routeLineIds()
-                ));
+                        edge.routeLineIds()));
                 externalCount++;
             }
         }
@@ -102,8 +100,7 @@ public final class ClusterCardSemanticBuilder {
                 edges,
                 cluster.routeLineIds(),
                 externalCount,
-                bounds
-        );
+                bounds);
     }
 
     private List<MapNode> clusterMembers(MapDimensionGraph graph, MapCluster cluster, ClusterCardProfile profile) {
@@ -151,8 +148,7 @@ public final class ClusterCardSemanticBuilder {
                 node.foldAnchorId(),
                 node.foldPeerId(),
                 Optional.empty(),
-                stationInternalLoop
-        );
+                stationInternalLoop);
     }
 
     private ClusterCardNode externalPortNode(String id, MapNode outsideNode, List<UUID> routeLineIds) {
@@ -170,8 +166,7 @@ public final class ClusterCardSemanticBuilder {
                 Optional.empty(),
                 Optional.empty(),
                 Optional.of(outsideNode.id()),
-                false
-        );
+                false);
     }
 
     private boolean hasStationInternalLoop(MapDimensionGraph graph, NodeId nodeId) {
@@ -210,8 +205,7 @@ public final class ClusterCardSemanticBuilder {
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
-                    List.of()
-            ));
+                    List.of()));
         }
         return result;
     }

@@ -6,8 +6,7 @@ public record PipeStyleParameterDefinition(
         double defaultValue,
         double minValue,
         double maxValue,
-        double step
-) {
+        double step) {
     public PipeStyleParameterDefinition {
         id = id == null ? "" : id.trim();
         nameKey = nameKey == null ? "" : nameKey.trim();

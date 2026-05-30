@@ -1,6 +1,6 @@
 package dev.marblegate.superpipeslide.network.sync.route;
 
-
+import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
 import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
@@ -8,14 +8,13 @@ import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectio
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionPathRecord;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationTransferLink;
-import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.Identifier;
 
 public record ClientboundRouteDataDeltaPayload(
@@ -35,8 +34,8 @@ public record ClientboundRouteDataDeltaPayload(
         List<RouteSectionPathRecord> updatedRouteSectionPaths,
         List<UUID> removedRouteSectionPathIds,
         List<StationTransferLink> updatedStationTransferLinks,
-        List<UUID> removedStationTransferLinkIds
-) implements CustomPacketPayload {
+        List<UUID> removedStationTransferLinkIds) implements CustomPacketPayload {
+
     private static final int MAX_OBJECTS = 32767;
 
     public static final Type<ClientboundRouteDataDeltaPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "route_data_delta"));
@@ -69,8 +68,7 @@ public record ClientboundRouteDataDeltaPayload(
                     ROUTE_SECTION_PATH_LIST_CODEC.decode(buffer),
                     UUID_LIST_CODEC.decode(buffer),
                     STATION_TRANSFER_LINK_LIST_CODEC.decode(buffer),
-                    UUID_LIST_CODEC.decode(buffer)
-            );
+                    UUID_LIST_CODEC.decode(buffer));
         }
 
         @Override
@@ -94,7 +92,6 @@ public record ClientboundRouteDataDeltaPayload(
             UUID_LIST_CODEC.encode(buffer, payload.removedStationTransferLinkIds());
         }
     };
-
     public ClientboundRouteDataDeltaPayload {
         updatedStationGroups = List.copyOf(updatedStationGroups);
         removedStationGroupIds = List.copyOf(removedStationGroupIds);
@@ -134,4 +131,3 @@ public record ClientboundRouteDataDeltaPayload(
         return TYPE;
     }
 }
-

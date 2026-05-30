@@ -2,15 +2,13 @@ package dev.marblegate.superpipeslide.common.core.route.service;
 
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSection;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 
 public final class RouteLayoutNavigator {
-    private RouteLayoutNavigator() {
-    }
+    private RouteLayoutNavigator() {}
 
     public static boolean containsStop(RouteLayout layout, UUID platformStopId) {
         return layout.orderedPlatformStops().contains(platformStopId);
@@ -70,9 +68,7 @@ public final class RouteLayoutNavigator {
         return Optional.empty();
     }
 
-    public record RouteStep(RouteSection section, UUID nextPlatformStopId, int sectionIndex) {
-    }
+    public record RouteStep(RouteSection section, UUID nextPlatformStopId, int sectionIndex) {}
 
-    private record StepPosition(int sectionIndex, UUID nextPlatformStopId) {
-    }
+    private record StepPosition(int sectionIndex, UUID nextPlatformStopId) {}
 }

@@ -11,10 +11,9 @@ public record GazeChoiceSession(
         List<GazeChoice> choices,
         UUID defaultChoiceId,
         int requiredFocusTicks,
-        GazeChoiceExpireCondition expireCondition
-) {
-    public static final int MAX_CHOICES = 16;
+        GazeChoiceExpireCondition expireCondition) {
 
+    public static final int MAX_CHOICES = 16;
     public GazeChoiceSession {
         if (source == null) {
             throw new IllegalArgumentException("Gaze choice source is required");

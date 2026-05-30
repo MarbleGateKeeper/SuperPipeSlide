@@ -1,13 +1,11 @@
 package dev.marblegate.superpipeslide.client.gui.pipe;
 
-
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
+import java.util.Arrays;
+import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
-
-import java.util.Arrays;
-import java.util.List;
 
 final class PipeAppearanceTerminalGui {
     static final int FRAME = 0xF224282C;
@@ -29,8 +27,7 @@ final class PipeAppearanceTerminalGui {
     static final int TEXT_MUTED = 0xFF4D7F5D;
     static final int TEXT_DISABLED = 0xFF3C5845;
 
-    private PipeAppearanceTerminalGui() {
-    }
+    private PipeAppearanceTerminalGui() {}
 
     static void frame(GuiGraphicsExtractor graphics, SPSGui.Rect panel) {
         graphics.fill(panel.x(), panel.y(), panel.right(), panel.bottom(), FRAME);

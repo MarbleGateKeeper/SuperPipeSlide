@@ -1,23 +1,20 @@
 package dev.marblegate.superpipeslide.client.fullmap.routecard.render;
 
-
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardViewMode;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardViewport;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.level.Level;
-
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 public record RouteLineCardState(
         UUID routeLineId,
         Optional<UUID> selectedLayoutId,
         Optional<ResourceKey<Level>> sourceLevelKey,
         RouteCardViewMode viewMode,
-        Map<RouteCardViewMode, RouteCardViewport> viewports
-) {
+        Map<RouteCardViewMode, RouteCardViewport> viewports) {
     public RouteLineCardState {
         selectedLayoutId = selectedLayoutId == null ? Optional.empty() : selectedLayoutId;
         sourceLevelKey = sourceLevelKey == null ? Optional.empty() : sourceLevelKey;
@@ -58,5 +55,4 @@ public record RouteLineCardState(
     public Optional<RouteCardViewport> viewport() {
         return Optional.ofNullable(this.viewports.get(this.viewMode));
     }
-
 }

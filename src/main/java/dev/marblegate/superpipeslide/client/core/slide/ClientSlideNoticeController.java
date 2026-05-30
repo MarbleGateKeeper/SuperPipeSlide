@@ -7,9 +7,9 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Optional;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 
@@ -34,8 +34,7 @@ public final class ClientSlideNoticeController {
     private static final int DEFAULT_ACCENT = 0xFF47A6FF;
     private static final Deque<Notice> NOTICES = new ArrayDeque<>();
 
-    private ClientSlideNoticeController() {
-    }
+    private ClientSlideNoticeController() {}
 
     public static void handleNotice(ClientboundSlideNoticePayload payload) {
         long now = System.currentTimeMillis();
@@ -132,8 +131,7 @@ public final class ClientSlideNoticeController {
             bodyLines.add(new MeasuredBodyLine(
                     new ClientboundSlideNoticePayload.NoticeLine(Component.translatable("notice.superpipeslide.slide.more_lines", hiddenRows), List.of(), false),
                     List.of(FormattedCharSequence.forward(Component.translatable("notice.superpipeslide.slide.more_lines", hiddenRows).getString(), net.minecraft.network.chat.Style.EMPTY)),
-                    false
-            ));
+                    false));
         }
         int headerHeight = 8 + Math.max(9, titleLines.size() * 9);
         int bodyHeight = bodyLines.isEmpty() ? 0 : 4 + bodyLines.stream().mapToInt(line -> line.chip() ? CHIP_ROW_HEIGHT : 9).sum();
@@ -446,9 +444,7 @@ public final class ClientSlideNoticeController {
         }
     }
 
-    private record MeasuredNotice(List<FormattedCharSequence> titleLines, List<MeasuredBodyLine> bodyLines, int height, boolean scrollingChips) {
-    }
+    private record MeasuredNotice(List<FormattedCharSequence> titleLines, List<MeasuredBodyLine> bodyLines, int height, boolean scrollingChips) {}
 
-    private record MeasuredBodyLine(ClientboundSlideNoticePayload.NoticeLine source, List<FormattedCharSequence> sequences, boolean chip) {
-    }
+    private record MeasuredBodyLine(ClientboundSlideNoticePayload.NoticeLine source, List<FormattedCharSequence> sequences, boolean chip) {}
 }

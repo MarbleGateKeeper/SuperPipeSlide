@@ -2,6 +2,8 @@ package dev.marblegate.superpipeslide.network.slide;
 
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.slide.ServerSlideController;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -14,9 +16,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-import java.util.Optional;
-import java.util.UUID;
-
 public record ServerboundSlideTeleportRequestPayload(
         UUID sessionId,
         ResourceKey<Level> targetLevel,
@@ -26,8 +25,8 @@ public record ServerboundSlideTeleportRequestPayload(
         Optional<UUID> targetConnectionId,
         int direction,
         double distanceOnConnection,
-        double speed
-) implements CustomPacketPayload {
+        double speed) implements CustomPacketPayload {
+
     public static final Type<ServerboundSlideTeleportRequestPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "slide_teleport_request"));
     public static final StreamCodec<RegistryFriendlyByteBuf, ServerboundSlideTeleportRequestPayload> STREAM_CODEC = StreamCodec.composite(
             UUIDUtil.STREAM_CODEC,
@@ -48,9 +47,7 @@ public record ServerboundSlideTeleportRequestPayload(
             ServerboundSlideTeleportRequestPayload::distanceOnConnection,
             ByteBufCodecs.DOUBLE.cast(),
             ServerboundSlideTeleportRequestPayload::speed,
-            ServerboundSlideTeleportRequestPayload::new
-    );
-
+            ServerboundSlideTeleportRequestPayload::new);
     public ServerboundSlideTeleportRequestPayload {
         targetConnectionId = targetConnectionId == null ? Optional.empty() : targetConnectionId;
         direction = direction < 0 ? -1 : 1;

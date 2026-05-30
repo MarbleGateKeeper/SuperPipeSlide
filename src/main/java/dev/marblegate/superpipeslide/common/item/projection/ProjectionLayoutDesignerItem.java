@@ -4,10 +4,13 @@ import dev.marblegate.superpipeslide.common.block.station.PlatformProjectorBlock
 import dev.marblegate.superpipeslide.common.block.station.StationNameProjectorBlockEntity;
 import dev.marblegate.superpipeslide.common.core.projection.layout.AppliedProjectionLayout;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutDefinition;
-import dev.marblegate.superpipeslide.common.core.projection.storage.ProjectionLayoutSavedData;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutTarget;
+import dev.marblegate.superpipeslide.common.core.projection.storage.ProjectionLayoutSavedData;
 import dev.marblegate.superpipeslide.common.registry.SPSDataComponents;
 import dev.marblegate.superpipeslide.network.projection.ClientboundOpenProjectionLayoutDesignerPayload;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -22,10 +25,6 @@ import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.PacketDistributor;
-
-import java.util.Optional;
-import java.util.UUID;
-import java.util.function.Consumer;
 
 public class ProjectionLayoutDesignerItem extends Item {
     public ProjectionLayoutDesignerItem(Properties properties) {
@@ -150,6 +149,5 @@ public class ProjectionLayoutDesignerItem extends Item {
         return null;
     }
 
-    private record TargetProjector(ProjectionLayoutTarget target, AppliedProjectionLayout appliedLayout, java.util.function.Consumer<AppliedProjectionLayout> applyLayout) {
-    }
+    private record TargetProjector(ProjectionLayoutTarget target, AppliedProjectionLayout appliedLayout, java.util.function.Consumer<AppliedProjectionLayout> applyLayout) {}
 }

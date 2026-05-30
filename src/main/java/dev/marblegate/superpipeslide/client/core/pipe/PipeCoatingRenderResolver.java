@@ -32,8 +32,7 @@ public final class PipeCoatingRenderResolver {
     private static final Map<Identifier, BlockTextureModelProfile> MODEL_PROFILE_CACHE = new LinkedHashMap<>();
     private static final RandomSource MODEL_RANDOM = RandomSource.create(0x5F3759DFL);
 
-    private PipeCoatingRenderResolver() {
-    }
+    private PipeCoatingRenderResolver() {}
 
     public static ResolvedPipeCoating resolve(PipeCoatingSelection selection) {
         PipeCoatingSelection normalized = PipeAppearanceDefinitions.normalizeSelection(selection);
@@ -100,8 +99,7 @@ public final class PipeCoatingRenderResolver {
         candidates.put("auto", new TextureCandidate(
                 Component.translatable("screen.superpipeslide.pipe_appearance.texture_pick.auto"),
                 PipeCoatingTexturePick.AUTO,
-                particle
-        ));
+                particle));
 
         Map<Identifier, TextureAtlasSprite> faceSprites = new LinkedHashMap<>();
         Map<Identifier, List<Direction>> faceDirections = new LinkedHashMap<>();
@@ -124,8 +122,7 @@ public final class PipeCoatingRenderResolver {
             candidates.put("face:" + spriteId, new TextureCandidate(
                     faceLabel(directions),
                     PipeCoatingTexturePick.face(directions.getFirst()),
-                    entry.getValue()
-            ));
+                    entry.getValue()));
         }
 
         int spriteIndex = 1;
@@ -138,8 +135,7 @@ public final class PipeCoatingRenderResolver {
             candidates.put(key, new TextureCandidate(
                     Component.translatable("screen.superpipeslide.pipe_appearance.texture_pick.sprite", spriteIndex++),
                     PipeCoatingTexturePick.sprite(spriteId),
-                    sprite
-            ));
+                    sprite));
         }
 
         return List.copyOf(candidates.values());
@@ -264,8 +260,7 @@ public final class PipeCoatingRenderResolver {
         return Minecraft.getInstance().getAtlasManager().getAtlasOrThrow(AtlasIds.BLOCKS).getSprite(spriteId);
     }
 
-    public record TextureCandidate(Component label, PipeCoatingTexturePick pick, TextureAtlasSprite sprite) {
-    }
+    public record TextureCandidate(Component label, PipeCoatingTexturePick pick, TextureAtlasSprite sprite) {}
 
     public record BlockTextureModelProfile(boolean resolved, boolean nonStandardModel, int unculledQuads, int faceQuads, int missingFaces, int uniqueSprites) {
         static BlockTextureModelProfile unresolved() {

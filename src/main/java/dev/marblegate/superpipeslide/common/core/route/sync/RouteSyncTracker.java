@@ -30,11 +30,15 @@ public final class RouteSyncTracker {
     private final Set<UUID> pendingRemovedRouteSectionPathIds = new LinkedHashSet<>();
     private final Map<UUID, StationTransferLink> pendingUpdatedStationTransferLinks = new LinkedHashMap<>();
     private final Set<UUID> pendingRemovedStationTransferLinkIds = new LinkedHashSet<>();
-    private long pendingBaseRevision = -1L;    public void captureBaseRevision(long revision) {
+    private long pendingBaseRevision = -1L;
+
+    public void captureBaseRevision(long revision) {
         if (this.pendingBaseRevision < 0L) {
             this.pendingBaseRevision = revision;
         }
-    }    public ClientboundRouteDataDeltaPayload consume(long currentRevision, long pipeRevisionUsed) {
+    }
+
+    public ClientboundRouteDataDeltaPayload consume(long currentRevision, long pipeRevisionUsed) {
         long baseRevision = this.pendingBaseRevision >= 0L ? this.pendingBaseRevision : currentRevision;
         ClientboundRouteDataDeltaPayload payload = new ClientboundRouteDataDeltaPayload(
                 baseRevision,
@@ -53,50 +57,77 @@ public final class RouteSyncTracker {
                 List.copyOf(this.pendingUpdatedRouteSectionPaths.values()),
                 List.copyOf(this.pendingRemovedRouteSectionPathIds),
                 List.copyOf(this.pendingUpdatedStationTransferLinks.values()),
-                List.copyOf(this.pendingRemovedStationTransferLinkIds)
-        );
+                List.copyOf(this.pendingRemovedStationTransferLinkIds));
         this.clear();
         return payload;
-    }    public void trackUpdated(StationGroup stationGroup) {
+    }
+
+    public void trackUpdated(StationGroup stationGroup) {
         this.pendingRemovedStationGroupIds.remove(stationGroup.id());
         this.pendingUpdatedStationGroups.put(stationGroup.id(), stationGroup);
-    }    public void trackRemovedStationGroup(UUID id) {
+    }
+
+    public void trackRemovedStationGroup(UUID id) {
         this.pendingUpdatedStationGroups.remove(id);
         this.pendingRemovedStationGroupIds.add(id);
-    }    public void trackUpdated(PlatformStop platformStop) {
+    }
+
+    public void trackUpdated(PlatformStop platformStop) {
         this.pendingRemovedPlatformStopIds.remove(platformStop.id());
         this.pendingUpdatedPlatformStops.put(platformStop.id(), platformStop);
-    }    public void trackRemovedPlatformStop(UUID id) {
+    }
+
+    public void trackRemovedPlatformStop(UUID id) {
         this.pendingUpdatedPlatformStops.remove(id);
         this.pendingRemovedPlatformStopIds.add(id);
-    }    public void trackUpdated(RouteLine routeLine) {
+    }
+
+    public void trackUpdated(RouteLine routeLine) {
         this.pendingRemovedRouteLineIds.remove(routeLine.id());
         this.pendingUpdatedRouteLines.put(routeLine.id(), routeLine);
-    }    public void trackRemovedRouteLine(UUID id) {
+    }
+
+    public void trackRemovedRouteLine(UUID id) {
         this.pendingUpdatedRouteLines.remove(id);
         this.pendingRemovedRouteLineIds.add(id);
-    }    public void trackUpdated(RouteLayout routeLayout) {
+    }
+
+    public void trackUpdated(RouteLayout routeLayout) {
         this.pendingRemovedRouteLayoutIds.remove(routeLayout.id());
         this.pendingUpdatedRouteLayouts.put(routeLayout.id(), routeLayout);
-    }    public void trackRemovedRouteLayout(UUID id) {
+    }
+
+    public void trackRemovedRouteLayout(UUID id) {
         this.pendingUpdatedRouteLayouts.remove(id);
         this.pendingRemovedRouteLayoutIds.add(id);
-    }    public void trackUpdated(RouteSection routeSection) {
+    }
+
+    public void trackUpdated(RouteSection routeSection) {
         this.pendingRemovedRouteSectionIds.remove(routeSection.id());
         this.pendingUpdatedRouteSections.put(routeSection.id(), routeSection);
-    }    public void trackRemovedRouteSection(UUID id) {
+    }
+
+    public void trackRemovedRouteSection(UUID id) {
         this.pendingUpdatedRouteSections.remove(id);
         this.pendingRemovedRouteSectionIds.add(id);
-    }    public void trackUpdated(RouteSectionPathRecord record) {
+    }
+
+    public void trackUpdated(RouteSectionPathRecord record) {
         this.pendingRemovedRouteSectionPathIds.remove(record.routeSectionId());
         this.pendingUpdatedRouteSectionPaths.put(record.routeSectionId(), record);
-    }    public void trackRemovedRouteSectionPath(UUID id) {
+    }
+
+    public void trackRemovedRouteSectionPath(UUID id) {
         this.pendingUpdatedRouteSectionPaths.remove(id);
         this.pendingRemovedRouteSectionPathIds.add(id);
-    }    public void trackUpdated(StationTransferLink link) {
+    }
+
+    public void trackUpdated(StationTransferLink link) {
         this.pendingRemovedStationTransferLinkIds.remove(link.id());
         this.pendingUpdatedStationTransferLinks.put(link.id(), link);
-    }    public void trackRemovedStationTransferLink(UUID id) {
+    }
+
+    public void trackRemovedStationTransferLink(UUID id) {
         this.pendingUpdatedStationTransferLinks.remove(id);
         this.pendingRemovedStationTransferLinkIds.add(id);
     }
@@ -119,4 +150,3 @@ public final class RouteSyncTracker {
         this.pendingBaseRevision = -1L;
     }
 }
-

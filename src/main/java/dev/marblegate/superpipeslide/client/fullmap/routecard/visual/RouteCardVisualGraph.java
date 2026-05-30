@@ -1,9 +1,7 @@
 package dev.marblegate.superpipeslide.client.fullmap.routecard.visual;
 
-
-import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardNodeId;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
-
+import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardNodeId;
 import java.util.List;
 import java.util.Optional;
 
@@ -13,8 +11,7 @@ public record RouteCardVisualGraph(
         List<RouteCardVisualSegment> segments,
         List<RouteCardVisualLabel> labels,
         Aabb2 bounds,
-        boolean fallback
-) {
+        boolean fallback) {
     public RouteCardVisualGraph {
         nodes = List.copyOf(nodes);
         edges = List.copyOf(edges);

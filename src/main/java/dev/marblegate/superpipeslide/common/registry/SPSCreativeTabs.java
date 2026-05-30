@@ -45,6 +45,5 @@ public final class SPSCreativeTabs {
             })
             .build());
 
-    private SPSCreativeTabs() {
-    }
+    private SPSCreativeTabs() {}
 }

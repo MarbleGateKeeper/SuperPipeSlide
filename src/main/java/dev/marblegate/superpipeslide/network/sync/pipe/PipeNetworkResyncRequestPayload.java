@@ -1,7 +1,5 @@
 package dev.marblegate.superpipeslide.network.sync.pipe;
 
-
-import dev.marblegate.superpipeslide.common.event.ServerEvents;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -14,8 +12,7 @@ public record PipeNetworkResyncRequestPayload() implements CustomPacketPayload {
     public static final Type<PipeNetworkResyncRequestPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "pipe_network_resync_request"));
     public static final StreamCodec<RegistryFriendlyByteBuf, PipeNetworkResyncRequestPayload> STREAM_CODEC = StreamCodec.unit(new PipeNetworkResyncRequestPayload());
 
-    public PipeNetworkResyncRequestPayload {
-    }
+    public PipeNetworkResyncRequestPayload {}
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

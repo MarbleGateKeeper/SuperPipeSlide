@@ -1,10 +1,12 @@
 package dev.marblegate.superpipeslide.network.projection;
 
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
-import dev.marblegate.superpipeslide.common.core.projection.storage.ProjectionLayoutSavedData;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutTarget;
+import dev.marblegate.superpipeslide.common.core.projection.storage.ProjectionLayoutSavedData;
 import dev.marblegate.superpipeslide.common.registry.SPSDataComponents;
 import dev.marblegate.superpipeslide.common.registry.SPSItems;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -14,15 +16,11 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-import java.util.Optional;
-import java.util.UUID;
-
 public record ServerboundProjectionLayoutSelectPayload(ProjectionLayoutTarget target, UUID layoutId) implements CustomPacketPayload {
     public static final Type<ServerboundProjectionLayoutSelectPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "projection_layout_select"));
     public static final StreamCodec<RegistryFriendlyByteBuf, ServerboundProjectionLayoutSelectPayload> STREAM_CODEC = StreamCodec.of(
             ServerboundProjectionLayoutSelectPayload::encode,
-            ServerboundProjectionLayoutSelectPayload::decode
-    );
+            ServerboundProjectionLayoutSelectPayload::decode);
 
     public static void handleServer(ServerboundProjectionLayoutSelectPayload payload, IPayloadContext context) {
         if (!(context.player() instanceof ServerPlayer player)) {

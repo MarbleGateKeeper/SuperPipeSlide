@@ -15,9 +15,9 @@ import dev.marblegate.superpipeslide.client.fullmap.cluster.visual.ClusterCardVi
 import dev.marblegate.superpipeslide.client.fullmap.cluster.visual.ClusterCardVisualNode;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapLayoutMode;
+import dev.marblegate.superpipeslide.client.fullmap.model.MapNode;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
-import dev.marblegate.superpipeslide.client.fullmap.model.MapNode;
 import dev.marblegate.superpipeslide.client.fullmap.render.FullRouteMapRenderer;
 import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
 import dev.marblegate.superpipeslide.client.fullmap.ui.DisplayNameStack;
@@ -51,8 +51,7 @@ public final class ClusterCardRenderer {
             SPSGui.Rect map,
             boolean active,
             int mouseX,
-            int mouseY
-    ) {
+            int mouseY) {
         SPSGui.Rect fitViewport = new SPSGui.Rect(map.right() - 20, map.bottom() - 20, FullMapTheme.ICON_BUTTON_SMALL, FullMapTheme.ICON_BUTTON_SMALL);
         boolean overControl = active && fitViewport.contains(mouseX, mouseY);
         ClusterCardProfile profile = semanticGraph.profile();
@@ -93,8 +92,7 @@ public final class ClusterCardRenderer {
         double s = scale(viewport);
         return new Vec2(
                 viewport.centerX() + (screenX - (map.x() + map.width() * 0.5D)) / s,
-                viewport.centerY() + (screenY - (map.y() + map.height() * 0.5D)) / s
-        );
+                viewport.centerY() + (screenY - (map.y() + map.height() * 0.5D)) / s);
     }
 
     public static double scale(ClusterCardViewport viewport) {
@@ -118,8 +116,7 @@ public final class ClusterCardRenderer {
         double s = scale(viewport);
         return new Vec2(
                 map.x() + map.width() * 0.5D + (point.x() - viewport.centerX()) * s,
-                map.y() + map.height() * 0.5D + (point.y() - viewport.centerY()) * s
-        );
+                map.y() + map.height() * 0.5D + (point.y() - viewport.centerY()) * s);
     }
 
     private static Aabb2 screenBounds(Aabb2 bounds, ClusterCardViewport viewport, SPSGui.Rect map) {
@@ -305,8 +302,7 @@ public final class ClusterCardRenderer {
             SPSGui.Rect boundary,
             List<SPSGui.Rect> avoidRects,
             int mouseX,
-            int mouseY
-    ) {
+            int mouseY) {
         if (hover.kind() == ClusterCardHitKind.NODE && hover.nodeId().isPresent()) {
             ClusterCardNode node = graph.node(hover.nodeId().get()).orElse(null);
             if (node == null) {
@@ -323,8 +319,7 @@ public final class ClusterCardRenderer {
                     clusterNodeSubtitle(node),
                     clusterNodeRows(node),
                     routeChips(node.routeLineIds()),
-                    clusterNodeAccent(node)
-            );
+                    clusterNodeAccent(node));
             return;
         }
         if (hover.kind() == ClusterCardHitKind.EDGE && hover.edgeId().isPresent()) {
@@ -340,8 +335,7 @@ public final class ClusterCardRenderer {
                             Component.translatable("screen.superpipeslide.full_map.tooltip_card.edge_subtitle", edge.routeLineIds().size()).getString(),
                             List.of(tooltipRow("screen.superpipeslide.full_map.tooltip_field.routes", Integer.toString(edge.routeLineIds().size()))),
                             routeChips(edge.routeLineIds()),
-                            primaryRouteColor(edge.routeLineIds())
-                    ));
+                            primaryRouteColor(edge.routeLineIds())));
         }
     }
 
@@ -834,8 +828,7 @@ public final class ClusterCardRenderer {
         return first.x() < second.right() && first.right() > second.x() && first.y() < second.bottom() && first.bottom() > second.y();
     }
 
-    private record LabelBlocker(String nodeId, SPSGui.Rect bounds) {
-    }
+    private record LabelBlocker(String nodeId, SPSGui.Rect bounds) {}
 
     private record EdgeLane(List<Integer> colors) {
         private EdgeLane {

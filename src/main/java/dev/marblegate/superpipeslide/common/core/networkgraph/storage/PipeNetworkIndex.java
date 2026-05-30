@@ -514,6 +514,5 @@ public final class PipeNetworkIndex {
         return (int) Math.floor(coordinate / CELL_SIZE);
     }
 
-    private record CellKey(ResourceKey<Level> levelKey, int x, int y, int z) {
-    }
+    private record CellKey(ResourceKey<Level> levelKey, int x, int y, int z) {}
 }

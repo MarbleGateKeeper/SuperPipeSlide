@@ -4,10 +4,13 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.fold.ClientFoldTraversalEffectController;
-import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
+import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -21,10 +24,6 @@ import net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent;
 import net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent;
 import net.neoforged.neoforge.client.event.ViewportEvent;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-
 public final class ClientFoldTraversalEffectRenderer {
     private static final ContextKey<RenderData> RENDER_DATA = new ContextKey<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "fold_traversal_effect"));
     private static final Vec3 WORLD_UP = new Vec3(0.0D, 1.0D, 0.0D);
@@ -36,8 +35,7 @@ public final class ClientFoldTraversalEffectRenderer {
     private static final int DIMENSION_ACCENT = 0xFFFFD16A;
     private static final int DIMENSION_SHADOW = 0xFF241447;
 
-    private ClientFoldTraversalEffectRenderer() {
-    }
+    private ClientFoldTraversalEffectRenderer() {}
 
     public static void extract(ExtractLevelRenderStateEvent event) {
         Optional<ClientFoldTraversalEffectController.Snapshot> snapshot = ClientFoldTraversalEffectController.snapshot();
@@ -559,9 +557,7 @@ public final class ClientFoldTraversalEffectRenderer {
         return value.lengthSqr() < 1.0E-8D ? fallback : value.normalize();
     }
 
-    private record RenderData(ClientFoldTraversalEffectController.Snapshot snapshot) {
-    }
+    private record RenderData(ClientFoldTraversalEffectController.Snapshot snapshot) {}
 
-    private record Frame(Vec3 right, Vec3 up, Vec3 normal) {
-    }
+    private record Frame(Vec3 right, Vec3 up, Vec3 normal) {}
 }

@@ -3,7 +3,6 @@ package dev.marblegate.superpipeslide.client.fullmap.schematic.model;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapEdge;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapEdgeOccurrence;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
-
 import java.util.List;
 import java.util.UUID;
 
@@ -14,8 +13,7 @@ public record SchematicEdge(
         SemanticEdgeKind kind,
         List<UUID> routeLineIds,
         List<MapEdgeOccurrence> occurrences,
-        MapEdge sourceEdge
-) {
+        MapEdge sourceEdge) {
     public SchematicEdge {
         routeLineIds = routeLineIds.stream().distinct().sorted().toList();
         occurrences = List.copyOf(occurrences);

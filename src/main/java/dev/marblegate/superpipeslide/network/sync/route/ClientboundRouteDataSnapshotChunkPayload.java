@@ -1,6 +1,6 @@
 package dev.marblegate.superpipeslide.network.sync.route;
 
-
+import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
 import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
@@ -8,12 +8,11 @@ import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectio
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionPathRecord;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationTransferLink;
-import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import java.util.List;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.Identifier;
 
 public record ClientboundRouteDataSnapshotChunkPayload(
@@ -25,8 +24,8 @@ public record ClientboundRouteDataSnapshotChunkPayload(
         List<RouteLayout> routeLayouts,
         List<RouteSection> routeSections,
         List<RouteSectionPathRecord> routeSectionPaths,
-        List<StationTransferLink> stationTransferLinks
-) implements CustomPacketPayload {
+        List<StationTransferLink> stationTransferLinks) implements CustomPacketPayload {
+
     private static final int MAX_OBJECTS = 1024;
 
     public static final Type<ClientboundRouteDataSnapshotChunkPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "route_data_snapshot_chunk"));
@@ -49,9 +48,7 @@ public record ClientboundRouteDataSnapshotChunkPayload(
             ClientboundRouteDataSnapshotChunkPayload::routeSectionPaths,
             StationTransferLink.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_OBJECTS)),
             ClientboundRouteDataSnapshotChunkPayload::stationTransferLinks,
-            ClientboundRouteDataSnapshotChunkPayload::new
-    );
-
+            ClientboundRouteDataSnapshotChunkPayload::new);
     public ClientboundRouteDataSnapshotChunkPayload {
         stationGroups = List.copyOf(stationGroups);
         platformStops = List.copyOf(platformStops);
@@ -67,4 +64,3 @@ public record ClientboundRouteDataSnapshotChunkPayload(
         return TYPE;
     }
 }
-

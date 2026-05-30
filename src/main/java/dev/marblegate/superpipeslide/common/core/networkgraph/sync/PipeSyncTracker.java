@@ -20,11 +20,15 @@ public final class PipeSyncTracker {
     private final Map<PipeAnchorId, ResourceKey<Level>> pendingRemovedNodeIds = new HashMap<>();
     private final Map<UUID, PipeConnection> pendingAddedOrUpdatedConnections = new HashMap<>();
     private final Map<UUID, ResourceKey<Level>> pendingRemovedConnectionIds = new HashMap<>();
-    private long pendingBaseRevision = -1L;    public void captureBaseRevision(long revision) {
+    private long pendingBaseRevision = -1L;
+
+    public void captureBaseRevision(long revision) {
         if (this.pendingBaseRevision < 0L) {
             this.pendingBaseRevision = revision;
         }
-    }    public PipeNetworkSavedData.PendingPipeNetworkChanges consume(long currentRevision) {
+    }
+
+    public PipeNetworkSavedData.PendingPipeNetworkChanges consume(long currentRevision) {
         long baseRevision = this.pendingBaseRevision >= 0L ? this.pendingBaseRevision : currentRevision;
         List<PipeNode> addedOrUpdatedNodes = List.copyOf(this.pendingAddedOrUpdatedNodes.values());
         List<PipeAnchorId> removedNodeIds = List.copyOf(this.pendingRemovedNodeIds.keySet());
@@ -40,16 +44,14 @@ public final class PipeSyncTracker {
                 addedOrUpdatedNodes,
                 removedNodeIds,
                 addedOrUpdatedConnections,
-                removedConnectionIds
-        );
+                removedConnectionIds);
         PipeNetworkChangeSet changeSet = new PipeNetworkChangeSet(
                 baseRevision,
                 currentRevision,
                 addedOrUpdatedNodes.stream().map(PipeNode::id).toList(),
                 removedNodeIds,
                 addedOrUpdatedConnections.stream().map(PipeConnection::id).toList(),
-                removedConnectionRefs
-        );
+                removedConnectionRefs);
 
         this.pendingAddedOrUpdatedNodes.clear();
         this.pendingRemovedNodeIds.clear();
@@ -57,20 +59,27 @@ public final class PipeSyncTracker {
         this.pendingRemovedConnectionIds.clear();
         this.pendingBaseRevision = -1L;
         return new PipeNetworkSavedData.PendingPipeNetworkChanges(payload, changeSet);
-    }    public void trackNodeUpsert(PipeNode node) {
+    }
+
+    public void trackNodeUpsert(PipeNode node) {
         this.pendingRemovedNodeIds.remove(node.id());
         this.pendingAddedOrUpdatedNodes.put(node.id(), node);
-    }    public void trackNodeRemoval(PipeAnchorId nodeId, ResourceKey<Level> levelKey) {
+    }
+
+    public void trackNodeRemoval(PipeAnchorId nodeId, ResourceKey<Level> levelKey) {
         this.pendingAddedOrUpdatedNodes.remove(nodeId);
         this.pendingRemovedNodeIds.put(nodeId, levelKey);
-    }    public void trackConnectionUpsert(PipeConnection connection) {
+    }
+
+    public void trackConnectionUpsert(PipeConnection connection) {
         this.pendingRemovedConnectionIds.remove(connection.id());
         this.pendingAddedOrUpdatedConnections.put(connection.id(), connection);
-    }    public void trackConnectionRemovals(Collection<UUID> connectionIds, ResourceKey<Level> levelKey) {
+    }
+
+    public void trackConnectionRemovals(Collection<UUID> connectionIds, ResourceKey<Level> levelKey) {
         for (UUID connectionId : connectionIds) {
             this.pendingAddedOrUpdatedConnections.remove(connectionId);
             this.pendingRemovedConnectionIds.put(connectionId, levelKey);
         }
     }
-
 }

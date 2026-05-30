@@ -1,19 +1,17 @@
 package dev.marblegate.superpipeslide.client.gui.route;
 
-
+import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.gui.base.RouteDataAwareScreen;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
-import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
 import dev.marblegate.superpipeslide.network.route.ServerboundRouteEditPayload;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
-
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 public class RouteLayoutCreateScreen extends RouteEditorScreenBase implements RouteDataAwareScreen {
     private final UUID routeLineId;

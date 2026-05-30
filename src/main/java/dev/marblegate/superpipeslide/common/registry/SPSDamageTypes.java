@@ -11,11 +11,9 @@ import net.minecraft.world.damagesource.DamageType;
 public final class SPSDamageTypes {
     public static final ResourceKey<DamageType> PIPE_SUFFOCATION = ResourceKey.create(
             Registries.DAMAGE_TYPE,
-            Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "pipe_suffocation")
-    );
+            Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "pipe_suffocation"));
 
-    private SPSDamageTypes() {
-    }
+    private SPSDamageTypes() {}
 
     public static DamageSource pipeSuffocation(ServerLevel level) {
         return new DamageSource(level.registryAccess().lookupOrThrow(Registries.DAMAGE_TYPE).getOrThrow(PIPE_SUFFOCATION));

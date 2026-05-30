@@ -1,14 +1,12 @@
 package dev.marblegate.superpipeslide.client.gui.route;
 
-
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.network.chat.Component;
-
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.network.chat.Component;
 
 public final class RouteEditorGui {
     public static final int BOARD = 0xFF6D5438;
@@ -35,8 +33,7 @@ public final class RouteEditorGui {
     public static final int SUCCESS = 0xFF2C7E44;
     public static final int SAVE = 0xFFD45C25;
 
-    private RouteEditorGui() {
-    }
+    private RouteEditorGui() {}
 
     public static SPSGui.Rect panelRect(int screenWidth, int screenHeight, int preferredWidth, int preferredHeight) {
         int width = Math.min(preferredWidth, screenWidth - 18);

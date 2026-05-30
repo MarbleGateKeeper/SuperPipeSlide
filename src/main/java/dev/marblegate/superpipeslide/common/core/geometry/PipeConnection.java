@@ -2,6 +2,8 @@ package dev.marblegate.superpipeslide.common.core.geometry;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -11,10 +13,8 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.Optional;
-import java.util.UUID;
-
 public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> levelKey, PipeAnchorId fromAnchor, PipeAnchorId toAnchor, CurveSpec curveSpec, Optional<PipeConnectionAttributes> attributes, Optional<UUID> platformStopId) {
+
     private static final int LENGTH_SAMPLES = 32;
     public static final int TRANSIENT_CONNECTION_KEY = 0;
 
@@ -26,8 +26,7 @@ public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> leve
             PipeAnchorId.CODEC.fieldOf("to").forGetter(PipeConnection::toAnchor),
             CurveSpec.CODEC.optionalFieldOf("curve_spec", CurveSpec.line()).forGetter(PipeConnection::curveSpec),
             PipeConnectionAttributes.CODEC.optionalFieldOf("attributes").forGetter(PipeConnection::attributes),
-            UUIDUtil.STRING_CODEC.optionalFieldOf("platform_stop_id").forGetter(PipeConnection::platformStopId)
-    ).apply(instance, PipeConnection::new));
+            UUIDUtil.STRING_CODEC.optionalFieldOf("platform_stop_id").forGetter(PipeConnection::platformStopId)).apply(instance, PipeConnection::new));
     public static final StreamCodec<RegistryFriendlyByteBuf, PipeConnection> STREAM_CODEC = StreamCodec.composite(
             UUIDUtil.STREAM_CODEC.cast(),
             PipeConnection::id,
@@ -43,9 +42,7 @@ public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> leve
             PipeConnection::attributes,
             ByteBufCodecs.optional(UUIDUtil.STREAM_CODEC).cast(),
             PipeConnection::platformStopId,
-            PipeConnection::newFromAnchors
-    );
-
+            PipeConnection::newFromAnchors);
     private static PipeConnection newFromAnchors(UUID id, int connectionKey, PipeAnchorId fromAnchor, PipeAnchorId toAnchor, CurveSpec curveSpec, Optional<PipeConnectionAttributes> attributes, Optional<UUID> platformStopId) {
         return new PipeConnection(id, connectionKey, fromAnchor.levelKey(), fromAnchor, toAnchor, curveSpec, attributes, platformStopId);
     }

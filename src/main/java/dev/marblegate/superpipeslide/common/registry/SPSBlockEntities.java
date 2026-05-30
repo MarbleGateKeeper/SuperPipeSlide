@@ -13,14 +13,11 @@ public final class SPSBlockEntities {
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<StationNameProjectorBlockEntity>> STATION_NAME_PROJECTOR = BLOCK_ENTITIES.register(
             "station_name_projector",
-            () -> new BlockEntityType<>(StationNameProjectorBlockEntity::new, false, SPSBlocks.STATION_NAME_PROJECTOR.get())
-    );
+            () -> new BlockEntityType<>(StationNameProjectorBlockEntity::new, false, SPSBlocks.STATION_NAME_PROJECTOR.get()));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PlatformProjectorBlockEntity>> PLATFORM_PROJECTOR = BLOCK_ENTITIES.register(
             "platform_projector",
-            () -> new BlockEntityType<>(PlatformProjectorBlockEntity::new, false, SPSBlocks.PLATFORM_PROJECTOR.get())
-    );
+            () -> new BlockEntityType<>(PlatformProjectorBlockEntity::new, false, SPSBlocks.PLATFORM_PROJECTOR.get()));
 
-    private SPSBlockEntities() {
-    }
+    private SPSBlockEntities() {}
 }

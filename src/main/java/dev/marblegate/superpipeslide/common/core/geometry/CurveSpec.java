@@ -2,23 +2,22 @@ package dev.marblegate.superpipeslide.common.core.geometry;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import java.util.List;
+import java.util.Optional;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.List;
-import java.util.Optional;
-
 public record CurveSpec(CurveType type, Optional<Vec3> startTangent, Optional<Vec3> endTangent, List<Vec3> controlPoints) {
+
     private static final int MAX_CONTROL_POINTS = 16;
 
     public static final Codec<CurveSpec> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             CurveType.CODEC.optionalFieldOf("type", CurveType.LINE).forGetter(CurveSpec::type),
             Vec3.CODEC.optionalFieldOf("start_tangent").forGetter(CurveSpec::startTangent),
             Vec3.CODEC.optionalFieldOf("end_tangent").forGetter(CurveSpec::endTangent),
-            Vec3.CODEC.listOf().optionalFieldOf("control_points", List.of()).forGetter(CurveSpec::controlPoints)
-    ).apply(instance, CurveSpec::new));
+            Vec3.CODEC.listOf().optionalFieldOf("control_points", List.of()).forGetter(CurveSpec::controlPoints)).apply(instance, CurveSpec::new));
     public static final StreamCodec<RegistryFriendlyByteBuf, CurveSpec> STREAM_CODEC = StreamCodec.composite(
             CurveType.STREAM_CODEC,
             CurveSpec::type,
@@ -28,9 +27,7 @@ public record CurveSpec(CurveType type, Optional<Vec3> startTangent, Optional<Ve
             CurveSpec::endTangent,
             Vec3.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_CONTROL_POINTS)).cast(),
             CurveSpec::controlPoints,
-            CurveSpec::new
-    );
-
+            CurveSpec::new);
     public CurveSpec {
         controlPoints = List.copyOf(controlPoints);
     }

@@ -12,8 +12,7 @@ public record ClientboundRouteDataSnapshotEndPayload(long revision) implements C
     public static final StreamCodec<RegistryFriendlyByteBuf, ClientboundRouteDataSnapshotEndPayload> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_LONG.cast(),
             ClientboundRouteDataSnapshotEndPayload::revision,
-            ClientboundRouteDataSnapshotEndPayload::new
-    );
+            ClientboundRouteDataSnapshotEndPayload::new);
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

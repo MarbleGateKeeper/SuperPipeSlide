@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.client.fullmap.model;
 
-
 import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
@@ -23,8 +22,7 @@ public record FullRouteMapSourceSnapshot(
         List<RouteSection> routeSections,
         List<StationTransferLink> stationTransferLinks,
         Map<UUID, RouteSectionPath> sectionPaths,
-        List<FoldAnchorNode> foldAnchors
-) {
+        List<FoldAnchorNode> foldAnchors) {
     public FullRouteMapSourceSnapshot {
         stationGroups = List.copyOf(stationGroups);
         platformStops = List.copyOf(platformStops);

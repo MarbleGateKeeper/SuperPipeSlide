@@ -5,19 +5,17 @@ import dev.marblegate.superpipeslide.client.fullmap.model.MapNode;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeKind;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardNode;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
-import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
+import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
-import net.minecraft.network.chat.Component;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.network.chat.Component;
 
 public final class FullMapText {
-    private FullMapText() {
-    }
+    private FullMapText() {}
 
     public static String displayName(RouteLine line) {
         return displayNameStack(line).flat();

@@ -1,11 +1,13 @@
 package dev.marblegate.superpipeslide.network.station;
 
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
-import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
+import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.event.ServerEvents;
 import dev.marblegate.superpipeslide.common.registry.SPSDataComponents;
 import dev.marblegate.superpipeslide.common.registry.SPSItems;
+import java.util.List;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -17,10 +19,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-import java.util.List;
-import java.util.UUID;
-
 public record ServerboundStationEditPayload(UUID requestId, long baseRouteRevision, UUID stationGroupId, String primaryName, List<String> translatedNames, boolean generateClaimer) implements CustomPacketPayload {
+
     private static final int MAX_TRANSLATED_NAMES = 1;
 
     public static final Type<ServerboundStationEditPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "station_edit"));
@@ -37,9 +37,7 @@ public record ServerboundStationEditPayload(UUID requestId, long baseRouteRevisi
             ServerboundStationEditPayload::translatedNames,
             ByteBufCodecs.BOOL,
             ServerboundStationEditPayload::generateClaimer,
-            ServerboundStationEditPayload::new
-    );
-
+            ServerboundStationEditPayload::new);
     public ServerboundStationEditPayload(long baseRouteRevision, UUID stationGroupId, String primaryName, List<String> translatedNames, boolean generateClaimer) {
         this(UUID.randomUUID(), baseRouteRevision, stationGroupId, primaryName, translatedNames, generateClaimer);
     }
@@ -79,4 +77,3 @@ public record ServerboundStationEditPayload(UUID requestId, long baseRouteRevisi
         return TYPE;
     }
 }
-

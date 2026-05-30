@@ -1,17 +1,17 @@
 package dev.marblegate.superpipeslide.client.fullmap.schematic.solve;
 
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
-import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
-import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapEdgeOccurrence;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeKind;
+import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
+import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
+import dev.marblegate.superpipeslide.client.fullmap.schematic.SchematicLayoutConfig;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicEdge;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicInputGraph;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicNode;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicQualityReport;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SemanticEdgeKind;
-import dev.marblegate.superpipeslide.client.fullmap.schematic.SchematicLayoutConfig;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualEdgePath;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualHitShape;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualLabel;
@@ -28,8 +28,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Orientation-locked transit diagram solver for the pure SCHEMATIC map mode.
@@ -50,14 +50,12 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
             new Vec2(-1.0D, 0.0D),
             new Vec2(-SQRT_HALF, -SQRT_HALF),
             new Vec2(0.0D, -1.0D),
-            new Vec2(SQRT_HALF, -SQRT_HALF)
-    );
+            new Vec2(SQRT_HALF, -SQRT_HALF));
     private static final List<LayoutProfile> PROFILES = List.of(
             new LayoutProfile("balanced", 118.0D, 1.42D, 20, 0.82D, false),
             new LayoutProfile("wide", 112.0D, 1.72D, 22, 0.78D, false),
             new LayoutProfile("compact", 104.0D, 1.36D, 18, 0.74D, true),
-            new LayoutProfile("fallback", 96.0D, 1.58D, 16, 0.72D, true)
-    );
+            new LayoutProfile("fallback", 96.0D, 1.58D, 16, 0.72D, true));
 
     @Override
     public SchematicLayoutResult solve(SchematicInputGraph input, SchematicLayoutConfig config, Optional<VisualRouteMapGraphSnapshot> previous) {
@@ -503,8 +501,7 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
                 .sum();
         double targetWidth = Math.max(
                 ordered.getFirst().bounds().maxX() - ordered.getFirst().bounds().minX(),
-                Math.sqrt(totalArea * profile.targetAspect())
-        );
+                Math.sqrt(totalArea * profile.targetAspect()));
         Map<NodeId, Vec2> result = new LinkedHashMap<>();
         double cursorX = 0.0D;
         double cursorY = 0.0D;
@@ -561,8 +558,7 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
                     lanesFor(edge),
                     new VisualHitShape(routed.points(), hitRadiusBlocks(edge), bounds),
                     bounds,
-                    routed.fallback()
-            ));
+                    routed.fallback()));
             routedPaths.add(routed.points());
         }
         int bendCount = paths.stream().mapToInt(path -> Math.max(0, path.points().size() - 2)).sum();
@@ -870,8 +866,7 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
                 routes.loopGlyphs(),
                 routes.stationInternalEdges(),
                 false,
-                false
-        );
+                false);
     }
 
     private double qualityScore(SchematicQualityReport quality, Aabb2 bounds, LayoutProfile profile) {
@@ -904,8 +899,7 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
                             node.label(),
                             node.routeLineIds(),
                             node.importance(),
-                            false
-                    );
+                            false);
                 })
                 .sorted(Comparator.comparing(VisualNode::id))
                 .toList();
@@ -923,8 +917,7 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
                 bounds,
                 input.routeRevision(),
                 input.pipeRevision(),
-                FullRouteMapConfig.SCHEMATIC_SOLVER_VERSION
-        );
+                FullRouteMapConfig.SCHEMATIC_SOLVER_VERSION);
     }
 
     private static VisualRouteMapGraph emptyGraph(SchematicInputGraph input) {
@@ -939,8 +932,7 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
                 Aabb2.around(0.0D, 0.0D, 32.0D),
                 input.routeRevision(),
                 input.pipeRevision(),
-                FullRouteMapConfig.SCHEMATIC_SOLVER_VERSION
-        );
+                FullRouteMapConfig.SCHEMATIC_SOLVER_VERSION);
     }
 
     private Optional<NodeId> starCenter(MetroTopology topology, MetroComponent component) {
@@ -1379,8 +1371,7 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
         }
         return Math.min(
                 Math.min(distanceToSegment(a, c, d), distanceToSegment(b, c, d)),
-                Math.min(distanceToSegment(c, a, b), distanceToSegment(d, a, b))
-        );
+                Math.min(distanceToSegment(c, a, b), distanceToSegment(d, a, b)));
     }
 
     private static double directionPenalty(List<Vec2> path) {
@@ -1527,20 +1518,15 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
         }
     }
 
-    private record LayoutAttempt(LayoutProfile profile, Map<NodeId, Vec2> positions, RouteOutput routeOutput, List<VisualLabel> labels, SchematicQualityReport quality, double score) {
-    }
+    private record LayoutAttempt(LayoutProfile profile, Map<NodeId, Vec2> positions, RouteOutput routeOutput, List<VisualLabel> labels, SchematicQualityReport quality, double score) {}
 
-    private record ComponentLayout(MetroComponent component, Map<NodeId, Vec2> positions, Aabb2 bounds) {
-    }
+    private record ComponentLayout(MetroComponent component, Map<NodeId, Vec2> positions, Aabb2 bounds) {}
 
-    private record RouteOutput(List<VisualEdgePath> edgePaths, int fallbackEdges, int bendCount, int loopGlyphs, int stationInternalEdges) {
-    }
+    private record RouteOutput(List<VisualEdgePath> edgePaths, int fallbackEdges, int bendCount, int loopGlyphs, int stationInternalEdges) {}
 
-    private record RoutedPath(List<Vec2> points, boolean fallback, boolean loopGlyph) {
-    }
+    private record RoutedPath(List<Vec2> points, boolean fallback, boolean loopGlyph) {}
 
-    private record ConstraintStats(int nodeOverlaps, int edgeNodeConflicts) {
-    }
+    private record ConstraintStats(int nodeOverlaps, int edgeNodeConflicts) {}
 
     private record CorridorHint(Vec2 direction) {
         static CorridorHint fromEndpoints(Vec2 from, Vec2 to) {
@@ -1572,11 +1558,9 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
         }
     }
 
-    private record PlacementAnchor(NodeId nodeId, boolean forward) {
-    }
+    private record PlacementAnchor(NodeId nodeId, boolean forward) {}
 
-    private record LabelCandidate(double x, double y, LabelBox box, double distanceFromNode) {
-    }
+    private record LabelCandidate(double x, double y, LabelBox box, double distanceFromNode) {}
 
     private record LabelBox(double minX, double minY, double maxX, double maxY, int priority) {
         boolean intersects(LabelBox other) {
@@ -1588,11 +1572,9 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
         }
     }
 
-    private record RouteKey(UUID routeLineId, UUID routeLayoutId) {
-    }
+    private record RouteKey(UUID routeLineId, UUID routeLayoutId) {}
 
-    private record EdgeUse(SchematicEdge edge, int layoutIndex) {
-    }
+    private record EdgeUse(SchematicEdge edge, int layoutIndex) {}
 
     private record RouteRun(RouteKey key, List<NodeId> sequence, List<SchematicEdge> edges, boolean closed, int score) {
         RouteRun {

@@ -1,12 +1,11 @@
 package dev.marblegate.superpipeslide.client.fullmap.physical;
 
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.level.Level;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 public record PhysicalMapNode(
         String id,
@@ -19,8 +18,7 @@ public record PhysicalMapNode(
         Optional<UUID> platformStopId,
         Optional<UUID> stationGroupId,
         Optional<PipeAnchorId> foldAnchorId,
-        List<UUID> routeLineIds
-) {
+        List<UUID> routeLineIds) {
     public PhysicalMapNode {
         platformStopId = platformStopId == null ? Optional.empty() : platformStopId;
         stationGroupId = stationGroupId == null ? Optional.empty() : stationGroupId;

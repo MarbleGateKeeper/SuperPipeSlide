@@ -2,13 +2,13 @@ package dev.marblegate.superpipeslide.common.core.projection.storage;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponent;
 import dev.marblegate.superpipeslide.common.core.projection.layout.PlayerProjectionLayouts;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionCanvas;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutDefinition;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutSummary;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutTarget;
-import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -25,14 +25,12 @@ import net.minecraft.world.level.saveddata.SavedDataType;
 public final class ProjectionLayoutSavedData extends SavedData {
     public static final Codec<ProjectionLayoutSavedData> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             PlayerProjectionLayouts.CODEC.listOf().optionalFieldOf("players", List.of()).forGetter(ProjectionLayoutSavedData::playersForCodec),
-            Codec.LONG.optionalFieldOf("revision", 0L).forGetter(ProjectionLayoutSavedData::revision)
-    ).apply(instance, ProjectionLayoutSavedData::new));
+            Codec.LONG.optionalFieldOf("revision", 0L).forGetter(ProjectionLayoutSavedData::revision)).apply(instance, ProjectionLayoutSavedData::new));
 
     public static final SavedDataType<ProjectionLayoutSavedData> TYPE = new SavedDataType<>(
             Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "projection_layouts"),
             ProjectionLayoutSavedData::new,
-            CODEC
-    );
+            CODEC);
 
     private final Map<UUID, PlayerProjectionLayouts> players = new LinkedHashMap<>();
     private long revision;
@@ -189,8 +187,7 @@ public final class ProjectionLayoutSavedData extends SavedData {
                 && layout.canvas().width() >= ProjectionCanvas.MIN_WIDTH
                 && layout.canvas().height() >= ProjectionCanvas.MIN_HEIGHT
                 && !layout.components().isEmpty()
-                && layout.components().stream().allMatch(component ->
-                Float.isFinite(component.x())
+                && layout.components().stream().allMatch(component -> Float.isFinite(component.x())
                         && Float.isFinite(component.y())
                         && Float.isFinite(component.width())
                         && Float.isFinite(component.height())

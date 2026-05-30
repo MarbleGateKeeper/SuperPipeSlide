@@ -4,25 +4,23 @@ import com.mojang.blaze3d.platform.NativeImage;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionBuiltinIcon;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponentSettings;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.resources.Identifier;
-import net.minecraft.server.packs.resources.Resource;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.resources.Resource;
 
 public final class ProjectionBuiltinIconTextureCache {
     private static final int MAX_TEXTURES = 128;
     private static final Map<String, Entry> CACHE = new LinkedHashMap<>(32, 0.75F, true);
     private static int sequence;
 
-    private ProjectionBuiltinIconTextureCache() {
-    }
+    private ProjectionBuiltinIconTextureCache() {}
 
     public static IconTexture textureFor(ProjectionBuiltinIcon icon, ProjectionComponentSettings.BuiltinIcon settings) {
         ProjectionBuiltinIcon safeIcon = icon == null ? ProjectionBuiltinIcon.byId(null) : icon;
@@ -150,9 +148,7 @@ public final class ProjectionBuiltinIconTextureCache {
         }
     }
 
-    public record IconTexture(Identifier textureId, float u0, float v0, float u1, float v1, int color) {
-    }
+    public record IconTexture(Identifier textureId, float u0, float v0, float u1, float v1, int color) {}
 
-    private record Entry(Identifier textureId, DynamicTexture texture) {
-    }
+    private record Entry(Identifier textureId, DynamicTexture texture) {}
 }

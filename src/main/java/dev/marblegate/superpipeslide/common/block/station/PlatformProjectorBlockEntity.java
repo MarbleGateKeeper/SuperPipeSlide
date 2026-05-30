@@ -3,10 +3,14 @@ package dev.marblegate.superpipeslide.common.block.station;
 import dev.marblegate.superpipeslide.common.core.projection.layout.AppliedProjectionLayout;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutTarget;
 import dev.marblegate.superpipeslide.common.core.projection.template.ProjectionTemplates;
-import dev.marblegate.superpipeslide.network.platform.ClientboundPlatformProjectorConfigPayload;
-import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
+import dev.marblegate.superpipeslide.common.core.route.storage.RouteNetworkSavedData;
 import dev.marblegate.superpipeslide.common.registry.SPSBlockEntities;
+import dev.marblegate.superpipeslide.network.platform.ClientboundPlatformProjectorConfigPayload;
+import java.util.Comparator;
+import java.util.Optional;
+import java.util.UUID;
+import javax.annotation.Nullable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.UUIDUtil;
@@ -17,17 +21,12 @@ import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.neoforge.network.PacketDistributor;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
-
-import javax.annotation.Nullable;
-import java.util.Comparator;
-import java.util.Optional;
-import java.util.UUID;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 public class PlatformProjectorBlockEntity extends BlockEntity {
     private static final double CONFIG_SYNC_DISTANCE_SQR = 192.0D * 192.0D;
@@ -146,7 +145,6 @@ public class PlatformProjectorBlockEntity extends BlockEntity {
                 PlatformProjectorConfig.enumByName(PlatformProjectorConfig.PlatformProjectionDirection.class, input.getStringOr("direction", defaults.direction().name()), defaults.direction()),
                 input.getFloatOr("offset_x", defaults.offsetX()),
                 input.getFloatOr("offset_y", defaults.offsetY()),
-                input.getBooleanOr("backside_projection", defaults.backsideProjection())
-        );
+                input.getBooleanOr("backside_projection", defaults.backsideProjection()));
     }
 }

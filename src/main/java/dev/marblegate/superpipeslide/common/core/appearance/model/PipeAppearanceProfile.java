@@ -1,20 +1,18 @@
 package dev.marblegate.superpipeslide.common.core.appearance.model;
 
-
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.marblegate.superpipeslide.common.core.appearance.coating.PipeCoatingSelection;
 import dev.marblegate.superpipeslide.common.core.appearance.material.MaterialSlotDefinition;
 import dev.marblegate.superpipeslide.common.core.appearance.storage.PipeAppearanceDefinitions;
 import dev.marblegate.superpipeslide.common.core.appearance.style.PipeStyleDefinition;
 import dev.marblegate.superpipeslide.common.core.appearance.style.PipeVariantDefinition;
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
 
 public record PipeAppearanceProfile(
         int profileId,
@@ -22,8 +20,8 @@ public record PipeAppearanceProfile(
         String variantId,
         boolean glow,
         Map<String, PipeCoatingSelection> slotCoatings,
-        Map<String, Double> styleParameters
-) {
+        Map<String, Double> styleParameters) {
+
     private static final int MAX_SLOTS = 16;
     private static final int MAX_PARAMETERS = 16;
     public static final int DEFAULT_PROFILE_ID = 0;
@@ -41,8 +39,7 @@ public record PipeAppearanceProfile(
             Codec.STRING.optionalFieldOf("variant", DEFAULT_VARIANT_ID).forGetter(PipeAppearanceProfile::variantId),
             Codec.BOOL.optionalFieldOf("glow", false).forGetter(PipeAppearanceProfile::glow),
             SLOT_COATINGS_CODEC.optionalFieldOf("slot_coatings", Map.of()).forGetter(PipeAppearanceProfile::slotCoatings),
-            STYLE_PARAMETERS_CODEC.optionalFieldOf("style_parameters", Map.of()).forGetter(PipeAppearanceProfile::styleParameters)
-    ).apply(instance, PipeAppearanceProfile::new));
+            STYLE_PARAMETERS_CODEC.optionalFieldOf("style_parameters", Map.of()).forGetter(PipeAppearanceProfile::styleParameters)).apply(instance, PipeAppearanceProfile::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, PipeAppearanceProfile> STREAM_CODEC = new StreamCodec<>() {
         @Override
@@ -92,7 +89,6 @@ public record PipeAppearanceProfile(
             }
         }
     };
-
     public PipeAppearanceProfile {
         styleId = normalizeId(styleId, DEFAULT_STYLE_ID);
         variantId = normalizeId(variantId, DEFAULT_VARIANT_ID);

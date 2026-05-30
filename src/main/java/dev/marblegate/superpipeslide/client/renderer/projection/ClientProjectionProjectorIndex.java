@@ -4,10 +4,10 @@ import dev.marblegate.superpipeslide.common.block.station.PlatformProjectorBlock
 import dev.marblegate.superpipeslide.common.block.station.StationNameProjectorBlockEntity;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.function.Consumer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -27,8 +27,7 @@ public final class ClientProjectionProjectorIndex {
     private static ClientLevel indexedLevel;
     private static FrameProjectors frameProjectors;
 
-    private ClientProjectionProjectorIndex() {
-    }
+    private ClientProjectionProjectorIndex() {}
 
     public static void clear() {
         CHUNKS.clear();

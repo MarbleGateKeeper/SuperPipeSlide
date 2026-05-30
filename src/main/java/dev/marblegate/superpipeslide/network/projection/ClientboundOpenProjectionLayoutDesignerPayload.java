@@ -3,6 +3,10 @@ package dev.marblegate.superpipeslide.network.projection;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutSummary;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutTarget;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -10,19 +14,13 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-
 public record ClientboundOpenProjectionLayoutDesignerPayload(ProjectionLayoutTarget activeTarget, Map<ProjectionLayoutTarget, UUID> selectedLayoutIds, List<ProjectionLayoutSummary> layouts, boolean editSelected) implements CustomPacketPayload {
+
     public static final int MAX_LAYOUTS = 96;
     public static final Type<ClientboundOpenProjectionLayoutDesignerPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "open_projection_layout_designer"));
     public static final StreamCodec<RegistryFriendlyByteBuf, ClientboundOpenProjectionLayoutDesignerPayload> STREAM_CODEC = StreamCodec.of(
             ClientboundOpenProjectionLayoutDesignerPayload::encode,
-            ClientboundOpenProjectionLayoutDesignerPayload::decode
-    );
-
+            ClientboundOpenProjectionLayoutDesignerPayload::decode);
     public ClientboundOpenProjectionLayoutDesignerPayload {
         activeTarget = activeTarget == null ? ProjectionLayoutTarget.STATION_NAME : activeTarget;
         selectedLayoutIds = selectedLayoutIds == null ? Map.of() : Map.copyOf(selectedLayoutIds);

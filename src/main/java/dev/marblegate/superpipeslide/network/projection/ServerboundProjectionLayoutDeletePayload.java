@@ -1,11 +1,13 @@
 package dev.marblegate.superpipeslide.network.projection;
 
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
-import dev.marblegate.superpipeslide.common.core.projection.storage.ProjectionLayoutSavedData;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutTarget;
+import dev.marblegate.superpipeslide.common.core.projection.storage.ProjectionLayoutSavedData;
 import dev.marblegate.superpipeslide.common.event.ServerEvents;
 import dev.marblegate.superpipeslide.common.registry.SPSDataComponents;
 import dev.marblegate.superpipeslide.common.registry.SPSItems;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -16,9 +18,6 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-import java.util.Optional;
-import java.util.UUID;
-
 public record ServerboundProjectionLayoutDeletePayload(UUID requestId, UUID layoutId) implements CustomPacketPayload {
     public static final Type<ServerboundProjectionLayoutDeletePayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "projection_layout_delete"));
     public static final StreamCodec<RegistryFriendlyByteBuf, ServerboundProjectionLayoutDeletePayload> STREAM_CODEC = StreamCodec.composite(
@@ -26,8 +25,7 @@ public record ServerboundProjectionLayoutDeletePayload(UUID requestId, UUID layo
             ServerboundProjectionLayoutDeletePayload::requestId,
             UUIDUtil.STREAM_CODEC,
             ServerboundProjectionLayoutDeletePayload::layoutId,
-            ServerboundProjectionLayoutDeletePayload::new
-    );
+            ServerboundProjectionLayoutDeletePayload::new);
 
     public ServerboundProjectionLayoutDeletePayload(UUID layoutId) {
         this(UUID.randomUUID(), layoutId);

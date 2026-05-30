@@ -1,6 +1,5 @@
 package dev.marblegate.superpipeslide.common.core.projection.template;
 
-
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponent;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponentSettings;
 import dev.marblegate.superpipeslide.common.core.projection.component.ProjectionComponentType;
@@ -18,8 +17,7 @@ public final class ProjectionTemplates {
     private static final PlatformTemplateTheme PLATFORM_LIGHT = new PlatformTemplateTheme(0xFF17242A, 0xFF53626A, 0xFF17242A, 0xFF17242A, 0xFF1E2A30, 0xEAF5F7F8, 0xFF17242A);
     private static final PlatformTemplateTheme PLATFORM_NETWORK = new PlatformTemplateTheme(0xFFD8FFF2, 0xFF8CB8AB, 0xFFD8FFF2, 0xFFD8FFF2, 0xFFD8FFF2, 0x66101820, 0xFFD8FFF2);
 
-    private ProjectionTemplates() {
-    }
+    private ProjectionTemplates() {}
 
     public static ProjectionLayoutDefinition defaultLayout() {
         return urbanBeam();
@@ -38,8 +36,7 @@ public final class ProjectionTemplates {
                 verticalPylon(),
                 verticalMetroPylon(),
                 minimalStrip(),
-                blockProjection()
-        );
+                blockProjection());
     }
 
     public static List<ProjectionLayoutDefinition> defaultLibrary(ProjectionLayoutTarget target) {
@@ -58,8 +55,7 @@ public final class ProjectionTemplates {
                 platformBidirectionalBoard(),
                 platformLoopBoard(),
                 platformTransferBoard(),
-                platformMinimalProjection()
-        );
+                platformMinimalProjection());
     }
 
     public static ProjectionLayoutDefinition urbanBeam() {
@@ -368,7 +364,5 @@ public final class ProjectionTemplates {
                 new ProjectionComponentSettings.PlatformLayoutMap(type, defaults.style(), defaults.showStopNames(), defaults.showTransferMarks(), defaults.showTerminalLabels(), defaults.followProjectionDirection(), defaults.nodeStyle(), theme.layoutText(), defaults.lineColor(), defaults.fontSize(), defaults.lineWidth(), defaults.nodeSize(), defaults.labelOverflow())).withVisibleCondition(ProjectionVisibleCondition.HAS_ROUTE_LAYOUT);
     }
 
-    private record PlatformTemplateTheme(int primaryText, int secondaryText, int arrowColor, int lineText, int layoutText, int transferFill, int transferText) {
-    }
-
+    private record PlatformTemplateTheme(int primaryText, int secondaryText, int arrowColor, int lineText, int layoutText, int transferFill, int transferText) {}
 }

@@ -5,15 +5,14 @@ import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import dev.marblegate.superpipeslide.mixin.client.RenderTypeAccessor;
 import dev.marblegate.superpipeslide.mixin.iris.IrisRenderSetupAccessor;
 import dev.marblegate.superpipeslide.mixin.iris.IrisRenderSetupTextureBindingAccessor;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.function.Supplier;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.api.v0.IrisApi;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.resources.Identifier;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.function.Supplier;
 
 public final class IrisRenderTypeAdapter implements ClientRenderCompatibility.RenderTypeAdapter {
     private static final int MAX_RENDER_TYPES = 512;

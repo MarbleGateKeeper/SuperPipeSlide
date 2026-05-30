@@ -11,10 +11,9 @@ public record TraversalContext(
         int routeConnectionIndex,
         Optional<UUID> pendingBranchChoiceConnectionId,
         boolean allowAutomaticBranchChoice,
-        RouteChoiceLookup routeChoiceLookup
-) {
-    public static final RouteChoiceLookup EMPTY_ROUTE_CHOICE_LOOKUP = (layoutId, routeDirection, currentPlatformStopId, currentRouteSectionId, routeConnectionIndex, currentConnectionId, branchNodeId) -> Optional.empty();
+        RouteChoiceLookup routeChoiceLookup) {
 
+    public static final RouteChoiceLookup EMPTY_ROUTE_CHOICE_LOOKUP = (layoutId, routeDirection, currentPlatformStopId, currentRouteSectionId, routeConnectionIndex, currentConnectionId, branchNodeId) -> Optional.empty();
     public TraversalContext {
         routeLayoutId = routeLayoutId == null ? Optional.empty() : routeLayoutId;
         currentPlatformStopId = currentPlatformStopId == null ? Optional.empty() : currentPlatformStopId;

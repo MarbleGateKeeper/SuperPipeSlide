@@ -1,9 +1,8 @@
 package dev.marblegate.superpipeslide.common.core.gaze;
 
-import net.minecraft.network.chat.Component;
-
 import java.util.List;
 import java.util.UUID;
+import net.minecraft.network.chat.Component;
 
 public record GazeChoice(
         UUID id,
@@ -13,12 +12,11 @@ public record GazeChoice(
         Component detail,
         List<Integer> colors,
         boolean recommended,
-        double requiredLookPrecision
-) {
+        double requiredLookPrecision) {
+
     public static final int MAX_LABEL_LENGTH = 64;
     public static final int MAX_DETAIL_LENGTH = 64;
     public static final int MAX_COLORS = 3;
-
     public GazeChoice {
         label = label == null ? Component.empty() : label;
         detail = detail == null ? Component.empty() : detail;

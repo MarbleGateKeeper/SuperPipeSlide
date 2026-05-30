@@ -5,7 +5,6 @@ import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
 import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkView;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;

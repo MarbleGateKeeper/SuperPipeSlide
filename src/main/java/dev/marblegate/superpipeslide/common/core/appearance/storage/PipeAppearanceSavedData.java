@@ -2,13 +2,13 @@ package dev.marblegate.superpipeslide.common.core.appearance.storage;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.appearance.model.PipeAppearanceAssignment;
 import dev.marblegate.superpipeslide.common.core.appearance.model.PipeAppearanceProfile;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionUtils;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
-import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.network.pipe.appearance.ClientboundPipeAppearanceSyncPayload;
 import java.util.ArrayDeque;
 import java.util.HashMap;
@@ -20,8 +20,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 
@@ -32,14 +32,12 @@ public final class PipeAppearanceSavedData extends SavedData {
             PipeAppearanceProfile.CODEC.listOf().optionalFieldOf("profiles", List.of()).forGetter(PipeAppearanceSavedData::profilesForCodec),
             PipeAppearanceAssignment.CODEC.listOf().optionalFieldOf("assignments", List.of()).forGetter(PipeAppearanceSavedData::assignmentsForCodec),
             Codec.LONG.optionalFieldOf("revision", 0L).forGetter(PipeAppearanceSavedData::revision),
-            Codec.INT.optionalFieldOf("next_profile_id", 1).forGetter(PipeAppearanceSavedData::nextProfileIdForCodec)
-    ).apply(instance, PipeAppearanceSavedData::new));
+            Codec.INT.optionalFieldOf("next_profile_id", 1).forGetter(PipeAppearanceSavedData::nextProfileIdForCodec)).apply(instance, PipeAppearanceSavedData::new));
 
     public static final SavedDataType<PipeAppearanceSavedData> TYPE = new SavedDataType<>(
             Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "pipe_appearance"),
             PipeAppearanceSavedData::new,
-            CODEC
-    );
+            CODEC);
 
     private final Map<Integer, PipeAppearanceProfile> profilesById = new LinkedHashMap<>();
     private final Map<String, Integer> profileIdsByContent = new HashMap<>();
@@ -146,8 +144,7 @@ public final class PipeAppearanceSavedData extends SavedData {
                 profilesForSync(),
                 assignmentsForSync(),
                 List.of(),
-                true
-        );
+                true);
     }
 
     public ClientboundPipeAppearanceSyncPayload consumePendingSyncPayload() {
@@ -158,8 +155,7 @@ public final class PipeAppearanceSavedData extends SavedData {
                         .map(entry -> new PipeAppearanceAssignment(entry.getKey(), entry.getValue()))
                         .toList(),
                 List.copyOf(this.pendingClearedAssignments),
-                false
-        );
+                false);
         this.pendingProfiles.clear();
         this.pendingAssignments.clear();
         this.pendingClearedAssignments.clear();

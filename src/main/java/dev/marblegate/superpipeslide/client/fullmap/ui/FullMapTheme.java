@@ -64,6 +64,5 @@ public final class FullMapTheme {
     public static final int ROUTE_CHIP_HEIGHT = 13;
     public static final int ROUTE_CHIP_TINY_HEIGHT = 12;
 
-    private FullMapTheme() {
-    }
+    private FullMapTheme() {}
 }

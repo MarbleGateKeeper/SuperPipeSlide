@@ -1,7 +1,7 @@
 package dev.marblegate.superpipeslide.client.fullmap.config;
 
-
 import dev.marblegate.superpipeslide.client.fullmap.ui.FullMapTheme;
+
 public final class FullRouteMapConfig {
     public static final double CLUSTER_THRESHOLD = 64.0D;
     public static final double DEEP_CLUSTER_THRESHOLD = 12.0D;
@@ -54,6 +54,5 @@ public final class FullRouteMapConfig {
     public static final int MAP_FOCUS_RING = FullMapTheme.FOCUS_RING;
     public static final int MAP_FOLD_MULTI_LINE = 0xFF888888;
 
-    private FullRouteMapConfig() {
-    }
+    private FullRouteMapConfig() {}
 }

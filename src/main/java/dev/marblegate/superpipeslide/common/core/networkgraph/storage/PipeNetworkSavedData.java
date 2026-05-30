@@ -13,6 +13,7 @@ import dev.marblegate.superpipeslide.common.core.networkgraph.solver.AutoCurveSo
 import dev.marblegate.superpipeslide.common.core.networkgraph.sync.PipeSyncTracker;
 import dev.marblegate.superpipeslide.common.registry.SPSBlocks;
 import dev.marblegate.superpipeslide.network.sync.pipe.PipeNetworkDeltaPayload;
+import java.util.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
@@ -25,8 +26,6 @@ import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.*;
-
 public final class PipeNetworkSavedData extends SavedData implements PipeNetworkView {
     private static final int SERVER_RUNTIME_REBUILD_BUDGET_PER_QUERY = 16;
 
@@ -34,14 +33,12 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
             PipeNode.CODEC.listOf().optionalFieldOf("nodes", List.of()).forGetter(PipeNetworkSavedData::nodesForCodec),
             PipeConnection.CODEC.listOf().optionalFieldOf("connections", List.of()).forGetter(PipeNetworkSavedData::connectionsForCodec),
             Codec.LONG.optionalFieldOf("revision", 0L).forGetter(PipeNetworkSavedData::revision),
-            Codec.INT.optionalFieldOf("next_connection_key", 1).forGetter(PipeNetworkSavedData::nextConnectionKeyForCodec)
-    ).apply(instance, PipeNetworkSavedData::new));
+            Codec.INT.optionalFieldOf("next_connection_key", 1).forGetter(PipeNetworkSavedData::nextConnectionKeyForCodec)).apply(instance, PipeNetworkSavedData::new));
 
     public static final SavedDataType<PipeNetworkSavedData> TYPE = new SavedDataType<>(
             Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "pipe_network"),
             PipeNetworkSavedData::new,
-            CODEC
-    );
+            CODEC);
 
     private final Map<PipeAnchorId, PipeNode> nodes;
     private final List<PipeConnection> connections;
@@ -345,8 +342,7 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
                 Vec3.atCenterOf(anchorId.blockPos()),
                 Optional.of(anchorId),
                 Optional.empty(),
-                List.of()
-        );
+                List.of());
         this.upsertBranchPipeNode(branchNode);
         return branchNode;
     }
@@ -375,8 +371,7 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
                     Vec3.atCenterOf(anchorId.blockPos()),
                     Optional.of(anchorId),
                     touching.isEmpty() ? Optional.empty() : Optional.of(touching.get(0).id()),
-                    managedConnections
-            );
+                    managedConnections);
 
             PipeNode branchPipeNode = PipeNode.branch(anchorId, branchNode);
             this.nodes.put(anchorId, branchPipeNode);
@@ -1356,6 +1351,5 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
         }
     }
 
-    private record BranchFrame(Vec3 forward, Vec3 up, Vec3 right) {
-    }
+    private record BranchFrame(Vec3 forward, Vec3 up, Vec3 right) {}
 }

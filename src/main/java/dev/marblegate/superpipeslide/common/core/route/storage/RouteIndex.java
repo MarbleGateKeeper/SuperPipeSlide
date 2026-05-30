@@ -36,8 +36,7 @@ final class RouteIndex {
         this.routeSectionIdsByRouteLayoutId.clear();
         this.routeSectionIdsByConnection.clear();
         this.stationTransferLinkIdsByStationGroupId.clear();
-        store.stationGroupValues().forEach(stationGroup ->
-                this.stationGroupIdByPosition.put(new DimensionPos(stationGroup.levelKey(), stationGroup.stationBlockPos()), stationGroup.id()));
+        store.stationGroupValues().forEach(stationGroup -> this.stationGroupIdByPosition.put(new DimensionPos(stationGroup.levelKey(), stationGroup.stationBlockPos()), stationGroup.id()));
         for (PlatformStop platformStop : store.platformStopValues()) {
             this.platformStopIdByConnection.put(platformStop.connectionRef(), platformStop.id());
             this.platformStopIdsByStationGroupId.computeIfAbsent(platformStop.stationGroupId(), ignored -> new ArrayList<>()).add(platformStop.id());
@@ -185,4 +184,3 @@ final class RouteIndex {
         }
     }
 }
-

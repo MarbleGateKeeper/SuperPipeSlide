@@ -29,21 +29,14 @@ public abstract class LevelRendererMixin {
     @Final
     LevelRenderState levelRenderState;
 
-    @Inject(
-            method = "renderLevel",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lcom/mojang/blaze3d/framegraph/FrameGraphBuilder;execute(Lcom/mojang/blaze3d/resource/GraphicsResourceAllocator;Lcom/mojang/blaze3d/framegraph/FrameGraphBuilder$Inspector;)V"
-            )
-    )
+    @Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/framegraph/FrameGraphBuilder;execute(Lcom/mojang/blaze3d/resource/GraphicsResourceAllocator;Lcom/mojang/blaze3d/framegraph/FrameGraphBuilder$Inspector;)V"))
     private void superpipeslide$addFoldTraversalPostEffect(CallbackInfo callbackInfo, @Local(name = "frame") FrameGraphBuilder frame) {
         ClientFoldTraversalPostEffectRenderer.addToFrame(
                 frame,
                 this.targets,
                 this.minecraft.getMainRenderTarget().width,
                 this.minecraft.getMainRenderTarget().height,
-                this.levelRenderState.cameraRenderState
-        );
+                this.levelRenderState.cameraRenderState);
     }
 
     @Inject(method = "setSectionDirty(IIIZ)V", at = @At("HEAD"))

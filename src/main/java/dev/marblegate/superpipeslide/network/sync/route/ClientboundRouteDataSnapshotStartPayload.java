@@ -17,8 +17,8 @@ public record ClientboundRouteDataSnapshotStartPayload(
         int routeSectionCount,
         int routeSectionPathCount,
         int stationTransferLinkCount,
-        int chunkCount
-) implements CustomPacketPayload {
+        int chunkCount) implements CustomPacketPayload {
+
     public static final Type<ClientboundRouteDataSnapshotStartPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "route_data_snapshot_start"));
     public static final StreamCodec<RegistryFriendlyByteBuf, ClientboundRouteDataSnapshotStartPayload> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_LONG.cast(),
@@ -41,9 +41,7 @@ public record ClientboundRouteDataSnapshotStartPayload(
             ClientboundRouteDataSnapshotStartPayload::stationTransferLinkCount,
             ByteBufCodecs.VAR_INT,
             ClientboundRouteDataSnapshotStartPayload::chunkCount,
-            ClientboundRouteDataSnapshotStartPayload::new
-    );
-
+            ClientboundRouteDataSnapshotStartPayload::new);
     public ClientboundRouteDataSnapshotStartPayload {
         if (revision < 0L || pipeRevisionUsed < 0L) {
             throw new IllegalArgumentException("Route data snapshot revisions cannot be negative");
