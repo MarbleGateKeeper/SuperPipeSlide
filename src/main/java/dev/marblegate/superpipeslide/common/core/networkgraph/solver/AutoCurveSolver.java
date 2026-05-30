@@ -8,8 +8,10 @@ import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionUtils;
 import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkView;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,16 +28,11 @@ public final class AutoCurveSolver {
     }
 
     public static Map<UUID, CurveSpec> recomputeAutoCurvesAround(PipeNetworkView view, Set<PipeAnchorId> anchors) {
-        if (anchors.isEmpty()) {
-            return Map.of();
-        }
+        return recomputeAutoCurveSpecs(view, affectedAutoCurveIdsAround(view, anchors));
+    }
 
-        Set<UUID> affectedConnectionIds = new HashSet<>();
-        for (PipeAnchorId anchor : anchors) {
-            collectAutoCurvesFrom(view, anchor, affectedConnectionIds);
-        }
-
-        Map<UUID, CurveSpec> updatedSpecs = new HashMap<>();
+    static Map<UUID, CurveSpec> recomputeAutoCurveSpecs(PipeNetworkView view, Set<UUID> affectedConnectionIds) {
+        Map<UUID, CurveSpec> updatedSpecs = new LinkedHashMap<>();
         for (UUID connectionId : affectedConnectionIds) {
             Optional<PipeConnection> connection = view.connection(connectionId);
             if (connection.isEmpty()) {
@@ -49,6 +46,18 @@ public final class AutoCurveSolver {
             }
         }
         return updatedSpecs;
+    }
+
+    public static Set<UUID> affectedAutoCurveIdsAround(PipeNetworkView view, Set<PipeAnchorId> anchors) {
+        if (anchors.isEmpty()) {
+            return Set.of();
+        }
+
+        Set<UUID> affectedConnectionIds = new LinkedHashSet<>();
+        for (PipeAnchorId anchor : anchors) {
+            collectAutoCurvesFrom(view, anchor, affectedConnectionIds);
+        }
+        return Collections.unmodifiableSet(affectedConnectionIds);
     }
 
     public static CurveSpec autoCurveSpecFor(PipeNetworkView view, PipeConnection current) {

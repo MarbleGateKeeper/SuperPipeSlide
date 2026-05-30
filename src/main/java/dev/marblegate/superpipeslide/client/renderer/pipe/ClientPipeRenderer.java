@@ -36,11 +36,9 @@ import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionAttributes;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRaycast;
 import dev.marblegate.superpipeslide.common.core.geometry.RuntimePipeConnection;
-import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
 import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
-import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNode;
-import dev.marblegate.superpipeslide.common.core.networkgraph.solver.AutoCurveSolver;
-import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkView;
+import dev.marblegate.superpipeslide.common.core.networkgraph.solver.PipeConnectionPlacementPlan;
+import dev.marblegate.superpipeslide.common.core.networkgraph.solver.PipeConnectionPlacementPlanner;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeAppearanceToolItem;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeAttributeToolItem;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeConnectorItem;
@@ -118,7 +116,7 @@ public final class ClientPipeRenderer {
     private static final int PREVIEW_VALID_COLOR = 0xE060FF80;
     private static final int PREVIEW_INVALID_COLOR = 0xE0FF5050;
     private static final int PREVIEW_WARNING_COLOR = 0xE0FFD85A;
-    private static final int PREVIEW_LENGTH_SAMPLES = 96;
+    private static final double PREVIEW_LENGTH_WARNING_MARGIN = 0.25D;
     private static final int FULL_BRIGHT_LIGHT = 0x00F000F0;
     private static final double PIPE_TEXTURE_TILE_U_BLOCKS = 1.0D;
     private static final double PIPE_TEXTURE_TILE_V_BLOCKS = 1.0D;
@@ -1959,10 +1957,9 @@ public final class ClientPipeRenderer {
         }
 
         CurveSpec curveSpec = PipeConnectorItem.curveSpec(stack, player, start, end);
-        PipeConnection connection = PipeConnection.withCurve(start, end, curveSpec);
-        if (mode == PipeConnectorMode.AUTO_CURVE) {
-            connection = recomputeAutoPreview(level, connection);
-        }
+        PipeConnection rawConnection = PipeConnection.withCurve(start, end, curveSpec);
+        PipeConnectionPlacementPlan placementPlan = PipeConnectionPlacementPlanner.plan(ClientPipeNetworkCache.currentView(), rawConnection, Config.MAX_CONNECTION_LENGTH.getAsDouble());
+        PipeConnection connection = placementPlan.candidate();
 
         List<Vec3> controlPath = List.of();
         if (mode == PipeConnectorMode.CONTROLLED) {
@@ -1971,30 +1968,7 @@ public final class ClientPipeRenderer {
             controlPath.addAll(stack.getOrDefault(SPSDataComponents.PENDING_CONTROL_POINTS.get(), List.of()));
             controlPath.add(connection.toSurface());
         }
-        return new Preview(connection, validate(level, start, end, target, connection), controlPath);
-    }
-
-    private static PipeConnection recomputeAutoPreview(ClientLevel level, PipeConnection preview) {
-        Set<PipeAnchorId> affectedAnchors = new LinkedHashSet<>();
-        affectedAnchors.add(preview.fromAnchor());
-        affectedAnchors.add(preview.toAnchor());
-        if (affectedAnchors.size() < 2) {
-            return preview;
-        }
-
-        List<PipeConnection> temporaryConnections = new ArrayList<>(ClientPipeNetworkCache.connections(level.dimension()));
-        temporaryConnections.removeIf(connection -> connection.id().equals(preview.id()));
-        temporaryConnections.add(preview);
-
-        Map<PipeAnchorId, BranchNode> branchNodes = new LinkedHashMap<>();
-        for (PipeNode node : ClientPipeNetworkCache.nodes(level.dimension())) {
-            node.branchNode().ifPresent(branchNode -> branchNodes.put(node.id(), branchNode));
-        }
-
-        PreviewNetworkView view = new PreviewNetworkView(temporaryConnections, branchNodes);
-        CurveSpec updatedSpec = AutoCurveSolver.recomputeAutoCurvesAround(view, affectedAnchors)
-                .get(preview.id());
-        return updatedSpec == null ? preview : preview.withCurveSpec(updatedSpec);
+        return new Preview(connection, validate(level, start, end, target, placementPlan), controlPath);
     }
 
     private static ItemStack heldConnector(LocalPlayer player) {
@@ -2058,7 +2032,7 @@ public final class ClientPipeRenderer {
         return level.isEmptyBlock(ghostAnchor) ? new Target(ghostAnchor, false, blockHit.getLocation()) : null;
     }
 
-    private static Validity validate(ClientLevel level, PipeAnchorId start, PipeAnchorId end, Target target, PipeConnection preview) {
+    private static Validity validate(ClientLevel level, PipeAnchorId start, PipeAnchorId end, Target target, PipeConnectionPlacementPlan placementPlan) {
         if (!start.levelKey().equals(end.levelKey()) || start.equals(end)) {
             return Validity.INVALID;
         }
@@ -2095,8 +2069,12 @@ public final class ClientPipeRenderer {
         if (!target.existingAnchor() && !level.isEmptyBlock(end.blockPos())) {
             return Validity.INVALID;
         }
-        if (isConnectionTooLong(preview)) {
+        double maxLength = Config.MAX_CONNECTION_LENGTH.getAsDouble();
+        if (placementPlan.hasLengthViolations()) {
             return Validity.INVALID;
+        }
+        if (placementPlan.isNearLimit(maxLength, PREVIEW_LENGTH_WARNING_MARGIN)) {
+            return Validity.WARNING;
         }
         return ClientPipeNetworkCache.connections(start.levelKey()).isEmpty() ? Validity.WARNING : Validity.VALID;
     }
@@ -2113,12 +2091,6 @@ public final class ClientPipeRenderer {
 
     private static int connectionLimit(boolean foldAnchor) {
         return foldAnchor ? 1 : 2;
-    }
-
-    private static boolean isConnectionTooLong(PipeConnection preview) {
-        double maxLength = Config.MAX_CONNECTION_LENGTH.getAsDouble();
-        double chordLength = preview.fromSurface().distanceTo(preview.toSurface());
-        return chordLength > maxLength || preview.length() > maxLength || preview.sampledLength(PREVIEW_LENGTH_SAMPLES) > maxLength;
     }
 
     private static TexturedQuad texturedQuad(Vec3 a, Vec3 b, Vec3 c, Vec3 d, float u0, float u1, float v0, float v1, int color, Vec3 normal, boolean generatedTexture, Identifier textureId, boolean translucent, boolean fullBright, boolean cullBackFace, int animationKind, double animationPhase) {
@@ -3374,63 +3346,6 @@ public final class ClientPipeRenderer {
 
         boolean needsLightRetry() {
             return this.needsLightRetry;
-        }
-    }
-
-    private static final class PreviewNetworkView implements PipeNetworkView {
-        private final Map<UUID, PipeConnection> connectionsById = new LinkedHashMap<>();
-        private final Map<PipeAnchorId, List<PipeConnection>> connectionsByAnchor = new LinkedHashMap<>();
-        private final Map<PipeAnchorId, BranchNode> branchNodes;
-
-        private PreviewNetworkView(List<PipeConnection> connections, Map<PipeAnchorId, BranchNode> branchNodes) {
-            this.branchNodes = branchNodes;
-            for (PipeConnection connection : connections) {
-                this.connectionsById.put(connection.id(), connection);
-                this.connectionsByAnchor.computeIfAbsent(connection.fromAnchor(), ignored -> new ArrayList<>()).add(connection);
-                this.connectionsByAnchor.computeIfAbsent(connection.toAnchor(), ignored -> new ArrayList<>()).add(connection);
-            }
-        }
-
-        @Override
-        public Optional<PipeConnection> connection(UUID id) {
-            return Optional.ofNullable(this.connectionsById.get(id));
-        }
-
-        @Override
-        public List<PipeConnection> connectionsTouching(PipeAnchorId anchorId) {
-            return List.copyOf(this.connectionsByAnchor.getOrDefault(anchorId, List.of()));
-        }
-
-        @Override
-        public int connectionCount(PipeAnchorId anchorId) {
-            return this.connectionsByAnchor.getOrDefault(anchorId, List.of()).size();
-        }
-
-        @Override
-        public Optional<BranchNode> branchNodeAt(PipeAnchorId anchorId) {
-            return Optional.ofNullable(this.branchNodes.get(anchorId));
-        }
-
-        @Override
-        public Optional<BranchNode> branchNodeManagingConnection(UUID connectionId) {
-            return this.branchNodes.values().stream()
-                    .filter(branchNode -> branchNode.referencesConnection(connectionId))
-                    .findFirst();
-        }
-
-        @Override
-        public Optional<dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode> foldAnchorAt(PipeAnchorId anchorId) {
-            return Optional.empty();
-        }
-
-        @Override
-        public Optional<PipeAnchorId> localFoldCounterpart(PipeAnchorId anchorId) {
-            return Optional.empty();
-        }
-
-        @Override
-        public long revision() {
-            return ClientPipeNetworkCache.revision();
         }
     }
 

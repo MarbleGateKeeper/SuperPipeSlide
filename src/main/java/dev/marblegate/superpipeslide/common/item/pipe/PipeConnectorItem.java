@@ -3,6 +3,8 @@ package dev.marblegate.superpipeslide.common.item.pipe;
 import dev.marblegate.superpipeslide.common.core.geometry.CurveSpec;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
+import dev.marblegate.superpipeslide.common.core.networkgraph.solver.PipeConnectionPlacementPlan;
+import dev.marblegate.superpipeslide.common.core.networkgraph.solver.PipeConnectionPlacementPlanner;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
 import dev.marblegate.superpipeslide.common.registry.SPSBlocks;
 import dev.marblegate.superpipeslide.common.registry.SPSDataComponents;
@@ -27,11 +29,11 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 public class PipeConnectorItem extends Item {
     private static final int MAX_CONTROL_POINTS = 8;
-    private static final int CONNECTION_LENGTH_VALIDATION_SAMPLES = 96;
     private final PipeConnectorMode connectorMode;
 
     public PipeConnectorItem(Properties properties) {
@@ -210,14 +212,6 @@ public class PipeConnectorItem extends Item {
             return InteractionResult.FAIL;
         }
 
-        CurveSpec curveSpec = curveSpec(stack, player, first, clicked);
-        PipeConnection candidateConnection = PipeConnection.withCurve(first, clicked, curveSpec);
-        double length = Math.max(candidateConnection.length(), candidateConnection.sampledLength(CONNECTION_LENGTH_VALIDATION_SAMPLES));
-        if (length > Config.MAX_CONNECTION_LENGTH.getAsDouble()) {
-            player.sendOverlayMessage(Component.translatable("message.superpipeslide.connection_too_long", String.format("%.1f", length)).withStyle(ChatFormatting.RED));
-            return InteractionResult.FAIL;
-        }
-
         boolean createdOrdinaryNode = false;
         if (keepBuilding && data.node(clicked).isEmpty()) {
             if (!player.getAbilities().instabuild) {
@@ -256,7 +250,16 @@ public class PipeConnectorItem extends Item {
             return InteractionResult.FAIL;
         }
 
-        PipeConnection connection = data.addConnectionWithBranchSupport(first, clicked, curveSpec).orElse(null);
+        CurveSpec curveSpec = curveSpec(stack, player, first, clicked);
+        PipeConnection candidateConnection = PipeConnection.withCurve(first, clicked, curveSpec);
+        PipeConnectionPlacementPlan placementPlan = PipeConnectionPlacementPlanner.plan(data, candidateConnection, Config.MAX_CONNECTION_LENGTH.getAsDouble());
+        if (placementPlan.hasLengthViolations()) {
+            cleanupCreatedOrdinaryNode(data, clicked, createdOrdinaryNode);
+            sendConnectionLengthViolation(player, placementPlan);
+            return InteractionResult.FAIL;
+        }
+
+        PipeConnection connection = data.addConnectionWithBranchSupport(first, clicked, placementPlan.candidate().curveSpec()).orElse(null);
         if (connection == null) {
             cleanupCreatedOrdinaryNode(data, clicked, createdOrdinaryNode);
             player.sendOverlayMessage(Component.translatable("message.superpipeslide.connection_not_allowed").withStyle(ChatFormatting.RED));
@@ -273,6 +276,13 @@ public class PipeConnectorItem extends Item {
         String createdMessage = firstBranch || clickedBranch ? "message.superpipeslide.branch_connection_created" : firstFold || clickedFold ? "message.superpipeslide.fold_connection_created" : "message.superpipeslide.connection_created";
         player.sendOverlayMessage(Component.translatable(createdMessage, shortId(connection), String.format("%.1f", connection.length())).withStyle(ChatFormatting.GREEN));
         return InteractionResult.SUCCESS_SERVER;
+    }
+
+    private static void sendConnectionLengthViolation(Player player, PipeConnectionPlacementPlan placementPlan) {
+        double length = placementPlan.largestViolation()
+                .map(PipeConnectionPlacementPlan.LengthViolation::measuredLength)
+                .orElseGet(placementPlan::maxMeasuredLength);
+        player.sendOverlayMessage(Component.translatable("message.superpipeslide.connection_too_long", String.format(Locale.ROOT, "%.1f", length)).withStyle(ChatFormatting.RED));
     }
 
     private static void cleanupCreatedOrdinaryNode(PipeNetworkSavedData data, PipeAnchorId created, boolean createdOrdinaryNode) {

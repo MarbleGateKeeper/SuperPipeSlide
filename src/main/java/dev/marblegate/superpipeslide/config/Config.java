@@ -6,7 +6,7 @@ public final class Config {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
     public static final ModConfigSpec.DoubleValue MAX_CONNECTION_LENGTH = BUILDER
-            .comment("Maximum length, in blocks, for a phase-one straight pipe connection.")
+            .comment("Maximum length, in blocks, for any pipe connection after curve solving.")
             .defineInRange("maxConnectionLength", 64.0D, 2.0D, 512.0D);
 
     public static final ModConfigSpec.DoubleValue CAPTURE_RADIUS = BUILDER
