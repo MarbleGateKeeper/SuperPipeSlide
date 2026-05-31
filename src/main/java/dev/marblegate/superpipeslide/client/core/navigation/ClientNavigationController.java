@@ -50,6 +50,7 @@ public final class ClientNavigationController {
     private static final double BOARDING_NEAR_RANGE = 18.0D;
     private static final double BOARDING_LOCAL_RANGE = 24.0D;
     private static final double BOARDING_HARD_RANGE = 8.0D;
+    private static final double DESTINATION_ARRIVAL_RANGE = BOARDING_HARD_RANGE;
     private static final double EARLY_TRANSFER_PATH_RANGE = 36.0D;
     private static final double EARLY_TRANSFER_WORLD_RANGE = 22.0D;
     private static final long RANGE_EXIT_MESSAGE_COOLDOWN_TICKS = 20L * 9L;
@@ -116,6 +117,12 @@ public final class ClientNavigationController {
         }
         NavigationPlan navigationPlan = plan.get();
         if (navigationPlan.segments().isEmpty()) {
+            if (!isPhysicallyAtDestination(player, navigationPlan.destinationStationGroupId())) {
+                sendNotice(ClientboundSlideNoticePayload.Kind.WARNING, List.of(0xFFFFB13B),
+                        Component.translatable("navigation.superpipeslide.failed"),
+                        List.of(line(Component.translatable("navigation.superpipeslide.failed.body"))));
+                return Optional.empty();
+            }
             session = new NavigationSession(navigationPlan, NavigationPhase.ARRIVED);
             session.completedAtMs = System.currentTimeMillis();
             sendNotice(ClientboundSlideNoticePayload.Kind.ARRIVAL, List.of(0xFFFFD35A),
@@ -387,6 +394,13 @@ public final class ClientNavigationController {
         }
         NavigationPlan plan = rebuilt.get();
         if (plan.segments().isEmpty()) {
+            if (!isPhysicallyAtDestination(player, plan.destinationStationGroupId())) {
+                session.phase = NavigationPhase.ROUTE_FAILED;
+                sendNotice(ClientboundSlideNoticePayload.Kind.WARNING, List.of(0xFFFF5E4D),
+                        Component.translatable("navigation.superpipeslide.failed"),
+                        List.of(line(Component.translatable("navigation.superpipeslide.failed.body"))));
+                return;
+            }
             session = new NavigationSession(plan, NavigationPhase.ARRIVED);
             session.completedAtMs = System.currentTimeMillis();
             sendNotice(ClientboundSlideNoticePayload.Kind.ARRIVAL, plan.primaryColors(),
@@ -522,8 +536,26 @@ public final class ClientNavigationController {
         UUID destination = session.plan.destinationStationGroupId();
         Optional<NavigationPlan> rebuilt = buildPlan(player, destination);
         if (rebuilt.isPresent()) {
-            session = new NavigationSession(rebuilt.get(), NavigationPhase.WALK_TO_BOARDING_STATION);
-            sendNotice(ClientboundSlideNoticePayload.Kind.STANDARD, rebuilt.get().primaryColors(),
+            NavigationPlan plan = rebuilt.get();
+            if (plan.segments().isEmpty()) {
+                if (isPhysicallyAtDestination(player, plan.destinationStationGroupId())) {
+                    session = new NavigationSession(plan, NavigationPhase.ARRIVED);
+                    session.completedAtMs = System.currentTimeMillis();
+                    sendNotice(ClientboundSlideNoticePayload.Kind.ARRIVAL, plan.primaryColors(),
+                            Component.translatable("navigation.superpipeslide.arrived", stationName(plan.destinationStationGroupId())),
+                            List.of(line(Component.translatable("navigation.superpipeslide.arrived.body"))));
+                    return;
+                }
+                session.phase = NavigationPhase.ROUTE_FAILED;
+                if (userRequested) {
+                    sendNotice(ClientboundSlideNoticePayload.Kind.WARNING, List.of(0xFFFF5E4D),
+                            Component.translatable("navigation.superpipeslide.failed"),
+                            List.of(line(Component.translatable("navigation.superpipeslide.failed.body"))));
+                }
+                return;
+            }
+            session = new NavigationSession(plan, NavigationPhase.WALK_TO_BOARDING_STATION);
+            sendNotice(ClientboundSlideNoticePayload.Kind.STANDARD, plan.primaryColors(),
                     Component.translatable("navigation.superpipeslide.route_updated"),
                     List.of(line(Component.translatable("navigation.superpipeslide.route_updated.body"))));
             return;
@@ -637,17 +669,21 @@ public final class ClientNavigationController {
         Set<UUID> destinationStopIds = new HashSet<>();
         destinationStops.forEach(stop -> destinationStopIds.add(stop.id()));
         AccessDistances accessDistances = new AccessDistances(player.position());
+        boolean allowDestinationAsStart = isPhysicallyAtDestination(player, destinationStationGroupId);
 
-        List<PlatformStop> preferredStarts = preferredStartCandidates(player, destinationStationGroupId, accessDistances);
+        List<PlatformStop> preferredStarts = preferredStartCandidates(player, destinationStationGroupId, accessDistances, allowDestinationAsStart);
         CandidatePlan best = bestCandidatePlan(graph, preferredStarts, destinationStopIds, destinationStationGroupId, accessDistances);
         if (best == null) {
-            best = bestCandidatePlan(graph, fallbackStartCandidates(player, accessDistances), destinationStopIds, destinationStationGroupId, accessDistances);
+            best = bestCandidatePlan(graph, fallbackStartCandidates(player, destinationStationGroupId, accessDistances, allowDestinationAsStart), destinationStopIds, destinationStationGroupId, accessDistances);
         }
         if (best == null) {
             return Optional.empty();
         }
 
         List<NavigationSegment> segments = compressSegments(best.search().edges());
+        if (segments.isEmpty() && !allowDestinationAsStart) {
+            return Optional.empty();
+        }
         UUID boardingPlatformStopId = segments.isEmpty() ? best.start().id() : segments.getFirst().boardingPlatformStopId();
         StationGroup startStation = ClientRouteDataCache.platformStop(boardingPlatformStopId)
                 .flatMap(stop -> ClientRouteDataCache.stationGroup(stop.stationGroupId()))
@@ -708,12 +744,12 @@ public final class ClientNavigationController {
         return new CandidatePlan(search.start().get(), search, search.cost(), walk);
     }
 
-    private static List<PlatformStop> preferredStartCandidates(LocalPlayer player, UUID destinationStationGroupId, AccessDistances accessDistances) {
+    private static List<PlatformStop> preferredStartCandidates(LocalPlayer player, UUID destinationStationGroupId, AccessDistances accessDistances, boolean allowDestinationAsStart) {
         ResourceKey<Level> level = player.level().dimension();
         LinkedHashMap<UUID, PlatformStop> nearbyDestinationStops = new LinkedHashMap<>();
         if (ClientRouteDataCache.stationGroup(destinationStationGroupId)
                 .filter(station -> station.levelKey().equals(level))
-                .filter(station -> accessDistances.stationGroupDistance(station.id()) <= BOARDING_LOCAL_RANGE)
+                .filter(station -> allowDestinationAsStart)
                 .isPresent()) {
             ClientRouteDataCache.platformStopsInStation(destinationStationGroupId).stream()
                     .sorted(Comparator.comparingDouble(accessDistances::platformDistance))
@@ -726,6 +762,7 @@ public final class ClientNavigationController {
         ClientRouteDataCache.stationGroups().stream()
                 .filter(station -> station.levelKey().equals(level))
                 .filter(station -> accessDistances.stationGroupDistance(station.id()) <= BOARDING_LOCAL_RANGE)
+                .filter(station -> allowDestinationAsStart || !station.id().equals(destinationStationGroupId))
                 .sorted(Comparator.comparingDouble(station -> accessDistances.stationGroupDistance(station.id())))
                 .forEach(station -> ClientRouteDataCache.platformStopsInStation(station.id()).stream()
                         .filter(stop -> !routeEdgesFrom(stop.id()).isEmpty())
@@ -737,11 +774,12 @@ public final class ClientNavigationController {
         return List.of();
     }
 
-    private static List<PlatformStop> fallbackStartCandidates(LocalPlayer player, AccessDistances accessDistances) {
+    private static List<PlatformStop> fallbackStartCandidates(LocalPlayer player, UUID destinationStationGroupId, AccessDistances accessDistances, boolean allowDestinationAsStart) {
         ResourceKey<Level> level = player.level().dimension();
         LinkedHashMap<UUID, PlatformStop> candidates = new LinkedHashMap<>();
         ClientRouteDataCache.platformStops().stream()
                 .filter(stop -> ClientRouteDataCache.stationGroup(stop.stationGroupId()).map(group -> group.levelKey().equals(level)).orElse(false))
+                .filter(stop -> allowDestinationAsStart || !stop.stationGroupId().equals(destinationStationGroupId))
                 .filter(stop -> !routeEdgesFrom(stop.id()).isEmpty())
                 .sorted(Comparator
                         .comparingDouble((PlatformStop stop) -> accessDistances.platformDistance(stop))
@@ -1133,6 +1171,25 @@ public final class ClientNavigationController {
         return ClientPipeNetworkCache.connection(platformStop.connectionRef())
                 .map(connection -> SlideGeometry.project(connection, playerPosition).distance())
                 .orElseGet(() -> platformPosition(platformStop).distanceTo(playerPosition));
+    }
+
+    private static boolean isPhysicallyAtDestination(LocalPlayer player, UUID destinationStationGroupId) {
+        return stationArrivalDistance(player, destinationStationGroupId) <= DESTINATION_ARRIVAL_RANGE;
+    }
+
+    private static double stationArrivalDistance(LocalPlayer player, UUID stationGroupId) {
+        Vec3 playerPosition = player.position();
+        ResourceKey<Level> level = player.level().dimension();
+        return ClientRouteDataCache.stationGroup(stationGroupId)
+                .filter(station -> station.levelKey().equals(level))
+                .map(station -> {
+                    double best = Vec3.atCenterOf(station.stationBlockPos()).distanceTo(playerPosition);
+                    for (PlatformStop stop : ClientRouteDataCache.platformStopsInStation(stationGroupId)) {
+                        best = Math.min(best, platformPosition(stop).distanceTo(playerPosition));
+                    }
+                    return best;
+                })
+                .orElse(Double.MAX_VALUE / 4.0D);
     }
 
     private static Component stationName(UUID platformStopOrStationGroupId) {
