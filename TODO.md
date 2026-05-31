@@ -2,3 +2,5 @@
 * Cinematic Perspective
 * Launching & Gliding Anchor & Ejecting Anchor
 * 改变跳跃操作，支持自动跳向临近所看管道。
+* 滑行时玩家头部外层不跟随姿态变化
+* 棱状管端头接套材质存在问题

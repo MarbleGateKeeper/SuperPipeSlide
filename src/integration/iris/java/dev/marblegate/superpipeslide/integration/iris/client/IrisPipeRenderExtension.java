@@ -13,7 +13,6 @@ import net.irisshaders.iris.pipeline.WorldRenderingPipeline;
 import net.irisshaders.iris.shadows.ShadowRenderer;
 import net.irisshaders.iris.shadows.ShadowRenderingState;
 import net.irisshaders.iris.uniforms.CameraUniforms;
-import net.irisshaders.iris.vertices.ImmediateState;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.culling.Frustum;
@@ -31,10 +30,10 @@ public final class IrisPipeRenderExtension implements ClientPipeRenderer.PipeRen
             return "iris_shaderpack_off";
         }
         try {
-            return "iris_shaderpack:" + Iris.getCurrentPackName() + ":pipeline_" + Iris.getPipelineManager().getVersionCounterForSodiumShaderReload() + ":pipe_entity_v14";
+            return "iris_shaderpack:" + Iris.getCurrentPackName() + ":pipeline_" + Iris.getPipelineManager().getVersionCounterForSodiumShaderReload() + ":pipe_instanced_v1";
         } catch (RuntimeException | LinkageError exception) {
             warn("query Iris render state", exception);
-            return "iris_shaderpack:unknown:pipe_entity_v1";
+            return "iris_shaderpack:unknown:pipe_instanced_v1";
         }
     }
 
@@ -64,20 +63,6 @@ public final class IrisPipeRenderExtension implements ClientPipeRenderer.PipeRen
             warn("set Iris entity rendering phase", exception);
             return NOOP_SCOPE;
         }
-    }
-
-    @Override
-    public ClientPipeRenderer.PipeRenderExtension.Scope entityBufferBuild() {
-        if (!irisShaderPackInUse()) {
-            return NOOP_SCOPE;
-        }
-        boolean wasRenderingLevel = ImmediateState.isRenderingLevel;
-        boolean wasRenderWithExtendedVertexFormat = ImmediateState.renderWithExtendedVertexFormat;
-        Boolean wasSkippingExtension = ImmediateState.skipExtension.get();
-        ImmediateState.isRenderingLevel = true;
-        ImmediateState.renderWithExtendedVertexFormat = true;
-        ImmediateState.skipExtension.set(false);
-        return new EntityBufferBuildScope(wasRenderingLevel, wasRenderWithExtendedVertexFormat, wasSkippingExtension);
     }
 
     @Override
@@ -179,25 +164,6 @@ public final class IrisPipeRenderExtension implements ClientPipeRenderer.PipeRen
         }
         warningLogged = true;
         SuperPipeSlide.LOGGER.warn("Failed to {}; Iris pipe rendering extension will use a reduced path.", action, throwable);
-    }
-
-    private static final class EntityBufferBuildScope implements ClientPipeRenderer.PipeRenderExtension.Scope {
-        private final boolean wasRenderingLevel;
-        private final boolean wasRenderWithExtendedVertexFormat;
-        private final Boolean wasSkippingExtension;
-
-        private EntityBufferBuildScope(boolean wasRenderingLevel, boolean wasRenderWithExtendedVertexFormat, Boolean wasSkippingExtension) {
-            this.wasRenderingLevel = wasRenderingLevel;
-            this.wasRenderWithExtendedVertexFormat = wasRenderWithExtendedVertexFormat;
-            this.wasSkippingExtension = wasSkippingExtension;
-        }
-
-        @Override
-        public void close() {
-            ImmediateState.isRenderingLevel = this.wasRenderingLevel;
-            ImmediateState.renderWithExtendedVertexFormat = this.wasRenderWithExtendedVertexFormat;
-            ImmediateState.skipExtension.set(this.wasSkippingExtension);
-        }
     }
 
     private static final class PhaseScope implements ClientPipeRenderer.PipeRenderExtension.Scope {

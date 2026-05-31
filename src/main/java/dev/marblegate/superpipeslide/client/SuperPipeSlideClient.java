@@ -223,6 +223,7 @@ public class SuperPipeSlideClient {
 
         @SubscribeEvent
         public static void onRenderFramePost(RenderFrameEvent.Post event) {
+            ClientPipeRenderer.endFrame();
             ClientFoldTraversalPostEffectRenderer.endFrame();
         }
 

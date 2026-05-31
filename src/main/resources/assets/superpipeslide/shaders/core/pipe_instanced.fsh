@@ -22,10 +22,6 @@ in vec4 vertexColor;
 in vec4 lightMapColor;
 #endif
 
-#ifndef NO_OVERLAY
-in vec4 overlayColor;
-#endif
-
 in vec2 texCoord0;
 
 out vec4 fragColor;
@@ -52,9 +48,6 @@ void main() {
 #endif
 
     color *= faceVertexColor * ColorModulator;
-#ifndef NO_OVERLAY
-    color.rgb = mix(overlayColor.rgb, color.rgb, overlayColor.a);
-#endif
 #ifndef EMISSIVE
     color *= lightMapColor;
 #endif

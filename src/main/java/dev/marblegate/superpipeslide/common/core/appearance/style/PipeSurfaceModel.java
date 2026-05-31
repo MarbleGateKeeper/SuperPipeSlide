@@ -31,23 +31,18 @@ public record PipeSurfaceModel(
     }
 
     public static PipeSurfaceModel build(PipeStyleShape shape, PipeVariantDefinition variant, PipeStyleGeometry geometry) {
-        return build(shape, variant, geometry, 0);
-    }
-
-    public static PipeSurfaceModel build(PipeStyleShape shape, PipeVariantDefinition variant, PipeStyleGeometry geometry, int lod) {
-        int detail = Math.max(0, Math.min(3, lod));
         SurfaceBuilder builder = new SurfaceBuilder();
         List<CoatingBand> bands = new ArrayList<>();
         List<PatternedBox> boxes = new ArrayList<>();
         switch (shape) {
-            case ROUND -> roundSurfaces(builder, geometry.radius(), roundSides(detail), "body");
-            case FACETED -> facetedSurfaces(builder, geometry.radius(), variant.reinforced(), facetedSides(detail));
+            case ROUND -> roundSurfaces(builder, geometry.radius(), roundSides(), "body");
+            case FACETED -> facetedSurfaces(builder, geometry.radius(), variant.reinforced(), facetedSides());
             case BOX -> boxSurfaces(builder, geometry, variant.splitCoating());
             case TRIANGLE -> triangleSurfaces(builder, geometry, variant.reinforced());
             case RAIL -> railSurfaces(builder, boxes, geometry, variant.reinforced());
-            case SLIDE -> slideSurfaces(builder, geometry, variant.reinforced(), variant.curved(), detail);
+            case SLIDE -> slideSurfaces(builder, geometry, variant.reinforced(), variant.curved());
             case MONORAIL -> monorailSurfaces(builder, geometry, variant.reinforced());
-            case COVERED -> coveredSurfaces(builder, boxes, geometry, variant.reinforced(), variant.extraRibs(), detail);
+            case COVERED -> coveredSurfaces(builder, boxes, geometry, variant.reinforced(), variant.extraRibs());
         }
         if (variant.extraRibs()) {
             String ribSlot = shape == PipeStyleShape.COVERED ? "frame" : "rib";
@@ -119,39 +114,20 @@ public record PipeSurfaceModel(
         }
     }
 
-    private static int roundSides(int lod) {
-        return switch (lod) {
-            case 0 -> 12;
-            case 1 -> 8;
-            case 2 -> 6;
-            default -> 4;
-        };
+    private static int roundSides() {
+        return 12;
     }
 
-    private static int facetedSides(int lod) {
-        return switch (lod) {
-            case 0 -> 8;
-            case 1 -> 6;
-            default -> 4;
-        };
+    private static int facetedSides() {
+        return 8;
     }
 
-    private static int curvedSlideSegments(int lod) {
-        return switch (lod) {
-            case 0 -> 10;
-            case 1 -> 7;
-            case 2 -> 5;
-            default -> 3;
-        };
+    private static int curvedSlideSegments() {
+        return 10;
     }
 
-    private static int coveredArchSegments(int lod) {
-        return switch (lod) {
-            case 0 -> 10;
-            case 1 -> 7;
-            case 2 -> 5;
-            default -> 4;
-        };
+    private static int coveredArchSegments() {
+        return 10;
     }
 
     private static void facetedSurfaces(SurfaceBuilder builder, double radius, boolean edge, int sides) {
@@ -206,9 +182,9 @@ public record PipeSurfaceModel(
         }
     }
 
-    private static void slideSurfaces(SurfaceBuilder builder, PipeStyleGeometry geometry, boolean rim, boolean curved, int lod) {
+    private static void slideSurfaces(SurfaceBuilder builder, PipeStyleGeometry geometry, boolean rim, boolean curved) {
         if (curved) {
-            curvedSlideSurfaces(builder, geometry, rim, lod);
+            curvedSlideSurfaces(builder, geometry, rim);
             return;
         }
         double halfWidth = geometry.halfWidth();
@@ -225,14 +201,14 @@ public record PipeSurfaceModel(
         builder.add("wall", -topHalf, depth, -floorHalf, 0.0D, true);
     }
 
-    private static void curvedSlideSurfaces(SurfaceBuilder builder, PipeStyleGeometry geometry, boolean rim, int lod) {
+    private static void curvedSlideSurfaces(SurfaceBuilder builder, PipeStyleGeometry geometry, boolean rim) {
         double halfWidth = geometry.halfWidth();
         double topHalf = halfWidth + halfWidth * geometry.wallSlope() * 0.35D;
         double depth = geometry.depth();
         double rimWidth = rim ? Math.min(geometry.rimWidth(), topHalf * 0.32D) : 0.0D;
         double bodyTopHalf = rim ? Math.max(halfWidth * 0.38D, topHalf - rimWidth) : topHalf;
         double floorLimit = Math.max(0.08D, bodyTopHalf * geometry.floorRatio() * 0.52D);
-        int segments = curvedSlideSegments(lod);
+        int segments = curvedSlideSegments();
         Local2 previous = null;
         for (int i = 0; i <= segments; i++) {
             double t = -1.0D + 2.0D * i / segments;
@@ -274,7 +250,7 @@ public record PipeSurfaceModel(
         }
     }
 
-    private static void coveredSurfaces(SurfaceBuilder builder, List<PatternedBox> boxes, PipeStyleGeometry geometry, boolean framed, boolean ringed, int lod) {
+    private static void coveredSurfaces(SurfaceBuilder builder, List<PatternedBox> boxes, PipeStyleGeometry geometry, boolean framed, boolean ringed) {
         double halfWidth = geometry.halfWidth();
         double height = geometry.halfHeight();
         double baseThickness = Math.max(0.035D, geometry.rimWidth());
@@ -285,7 +261,7 @@ public record PipeSurfaceModel(
         builder.add("base", -halfWidth, -baseThickness, -floorHalf, 0.0D, true);
 
         List<Local2> arch = new ArrayList<>();
-        int segments = coveredArchSegments(lod);
+        int segments = coveredArchSegments();
         for (int i = 0; i <= segments; i++) {
             double angle = Math.PI - Math.PI * i / segments;
             arch.add(new Local2(Math.cos(angle) * halfWidth, Math.sin(angle) * height));
