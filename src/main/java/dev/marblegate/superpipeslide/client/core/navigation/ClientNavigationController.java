@@ -55,6 +55,7 @@ public final class ClientNavigationController {
     private static final long RANGE_EXIT_MESSAGE_COOLDOWN_TICKS = 20L * 9L;
     private static final long WRONG_BOARDING_MESSAGE_COOLDOWN_TICKS = 20L * 3L;
     private static final long GENERIC_ARRIVAL_SUPPRESSION_TICKS = 80L;
+    private static final long ARRIVAL_HUD_DISMISS_MILLIS = 4500L;
     @Nullable
     private static NavigationSession session;
     @Nullable
@@ -199,7 +200,7 @@ public final class ClientNavigationController {
             }
         }
         if (session == null || session.phase == NavigationPhase.ROUTE_FAILED || session.phase == NavigationPhase.ARRIVED) {
-            if (session != null && session.phase == NavigationPhase.ARRIVED && session.completedAtMs > 0L && System.currentTimeMillis() - session.completedAtMs > 4500L) {
+            if (session != null && session.phase == NavigationPhase.ARRIVED && shouldDismissArrivalHud()) {
                 session = null;
             }
             return;
@@ -215,6 +216,13 @@ public final class ClientNavigationController {
             }
         }
         updateBoardingProximity(player);
+    }
+
+    private static boolean shouldDismissArrivalHud() {
+        if (session == null || session.completedAtMs <= 0L || ClientSlideController.isSliding()) {
+            return false;
+        }
+        return System.currentTimeMillis() - session.completedAtMs > ARRIVAL_HUD_DISMISS_MILLIS;
     }
 
     public static boolean canCaptureConnection(PipeConnection connection) {

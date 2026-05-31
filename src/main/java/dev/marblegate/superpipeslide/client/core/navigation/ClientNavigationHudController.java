@@ -4,6 +4,7 @@ import dev.marblegate.superpipeslide.client.core.route.ClientRouteHudController;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import javax.annotation.Nullable;
@@ -26,19 +27,40 @@ public final class ClientNavigationHudController {
     private static final int RED = 0xFFE36D63;
     private static final double ENTRY_STEP = 0.22D;
     private static final double EXIT_STEP = 0.16D;
+    private static final double CARD_ENTRY_STEP = 0.30D;
+    private static final double CARD_EXIT_STEP = 0.22D;
+    private static final double PROGRESS_STEP = 0.28D;
+    private static final int CARD_PEEK_MILLIS = 3200;
+    private static final int RAIL_WIDTH = 16;
+    private static final int RAIL_TRACK_TOP_PADDING = 14;
+    private static final int RAIL_TRACK_BOTTOM_PADDING = 14;
+    private static final int CARD_GAP = 8;
+    private static final int MAX_CARD_WIDTH = 176;
+    private static final int MIN_CARD_WIDTH = 96;
     private static final double FAR_SCREEN_MARKER_RANGE = 64.0D;
     private static final double EDGE_MARKER_MARGIN = 22.0D;
     private static final double PROJECTED_MARKER_PADDING = 18.0D;
 
     @Nullable
     private static ClientNavigationController.NavigationHudSnapshot snapshot;
+    @Nullable
+    private static ClientNavigationController.NavigationPhase lastPhase;
+    private static int lastSegmentNumber = -1;
     private static double visibleAlpha;
+    private static double cardReveal;
+    private static double displayedProgress = Double.NaN;
+    private static long cardPeekUntilMs;
 
     private ClientNavigationHudController() {}
 
     public static void clear() {
         snapshot = null;
+        lastPhase = null;
+        lastSegmentNumber = -1;
         visibleAlpha = 0.0D;
+        cardReveal = 0.0D;
+        displayedProgress = Double.NaN;
+        cardPeekUntilMs = 0L;
     }
 
     public static void tick() {
@@ -49,14 +71,28 @@ public final class ClientNavigationHudController {
         }
         Optional<ClientNavigationController.NavigationHudSnapshot> next = ClientNavigationController.hudSnapshot(minecraft.player);
         if (next.isPresent()) {
-            snapshot = next.get();
+            ClientNavigationController.NavigationHudSnapshot value = next.get();
+            long now = System.currentTimeMillis();
+            if (isAttentionPhase(value.phase()) && (lastPhase != value.phase() || lastSegmentNumber != value.segmentNumber())) {
+                cardPeekUntilMs = now + CARD_PEEK_MILLIS;
+            }
+            snapshot = value;
+            lastPhase = value.phase();
+            lastSegmentNumber = value.segmentNumber();
+            if (!Double.isFinite(displayedProgress)) {
+                displayedProgress = value.progress();
+            } else {
+                displayedProgress += (value.progress() - displayedProgress) * PROGRESS_STEP;
+            }
             visibleAlpha += (1.0D - visibleAlpha) * ENTRY_STEP;
+            double targetReveal = targetCardReveal(value, now);
+            cardReveal += (targetReveal - cardReveal) * (targetReveal > cardReveal ? CARD_ENTRY_STEP : CARD_EXIT_STEP);
             return;
         }
         visibleAlpha += (0.0D - visibleAlpha) * EXIT_STEP;
+        cardReveal += (0.0D - cardReveal) * CARD_EXIT_STEP;
         if (visibleAlpha < 0.015D) {
-            snapshot = null;
-            visibleAlpha = 0.0D;
+            clear();
         }
     }
 
@@ -72,53 +108,179 @@ public final class ClientNavigationHudController {
             return;
         }
 
-        int screenWidth = graphics.guiWidth();
-        int availableWidth = Math.max(96, screenWidth - 20);
-        int width = Math.min(availableWidth, Math.max(176, Math.min(232, screenWidth / 3 + 52)));
-        int x = 10;
-        int y = ClientRouteHudController.isVisible() ? 58 : 10;
-        renderPanel(graphics, font, snapshot, x, y, width, alpha);
+        HudGeometry geometry = geometry(graphics.guiWidth(), graphics.guiHeight(), snapshot);
+        renderProgressRail(graphics, snapshot, geometry, alpha);
+        renderInfoCard(graphics, font, snapshot, geometry, alpha);
         renderWorldTargetIndicator(graphics, font, minecraft, alpha);
     }
 
-    private static int panelHeight(ClientNavigationController.NavigationHudSnapshot value) {
-        return value.target().isPresent() ? 38 : 32;
+    private static double targetCardReveal(ClientNavigationController.NavigationHudSnapshot value, long now) {
+        if (value.phase() == ClientNavigationController.NavigationPhase.ARRIVED
+                || value.phase() == ClientNavigationController.NavigationPhase.ROUTE_FAILED
+                || !isRidingPhase(value.phase())) {
+            return 1.0D;
+        }
+        return now <= cardPeekUntilMs ? 1.0D : 0.0D;
     }
 
-    private static void renderPanel(GuiGraphicsExtractor graphics, Font font, ClientNavigationController.NavigationHudSnapshot value, int x, int y, int width, double alpha) {
-        int height = panelHeight(value);
+    private static boolean isRidingPhase(ClientNavigationController.NavigationPhase phase) {
+        return phase == ClientNavigationController.NavigationPhase.RIDING_SEGMENT
+                || phase == ClientNavigationController.NavigationPhase.APPROACHING_TRANSFER
+                || phase == ClientNavigationController.NavigationPhase.APPROACHING_DESTINATION;
+    }
+
+    private static boolean isAttentionPhase(ClientNavigationController.NavigationPhase phase) {
+        return phase == ClientNavigationController.NavigationPhase.APPROACHING_TRANSFER
+                || phase == ClientNavigationController.NavigationPhase.APPROACHING_DESTINATION;
+    }
+
+    private static HudGeometry geometry(int screenWidth, int screenHeight, ClientNavigationController.NavigationHudSnapshot value) {
+        int railX = screenWidth <= 240 ? 5 : 9;
+        int topLimit = screenHeight < 160 ? 10 : ClientRouteHudController.isVisible() ? 58 : 16;
+        int bottomMargin = screenHeight < 180 ? 18 : 42;
+        int availableHeight = Math.max(64, screenHeight - topLimit - bottomMargin);
+        int railHeight = Math.min(164, Math.max(88, availableHeight));
+        railHeight = Math.min(railHeight, availableHeight);
+        int railY = topLimit + Math.max(0, (availableHeight - railHeight) / 2);
+        int cardX = railX + RAIL_WIDTH + CARD_GAP;
+        int cardWidth = Math.min(MAX_CARD_WIDTH, Math.max(0, screenWidth - cardX - 8));
+        int cardHeight = value.target().isPresent() || !value.detailText().isBlank() ? 54 : 44;
+        int preferredCardY = railY + 8;
+        int cardY = Math.max(6, Math.min(screenHeight - cardHeight - 6, preferredCardY));
+        if (cardWidth > 0 && cardWidth < MIN_CARD_WIDTH) {
+            cardWidth = Math.max(0, cardWidth);
+        }
+        return new HudGeometry(railX, railY, RAIL_WIDTH, railHeight, cardX, cardY, cardWidth, cardHeight);
+    }
+
+    private static void renderProgressRail(GuiGraphicsExtractor graphics, ClientNavigationController.NavigationHudSnapshot value, HudGeometry geometry, double alpha) {
         int accent = value.target().map(target -> targetColor(target.kind(), value.colors())).orElseGet(() -> firstColor(value.colors()));
-        graphics.fill(x + 2, y + 2, x + width + 2, y + height + 2, color(0x66000000, alpha));
-        graphics.fill(x, y, x + width, y + height, color(PANEL, alpha));
-        graphics.outline(x, y, width, height, color(PANEL_LINE, alpha));
+        int centerX = geometry.railX() + geometry.railWidth() / 2;
+        double centerY = geometry.railY() + geometry.railHeight() * 0.5D;
+        double progress = clamp(Double.isFinite(displayedProgress) ? displayedProgress : value.progress());
+        double trackTop = geometry.railY() + RAIL_TRACK_TOP_PADDING;
+        double trackBottom = geometry.railY() + geometry.railHeight() - RAIL_TRACK_BOTTOM_PADDING;
+        double progressY = trackTop + (trackBottom - trackTop) * progress;
 
-        List<Integer> colors = value.colors().isEmpty() ? List.of(0xFF47A6FF) : value.colors();
-        drawColorBand(graphics, x, y, height, colors, alpha);
+        drawVerticalPill(graphics, centerX, centerY, geometry.railWidth(), geometry.railHeight(), color(PANEL, alpha * 0.90D));
+        drawVerticalPill(graphics, centerX, centerY, geometry.railWidth() - 3.0D, geometry.railHeight() - 3.0D, color(0xAA0E151C, alpha * 0.72D));
 
-        drawStateGlyph(graphics, new Vec2(x + 14, y + 14), value.phase(), accent, alpha);
-        String distance = value.target()
-                .map(target -> target.distance() >= 999.0D ? "999m+" : Math.round(target.distance()) + "m")
-                .orElse("");
+        drawVerticalColorTrack(graphics, centerX, trackTop, trackBottom, value.colors(), alpha * 0.46D);
+        if (progressY > trackTop + 0.4D) {
+            SmoothGuiPrimitives.line(graphics, new Vec2(centerX, trackTop), new Vec2(centerX, progressY), 5.4D, color(accent, alpha * 0.90D));
+            SmoothGuiPrimitives.line(graphics, new Vec2(centerX, trackTop), new Vec2(centerX, progressY), 2.2D, color(0x88FFFFFF, alpha * 0.52D));
+        }
+        if (progressY < trackBottom - 0.4D) {
+            SmoothGuiPrimitives.line(graphics, new Vec2(centerX, progressY), new Vec2(centerX, trackBottom), 3.0D, color(0x556A8192, alpha * 0.70D));
+        }
+
+        SmoothGuiPrimitives.circle(graphics, new Vec2(centerX, trackTop), 3.4D, color(accent, alpha * 0.64D));
+        SmoothGuiPrimitives.circle(graphics, new Vec2(centerX, trackBottom), 3.4D, color(0xFF6A8192, alpha * 0.62D));
+        drawStateGlyph(graphics, new Vec2(centerX, progressY), value.phase(), accent, alpha);
+    }
+
+    private static void drawVerticalPill(GuiGraphicsExtractor graphics, double centerX, double centerY, double width, double height, int color) {
+        if (((color >>> 24) & 0xFF) <= 0 || width <= 0.0D || height <= 0.0D) {
+            return;
+        }
+        double halfWidth = width * 0.5D;
+        double top = centerY - height * 0.5D;
+        double bottom = centerY + height * 0.5D;
+        double radius = Math.min(halfWidth, height * 0.5D);
+        double capTopCenter = top + radius;
+        double capBottomCenter = bottom - radius;
+        List<SmoothGuiPrimitives.GradientQuad> quads = new ArrayList<>();
+        addRectQuad(quads, centerX - halfWidth, capTopCenter, centerX + halfWidth, capBottomCenter, color);
+        int slices = Math.max(8, Math.min(24, (int) Math.ceil(radius * 2.0D)));
+        for (int i = 0; i < slices; i++) {
+            double y0 = top + radius * i / slices;
+            double y1 = top + radius * (i + 1) / slices;
+            double sampleY = (y0 + y1) * 0.5D;
+            double topHalf = Math.sqrt(Math.max(0.0D, radius * radius - (sampleY - capTopCenter) * (sampleY - capTopCenter)));
+            addRectQuad(quads, centerX - topHalf, y0, centerX + topHalf, y1, color);
+
+            double by0 = capBottomCenter + radius * i / slices;
+            double by1 = capBottomCenter + radius * (i + 1) / slices;
+            double sampleBottomY = (by0 + by1) * 0.5D;
+            double bottomHalf = Math.sqrt(Math.max(0.0D, radius * radius - (sampleBottomY - capBottomCenter) * (sampleBottomY - capBottomCenter)));
+            addRectQuad(quads, centerX - bottomHalf, by0, centerX + bottomHalf, by1, color);
+        }
+        SmoothGuiPrimitives.quads(graphics, quads);
+    }
+
+    private static void addRectQuad(List<SmoothGuiPrimitives.GradientQuad> quads, double left, double top, double right, double bottom, int color) {
+        if (right <= left || bottom <= top) {
+            return;
+        }
+        quads.add(new SmoothGuiPrimitives.GradientQuad(
+                new Vec2(left, top),
+                new Vec2(right, top),
+                new Vec2(right, bottom),
+                new Vec2(left, bottom),
+                color,
+                color,
+                color,
+                color));
+    }
+
+    private static void drawVerticalColorTrack(GuiGraphicsExtractor graphics, int centerX, double top, double bottom, List<Integer> colors, double alpha) {
+        List<Integer> normalized = colors == null || colors.isEmpty() ? List.of(0xFF47A6FF) : colors.stream().limit(3).map(SPSGui::opaque).toList();
+        double height = Math.max(1.0D, bottom - top);
+        double segmentHeight = height / normalized.size();
+        for (int i = 0; i < normalized.size(); i++) {
+            double y1 = top + i * segmentHeight;
+            double y2 = i == normalized.size() - 1 ? bottom : y1 + segmentHeight;
+            SmoothGuiPrimitives.line(graphics, new Vec2(centerX, y1), new Vec2(centerX, y2), 4.0D, color(normalized.get(i), alpha));
+        }
+    }
+
+    private static void renderInfoCard(GuiGraphicsExtractor graphics, Font font, ClientNavigationController.NavigationHudSnapshot value, HudGeometry geometry, double alpha) {
+        double reveal = easeOutCubic(cardReveal);
+        if (reveal <= 0.025D || geometry.cardWidth() < 64) {
+            return;
+        }
+        double cardAlpha = alpha * reveal;
+        int slideOffset = (int) Math.round((1.0D - reveal) * -12.0D);
+        int x = geometry.cardX() + slideOffset;
+        int y = geometry.cardY();
+        int width = geometry.cardWidth();
+        int height = geometry.cardHeight();
+
+        graphics.fill(x + 2, y + 2, x + width + 2, y + height + 2, color(0x66000000, cardAlpha * 0.72D));
+        graphics.fill(x, y, x + width, y + height, color(PANEL, cardAlpha));
+        graphics.outline(x, y, width, height, color(PANEL_LINE, cardAlpha));
+        graphics.fill(x + 1, y + 1, x + width - 1, y + 2, color(0x66FFFFFF, cardAlpha * 0.42D));
+        drawColorBand(graphics, x, y, height, value.colors(), cardAlpha);
+
+        int textX = x + 9;
+        int right = x + width - 8;
+        String distance = value.target().map(ClientNavigationHudController::distanceText).orElse("");
         int distanceWidth = distance.isBlank() ? 0 : font.width(distance);
-        int titleRightReserve = distance.isBlank() ? 10 : distanceWidth + 16;
-        String destination = SPSGui.ellipsize(font, value.destinationName(), width - 34 - titleRightReserve);
-        graphics.text(font, destination, x + 29, y + 5, color(TEXT, alpha), true);
-        if (!distance.isBlank()) {
-            graphics.text(font, distance, x + width - distanceWidth - 8, y + 5, color(TEXT, alpha * 0.92D), true);
+        boolean showDistanceChip = !distance.isBlank() && width >= 132;
+        int headlineRightReserve = showDistanceChip ? distanceWidth + 12 : 0;
+        String headline = value.actionText().isBlank() ? value.destinationName() : value.actionText();
+        graphics.text(font, SPSGui.ellipsize(font, headline, right - textX - headlineRightReserve), textX, y + 6, color(TEXT, cardAlpha), true);
+        if (showDistanceChip) {
+            graphics.text(font, distance, right - distanceWidth, y + 6, color(TEXT, cardAlpha * 0.90D), true);
         }
 
-        String secondary = value.actionText();
-        if (value.target().isEmpty() && !value.detailText().isBlank()) {
-            secondary = secondary + " · " + value.detailText();
+        String targetLine = targetLine(value, distance, showDistanceChip);
+        graphics.text(font, SPSGui.ellipsize(font, targetLine, right - textX), textX, y + 19, color(MUTED, cardAlpha * 0.92D), true);
+        if (!value.detailText().isBlank() && height >= 50) {
+            graphics.text(font, SPSGui.ellipsize(font, value.detailText(), right - textX), textX, y + 33, color(MUTED, cardAlpha * 0.72D), true);
         }
-        secondary = SPSGui.ellipsize(font, secondary, width - 40);
-        graphics.text(font, secondary, x + 29, y + 17, color(MUTED, alpha * 0.90D), true);
+    }
 
-        int progressLeft = x + 29;
-        int progressRight = x + width - 8;
-        int progressY = y + height - 5;
-        SmoothGuiPrimitives.line(graphics, new Vec2(progressLeft, progressY), new Vec2(progressRight, progressY), 1.6D, color(0x556A8192, alpha));
-        SmoothGuiPrimitives.line(graphics, new Vec2(progressLeft, progressY), new Vec2(progressLeft + (progressRight - progressLeft) * clamp(value.progress()), progressY), 2.0D, color(accent, alpha));
+    private static String targetLine(ClientNavigationController.NavigationHudSnapshot value, String distance, boolean distanceIsSeparate) {
+        String targetName = value.target().map(ClientNavigationController.TargetInfo::name).orElse(value.destinationName());
+        if (distance.isBlank() || distanceIsSeparate) {
+            return targetName;
+        }
+        return targetName + " / " + distance;
+    }
+
+    private static String distanceText(ClientNavigationController.TargetInfo target) {
+        return target.distance() >= 999.0D ? "999m+" : Math.round(target.distance()) + "m";
     }
 
     private static void drawColorBand(GuiGraphicsExtractor graphics, int x, int y, int height, List<Integer> colors, double alpha) {
@@ -316,6 +478,14 @@ public final class ClientNavigationHudController {
     private static double clamp(double value) {
         return Math.max(0.0D, Math.min(1.0D, value));
     }
+
+    private static double easeOutCubic(double value) {
+        double t = clamp(value);
+        double inv = 1.0D - t;
+        return 1.0D - inv * inv * inv;
+    }
+
+    private record HudGeometry(int railX, int railY, int railWidth, int railHeight, int cardX, int cardY, int cardWidth, int cardHeight) {}
 
     private record TargetProjection(double screenX, double screenY, double directionX, double directionY, boolean insideSafeArea, boolean behind) {}
 }
