@@ -1531,6 +1531,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 this.searchBox.setFocused(false);
                 this.setFocused(null);
             }
+            this.minecraft.setScreen(null);
         } else {
             this.selectedNavigationPlan = null;
             this.navigationSheetExpanded = true;

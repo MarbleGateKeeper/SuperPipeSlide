@@ -2298,9 +2298,6 @@ public final class ClientSlideController {
         if (minecraft.screen instanceof SlideSafetyWarningScreen) {
             return true;
         }
-        if (minecraft.screen != null) {
-            return true;
-        }
         minecraft.setScreen(new SlideSafetyWarningScreen(() -> cooldown = new CaptureCooldown(connection.id(), SAFETY_PROMPT_COOLDOWN_TICKS, true)));
         return true;
     }
