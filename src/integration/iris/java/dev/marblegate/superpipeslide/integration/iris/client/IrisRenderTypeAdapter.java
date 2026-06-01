@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.function.Supplier;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.api.v0.IrisApi;
+import net.irisshaders.iris.vertices.ImmediateState;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.resources.Identifier;
@@ -27,6 +28,15 @@ public final class IrisRenderTypeAdapter implements ClientRenderCompatibility.Re
             return "iris_shaderpack:" + Iris.getCurrentPackName() + ":pipeline_" + Iris.getPipelineManager().getVersionCounterForSodiumShaderReload() + ":render_types_v1";
         } catch (RuntimeException | LinkageError exception) {
             return "iris_shaderpack:unknown:render_types_v1";
+        }
+    }
+
+    @Override
+    public boolean isRenderingExternalShadowPass() {
+        try {
+            return IrisApi.getInstance().isRenderingShadowPass();
+        } catch (RuntimeException | LinkageError exception) {
+            return false;
         }
     }
 
@@ -56,6 +66,16 @@ public final class IrisRenderTypeAdapter implements ClientRenderCompatibility.Re
         synchronized (this.overlayRenderTypes) {
             this.overlayRenderTypes.clear();
         }
+    }
+
+    @Override
+    public ClientRenderCompatibility.Scope pipelineBypassScope() {
+        if (!shaderPackInUse()) {
+            return ClientRenderCompatibility.RenderTypeAdapter.super.pipelineBypassScope();
+        }
+        boolean previousBypass = ImmediateState.bypass;
+        ImmediateState.bypass = true;
+        return () -> ImmediateState.bypass = previousBypass;
     }
 
     private RenderType createOverlayRenderType(RenderType original) {

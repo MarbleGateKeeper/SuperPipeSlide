@@ -15,7 +15,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Restriction(require = @Condition(ModIntegration.Constants.IRIS))
 @Mixin(targets = "net.irisshaders.iris.shadows.ShadowRenderer")
 public abstract class IrisShadowRendererMixin {
-    @Inject(method = "renderShadows(Lnet/irisshaders/iris/mixin/LevelRendererAccessor;Lnet/minecraft/client/Camera;Lnet/minecraft/client/renderer/state/level/CameraRenderState;)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/feature/FeatureRenderDispatcher;renderAllFeatures()V", shift = At.Shift.AFTER), require = 0)
+    @Inject(method = "renderShadows(Lnet/irisshaders/iris/mixin/LevelRendererAccessor;Lnet/minecraft/client/Camera;Lnet/minecraft/client/renderer/state/level/CameraRenderState;)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/feature/FeatureRenderDispatcher;renderAllFeatures()V"), require = 0)
+    private void superpipeslide$renderShaderpackEntityShadows(@Coerce Object levelRenderer, Camera playerCamera, CameraRenderState renderState, CallbackInfo callbackInfo) {
+        ClientPipeRenderer.renderShaderpackEntityShadowPass(ClientPipeRenderer.activeRenderExtension(), playerCamera);
+    }
+
+    @Inject(method = "renderShadows(Lnet/irisshaders/iris/mixin/LevelRendererAccessor;Lnet/minecraft/client/Camera;Lnet/minecraft/client/renderer/state/level/CameraRenderState;)V", at = @At(value = "INVOKE", target = "Lnet/irisshaders/iris/shadows/ShadowRenderer;copyPreTranslucentDepth(Lnet/irisshaders/iris/mixin/LevelRendererAccessor;)V", shift = At.Shift.AFTER), require = 0)
     private void superpipeslide$renderPipeExternalShadows(@Coerce Object levelRenderer, Camera playerCamera, CameraRenderState renderState, CallbackInfo callbackInfo) {
         ClientPipeRenderer.activeRenderExtension().renderExternalShadowPass(playerCamera);
     }

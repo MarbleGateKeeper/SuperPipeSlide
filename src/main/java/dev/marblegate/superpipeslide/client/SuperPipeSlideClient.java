@@ -21,6 +21,7 @@ import dev.marblegate.superpipeslide.client.core.slide.ClientSlidePoseController
 import dev.marblegate.superpipeslide.client.core.sync.ClientDataResyncRequests;
 import dev.marblegate.superpipeslide.client.fullmap.screen.FullRouteMapScreen;
 import dev.marblegate.superpipeslide.client.renderer.anchor.ClientAnchorVisibilityRenderer;
+import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import dev.marblegate.superpipeslide.client.renderer.fold.ClientFoldTraversalEffectRenderer;
 import dev.marblegate.superpipeslide.client.renderer.fold.ClientFoldTraversalPostEffectRenderer;
 import dev.marblegate.superpipeslide.client.renderer.gaze.ClientGazeChoiceGeometryRenderer;
@@ -172,6 +173,9 @@ public class SuperPipeSlideClient {
 
         @SubscribeEvent
         public static void onExtractLevelRenderState(ExtractLevelRenderStateEvent event) {
+            if (ClientRenderCompatibility.isRenderingExternalShadowPass()) {
+                return;
+            }
             ClientPipeRenderer.extract(event);
             ClientAnchorVisibilityRenderer.extract(event);
             ClientSlideFeedbackGeometryRenderer.extract(event);
@@ -185,6 +189,9 @@ public class SuperPipeSlideClient {
 
         @SubscribeEvent
         public static void onSubmitCustomGeometry(SubmitCustomGeometryEvent event) {
+            if (ClientRenderCompatibility.isRenderingExternalShadowPass()) {
+                return;
+            }
             ClientPipeRenderer.submit(event);
             ClientAnchorVisibilityRenderer.submit(event);
             ClientSlideFeedbackGeometryRenderer.submit(event);
@@ -196,16 +203,25 @@ public class SuperPipeSlideClient {
 
         @SubscribeEvent
         public static void onRenderLevelAfterOpaqueBlocks(RenderLevelStageEvent.AfterOpaqueBlocks event) {
+            if (ClientRenderCompatibility.isRenderingExternalShadowPass()) {
+                return;
+            }
             ClientPipeRenderer.renderAfterOpaqueBlocks(event);
         }
 
         @SubscribeEvent
         public static void onRenderLevelAfterTranslucentFeatures(RenderLevelStageEvent.AfterTranslucentFeatures event) {
+            if (ClientRenderCompatibility.isRenderingExternalShadowPass()) {
+                return;
+            }
             ClientPipeRenderer.renderAfterTranslucentFeatures(event);
         }
 
         @SubscribeEvent
         public static void onRenderLevelAfter(RenderLevelStageEvent.AfterLevel event) {
+            if (ClientRenderCompatibility.isRenderingExternalShadowPass()) {
+                return;
+            }
             ProjectionWorldRenderer.renderAfterLevel(event);
         }
 

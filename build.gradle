@@ -18,6 +18,7 @@ sourceSets.main.resources {
 }
 
 def allIntegrationSourceSets = [
+        "sodium",
         "iris",
         "distanthorizons",
 ]
@@ -178,6 +179,10 @@ dependencies {
 
     // Compatibility Integration
     localImplementation("net.caffeinemc:sodium-neoforge:${sodium_version}")
+    if (hasIntegration("sodium")) {
+        sodiumCompileOnly("net.caffeinemc:sodium-neoforge-mod:${sodium_version}")
+    }
+
     if (hasIntegration("iris")) {
         irisCompileOnly("net.caffeinemc:sodium-neoforge-mod:${sodium_version}")
         irisLocalImplementation("maven.modrinth:iris:${iris_version}")
@@ -200,6 +205,10 @@ def integrationMixinBlocks = enabledIntegrationSourceSets
         }
         .join("\n\n")
 
+def sodiumConfigApiBlock = hasIntegration("sodium")
+        ? "[modproperties.${mod_id}]\n\"sodium:config_api_user\"=\"dev.marblegate.superpipeslide.integration.sodium.client.SuperPipeSlideSodiumConfig\""
+        : ""
+
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
     var replaceProperties = [
             minecraft_version      : minecraft_version,
@@ -210,6 +219,7 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
             mod_license            : mod_license,
             mod_version            : mod_version,
             integration_mixin_blocks: integrationMixinBlocks,
+            sodium_config_api_block: sodiumConfigApiBlock,
     ]
     inputs.properties replaceProperties
     expand replaceProperties

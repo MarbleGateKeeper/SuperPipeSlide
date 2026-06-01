@@ -43,6 +43,8 @@ description='''
 SuperPipeSlide adds anchor-based pipe routes that let players slide along pipe surfaces without vehicles.
 '''
 
+${sodium_config_api_block}
+
 # The [[mixins]] block allows you to declare your mixin config to FML so that it gets loaded.
 [[mixins]]
 config="${mod_id}.mixins.json"

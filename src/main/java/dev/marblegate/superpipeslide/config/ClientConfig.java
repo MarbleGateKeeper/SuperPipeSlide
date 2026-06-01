@@ -5,6 +5,10 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 public final class ClientConfig {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
+    public static final ModConfigSpec.EnumValue<ShaderpackPipeRenderMode> SHADERPACK_PIPE_RENDER_MODE = BUILDER
+            .comment("Controls how pipes are rendered when a shader pack integration is active. PERFORMANCE uses the optimized instanced renderer and is the default. NATIVE uses the integration's native submit path and usually matches shader pack effects more closely, but may cost more performance.")
+            .defineEnum("shaderpackPipeRenderMode", ShaderpackPipeRenderMode.PERFORMANCE);
+
     public static final ModConfigSpec.BooleanValue ENABLE_SLIDE_CAMERA_FEEDBACK = BUILDER
             .comment("Whether sliding may adjust camera pitch and roll for slope, turning, and upcoming sharp-turn anticipation. Disable this to keep sliding mechanics and visual effects while removing camera tilt feedback.")
             .define("enableSlideCameraFeedback", true);
@@ -38,6 +42,10 @@ public final class ClientConfig {
             .defineInRange("projectionNetworkImageMaxPixels", 2048 * 2048, 64 * 64, 4096 * 4096);
 
     public static final ModConfigSpec SPEC = BUILDER.build();
+
+    public static void save() {
+        SPEC.save();
+    }
 
     private ClientConfig() {}
 }

@@ -20,12 +20,22 @@ layout(std140) uniform PipeInstances {
     vec4 InstanceData[PIPE_INSTANCE_CHUNK_CAPACITY * PIPE_INSTANCE_RECORD_VEC4S];
 };
 
-#ifndef EMISSIVE
+layout(std140) uniform PipeRenderState {
+    vec4 PipeRenderStateData;
+    vec4 PipeRenderCameraData;
+    vec4 PipeExternalLightingData;
+    mat4 PipeShadowViewProjection;
+};
+
+#if !defined(SHADOW_PASS) && !defined(EMISSIVE)
 uniform sampler2D Sampler2;
 #endif
 
+#ifndef SHADOW_PASS
 out float sphericalVertexDistance;
 out float cylindricalVertexDistance;
+out vec3 pipeShadowPosition;
+out vec3 pipeNormal;
 
 #ifdef PER_FACE_LIGHTING
 out vec4 vertexPerFaceColorBack;
@@ -37,8 +47,47 @@ out vec4 vertexColor;
 #ifndef EMISSIVE
 out vec4 lightMapColor;
 #endif
+#endif
 
 out vec2 texCoord0;
+
+float superpipeslide_fract(float value) {
+    return value - floor(value);
+}
+
+float superpipeslide_impulse_wave(float value) {
+    float phase = superpipeslide_fract(value);
+    return pow(max(0.0, 1.0 - phase), 2.7);
+}
+
+float superpipeslide_soft_pulse(float value) {
+    float phase = superpipeslide_fract(value);
+    return 0.5 + 0.5 * cos((phase - 0.5) * 6.28318530718);
+}
+
+float superpipeslide_direction_pulse(float value) {
+    float phase = superpipeslide_fract(value);
+    if (phase < 0.18) {
+        return 1.0 - phase;
+    }
+    return max(0.0, 1.0 - (phase - 0.18) / 0.82) * 0.24;
+}
+
+float superpipeslide_marker_factor(int animationKind, float animationTime, float animationPhase) {
+    if (PipeRenderStateData.y >= 0.5) {
+        return 1.0;
+    }
+    if (animationKind == 1) {
+        return 0.72 + 0.48 * superpipeslide_impulse_wave(animationTime * 1.35 - animationPhase);
+    }
+    if (animationKind == 2) {
+        return 0.78 + 0.34 * superpipeslide_soft_pulse(animationTime * 0.66 - animationPhase);
+    }
+    if (animationKind == 3) {
+        return 0.82 + 0.26 * superpipeslide_direction_pulse(animationTime * 0.48 - animationPhase);
+    }
+    return 1.0;
+}
 
 void main() {
     int base = gl_InstanceID * PIPE_INSTANCE_RECORD_VEC4S;
@@ -57,6 +106,12 @@ void main() {
     vec3 pos = mix(top, bottom, corner.y) + ModelOffset;
     gl_Position = ProjMat * ModelViewMat * vec4(pos, 1.0);
 
+    float animationMeta = mod(normalData.w, 8.0);
+    int animationKind = int(floor(animationMeta + 0.0001));
+    float animationPhase = fract(animationMeta) * 8.0;
+    color.rgb *= superpipeslide_marker_factor(animationKind, PipeRenderStateData.x, animationPhase);
+
+#ifndef SHADOW_PASS
     sphericalVertexDistance = fog_spherical_distance(pos);
     cylindricalVertexDistance = fog_cylindrical_distance(pos);
 
@@ -66,6 +121,8 @@ void main() {
     } else {
         normal = normalize(normal);
     }
+    pipeShadowPosition = pos;
+    pipeNormal = normal;
 
 #if defined(NO_CARDINAL_LIGHTING)
     vertexColor = color;
@@ -83,6 +140,7 @@ void main() {
     vec2 packedLight = mix(topLight, bottomLight, corner.y);
     lightMapColor = sample_lightmap(Sampler2, ivec2(packedLight + vec2(0.5)));
 #endif
+#endif
 
     float u = mix(p0.w, p1.w, corner.x);
     float v = mix(p2.w, p3.w, corner.y);
@@ -90,5 +148,15 @@ void main() {
 
 #ifdef APPLY_TEXTURE_MATRIX
     texCoord0 = (TextureMat * vec4(texCoord0, 0.0, 1.0)).xy;
+#endif
+
+#ifdef SHADOW_PASS
+    float shadowMapBias = PipeExternalLightingData.w;
+    if (shadowMapBias > 0.0) {
+        float vertexRadius = length(gl_Position.xy);
+        float distortFactor = vertexRadius * shadowMapBias + (1.0 - shadowMapBias);
+        gl_Position.xy /= distortFactor;
+    }
+    gl_Position.z *= 0.2;
 #endif
 }

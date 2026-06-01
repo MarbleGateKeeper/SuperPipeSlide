@@ -1333,5 +1333,15 @@
   "screen.superpipeslide.projection_designer.tile_gap": "Tile Gap",
   "screen.superpipeslide.projection_image.not_image": "Not an Image",
   "screen.superpipeslide.projection_image.decode_failed": "Decode Failed",
-  "screen.superpipeslide.projection_image.webp_unsupported": "WebP Unsupported"
+  "screen.superpipeslide.projection_image.webp_unsupported": "WebP Unsupported",
+  "message.superpipeslide.shaderpack_pipe_performance_mode": "SuperPipeSlide is using Performance mode for pipes with the active shader pack. If pipes or shadows look wrong, open Sodium Video Settings > SuperPipeSlide and switch Shader Pack Pipe Render Mode to Native.",
+  "sodium.options.superpipeslide.page": "SuperPipeSlide",
+  "sodium.options.superpipeslide.group.shaderpack": "Shader Pack Pipes",
+  "sodium.options.superpipeslide.shaderpack_pipe_render_mode": "Shader Pack Pipe Render Mode",
+  "sodium.options.superpipeslide.shaderpack_pipe_render_mode.performance": "Performance",
+  "sodium.options.superpipeslide.shaderpack_pipe_render_mode.native": "Native",
+  "sodium.options.superpipeslide.shaderpack_pipe_render_mode.tooltip.performance": "Uses SuperPipeSlide's optimized instanced pipe renderer. This is faster and works well for many shader packs, but some packs may show different pipe materials or shadow behavior.",
+  "sodium.options.superpipeslide.shaderpack_pipe_render_mode.tooltip.native": "Submits pipes through the shader pack integration as ordinary entity geometry. This usually gives better shader pack compatibility and more native-looking effects, but can cost more performance with many pipes.",
+  "superpipeslide.configuration.shaderpackPipeRenderMode": "Shader Pack Pipe Render Mode",
+  "superpipeslide.configuration.shaderpackPipeRenderMode.tooltip": "Controls how pipes are rendered when a shader pack integration is active. Performance mode is faster; Native mode usually matches shader pack effects more closely at a higher rendering cost."
 }

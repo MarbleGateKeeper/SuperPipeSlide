@@ -261,7 +261,8 @@ final class ProjectionGpuBatchCache {
                         ? (RenderSystem.outputDepthTextureOverride != null ? RenderSystem.outputDepthTextureOverride : target.getDepthTextureView())
                         : null;
                 CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
-                try (RenderPass renderPass = encoder.createRenderPass(
+                try (ClientRenderCompatibility.Scope ignored = ClientRenderCompatibility.pipelineBypassScope();
+                        RenderPass renderPass = encoder.createRenderPass(
                         () -> "SuperPipeSlide projection " + this.renderType,
                         colorTexture,
                         OptionalInt.empty(),

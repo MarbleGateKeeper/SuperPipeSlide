@@ -15,6 +15,7 @@ public final class ClientRenderCompatibility {
             RenderSetup.builder(RenderPipelines.LIGHTNING)
                     .sortOnUpload()
                     .createRenderSetup());
+    private static final Scope NOOP_SCOPE = () -> {};
     private static volatile RenderTypeAdapter renderTypeAdapter = RenderTypeAdapter.IDENTITY;
 
     private ClientRenderCompatibility() {}
@@ -25,6 +26,10 @@ public final class ClientRenderCompatibility {
 
     public static void clearCaches() {
         renderTypeAdapter.clearCaches();
+    }
+
+    public static boolean isRenderingExternalShadowPass() {
+        return renderTypeAdapter.isRenderingExternalShadowPass();
     }
 
     public static String renderStateKey() {
@@ -44,6 +49,10 @@ public final class ClientRenderCompatibility {
 
     public static RenderType effectQuads() {
         return EFFECT_QUADS;
+    }
+
+    public static Scope pipelineBypassScope() {
+        return renderTypeAdapter.pipelineBypassScope();
     }
 
     public static MultiBufferSource textBufferSource(MultiBufferSource delegate) {
@@ -71,10 +80,23 @@ public final class ClientRenderCompatibility {
             return "vanilla";
         }
 
+        default boolean isRenderingExternalShadowPass() {
+            return false;
+        }
+
         default RenderType world(RenderType original) {
             return original;
         }
 
         default void clearCaches() {}
+
+        default Scope pipelineBypassScope() {
+            return NOOP_SCOPE;
+        }
+    }
+
+    public interface Scope extends AutoCloseable {
+        @Override
+        void close();
     }
 }

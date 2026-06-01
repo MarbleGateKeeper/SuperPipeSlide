@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import dev.marblegate.superpipeslide.client.core.projection.render.ProjectionRenderFrameContext;
+import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -15,6 +16,9 @@ public final class ProjectionWorldRenderer {
     private ProjectionWorldRenderer() {}
 
     public static void renderAfterLevel(RenderLevelStageEvent.AfterLevel event) {
+        if (ClientRenderCompatibility.isRenderingExternalShadowPass()) {
+            return;
+        }
         boolean hasStationProjectors = StationNameProjectorRenderer.hasQueuedProjectors();
         boolean hasPlatformProjectors = PlatformProjectorRenderer.hasQueuedProjectors();
         if (!hasStationProjectors && !hasPlatformProjectors) {
@@ -28,7 +32,8 @@ public final class ProjectionWorldRenderer {
         modelViewStack.pushMatrix();
         modelViewStack.mul(event.getModelViewMatrix());
         modelViewStack.translate((float) -camera.x, (float) -camera.y, (float) -camera.z);
-        try (ByteBufferBuilder buffer = new ByteBufferBuilder(RenderType.BIG_BUFFER_SIZE)) {
+        try (ClientRenderCompatibility.Scope ignored = ClientRenderCompatibility.pipelineBypassScope();
+                ByteBufferBuilder buffer = new ByteBufferBuilder(RenderType.BIG_BUFFER_SIZE)) {
             ProjectionRenderFrameContext.begin(System.currentTimeMillis());
             MultiBufferSource.BufferSource bufferSource = MultiBufferSource.immediate(buffer);
             ImmediateSubmitNodeCollector collector = new ImmediateSubmitNodeCollector(bufferSource);
