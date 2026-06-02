@@ -2,6 +2,7 @@
 
 #moj_import <minecraft:fog.glsl>
 #moj_import <minecraft:dynamictransforms.glsl>
+#moj_import <minecraft:sample_lightmap.glsl>
 
 uniform sampler2D Sampler0;
 
@@ -17,6 +18,7 @@ layout(std140) uniform PipeRenderState {
 };
 
 #if !defined(SHADOW_PASS) && !defined(EMISSIVE)
+uniform sampler2D Sampler2;
 uniform sampler2D PipeShadowSampler;
 uniform sampler2D PipeShadowWithPipesSampler;
 #endif
@@ -37,6 +39,7 @@ in vec4 vertexColor;
 
 #ifndef EMISSIVE
 in vec4 lightMapColor;
+in vec2 lightMapUv;
 #endif
 #endif
 
@@ -45,6 +48,8 @@ in vec2 texCoord0;
 out vec4 fragColor;
 
 #if !defined(SHADOW_PASS) && !defined(EMISSIVE)
+const float SUPERPIPESLIDE_LIGHTMAP_MAX = 240.0;
+
 float superpipeslide_shadow_compare(sampler2D shadowSampler, vec2 uv, float currentDepth, float bias) {
     return currentDepth <= texture(shadowSampler, uv).r + bias ? 1.0 : 0.0;
 }
@@ -138,6 +143,14 @@ float superpipeslide_shadow_factor(vec3 shadowPosition, vec3 normal) {
     }
     return mix(1.0 - PipeExternalLightingData.x, 1.0, lit);
 }
+
+vec4 superpipeslide_shadowed_lightmap(float shadowFactor) {
+    if (shadowFactor >= 0.999) {
+        return lightMapColor;
+    }
+    vec2 shadowedLightMapUv = clamp(vec2(lightMapUv.x, lightMapUv.y * shadowFactor), vec2(0.0), vec2(SUPERPIPESLIDE_LIGHTMAP_MAX));
+    return sample_lightmap(Sampler2, ivec2(shadowedLightMapUv + vec2(0.5)));
+}
 #endif
 
 void main() {
@@ -152,7 +165,7 @@ void main() {
     fragColor = vec4(1.0);
 #else
 #ifndef EMISSIVE
-    color.rgb *= superpipeslide_shadow_factor(pipeShadowPosition, pipeNormal);
+    float shadowFactor = superpipeslide_shadow_factor(pipeShadowPosition, pipeNormal);
 #endif
 #ifdef PER_FACE_LIGHTING
     vec4 faceVertexColor = gl_FrontFacing ? vertexPerFaceColorFront : vertexPerFaceColorBack;
@@ -169,7 +182,7 @@ void main() {
 
     color *= faceVertexColor * ColorModulator;
 #ifndef EMISSIVE
-    color *= lightMapColor;
+    color *= superpipeslide_shadowed_lightmap(shadowFactor);
 #endif
 
     fragColor = apply_fog(color, sphericalVertexDistance, cylindricalVertexDistance, FogEnvironmentalStart, FogEnvironmentalEnd, FogRenderDistanceStart, FogRenderDistanceEnd, FogColor);

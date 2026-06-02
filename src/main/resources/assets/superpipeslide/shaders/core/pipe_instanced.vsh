@@ -46,6 +46,7 @@ out vec4 vertexColor;
 
 #ifndef EMISSIVE
 out vec4 lightMapColor;
+out vec2 lightMapUv;
 #endif
 #endif
 
@@ -138,6 +139,7 @@ void main() {
     vec2 topLight = mix(light01.xy, light01.zw, corner.x);
     vec2 bottomLight = mix(light32.xy, light32.zw, corner.x);
     vec2 packedLight = mix(topLight, bottomLight, corner.y);
+    lightMapUv = packedLight;
     lightMapColor = sample_lightmap(Sampler2, ivec2(packedLight + vec2(0.5)));
 #endif
 #endif
