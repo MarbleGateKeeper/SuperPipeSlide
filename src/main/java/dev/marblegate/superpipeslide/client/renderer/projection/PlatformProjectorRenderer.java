@@ -666,8 +666,14 @@ public final class PlatformProjectorRenderer {
         switch (component.type()) {
             case CUSTOM_TEXT -> drawComponentLine(poseStack, collector, font, component.text(), rect, (ProjectionComponentSettings.Text) settings);
             case PLATFORM_TITLE_GROUP -> drawPlatformTitle(poseStack, collector, font, rect, info, (ProjectionComponentSettings.PlatformTitleGroup) settings);
-            case PLATFORM_BADGE -> drawComponentLine(poseStack, collector, font, badgeLabel(info, (ProjectionComponentSettings.PlatformBadge) settings), rect, textSettings(((ProjectionComponentSettings.PlatformBadge) settings).textColor(), ((ProjectionComponentSettings.PlatformBadge) settings).fontSize(), ProjectionTextAlign.CENTER, ProjectionOverflowMode.SCALE));
-            case PLATFORM_DIRECTION_TITLE -> drawComponentLine(poseStack, collector, font, directionLabel(info, (ProjectionComponentSettings.PlatformDirection) settings), rect, textSettings(((ProjectionComponentSettings.PlatformDirection) settings).textColor(), ((ProjectionComponentSettings.PlatformDirection) settings).fontSize(), ((ProjectionComponentSettings.PlatformDirection) settings).align(), ((ProjectionComponentSettings.PlatformDirection) settings).overflow()));
+            case PLATFORM_BADGE -> {
+                ProjectionComponentSettings.PlatformBadge badge = (ProjectionComponentSettings.PlatformBadge) settings;
+                drawComponentLine(poseStack, collector, font, badgeLabel(info, badge), rect, badge.textColor(), badge.fontSize(), ProjectionTextAlign.CENTER, ProjectionOverflowMode.SCALE);
+            }
+            case PLATFORM_DIRECTION_TITLE -> {
+                ProjectionComponentSettings.PlatformDirection direction = (ProjectionComponentSettings.PlatformDirection) settings;
+                drawComponentLine(poseStack, collector, font, directionLabel(info, direction), rect, direction.textColor(), direction.fontSize(), direction.align(), direction.overflow());
+            }
             case PLATFORM_STATUS_TAGS -> drawStatusTagText(poseStack, collector, font, rect, info, (ProjectionComponentSettings.PlatformStatusTags) settings);
             case PLATFORM_LINE_CURRENT, PLATFORM_LINE_BAND, PLATFORM_TERMINAL_STRIP -> drawLineText(poseStack, collector, font, rect, info, (ProjectionComponentSettings.PlatformLine) settings);
             case PLATFORM_LINE_ICON -> drawLineIconText(poseStack, collector, font, rect, info, (ProjectionComponentSettings.PlatformLineIcon) settings);
@@ -816,7 +822,8 @@ public final class PlatformProjectorRenderer {
             return;
         }
         String key = state.messageKey() == null || state.messageKey().isBlank() ? "screen.superpipeslide.projection_image.failed" : state.messageKey();
-        drawComponentLine(poseStack, collector, font, Component.translatable(key).getString(), new ComponentRect(rect.x() + rect.width() * 0.06F, rect.y() + rect.height() * 0.10F, rect.width() * 0.88F, rect.height() * 0.32F), textSettings(loading ? 0xFF37C3BB : 0xFFFF8A6A, Math.min(0.035F, Math.max(0.012F, rect.height() * 0.16F)), ProjectionTextAlign.CENTER, ProjectionOverflowMode.SCALE));
+        drawComponentLine(poseStack, collector, font, Component.translatable(key).getString(), new ComponentRect(rect.x() + rect.width() * 0.06F, rect.y() + rect.height() * 0.10F, rect.width() * 0.88F, rect.height() * 0.32F),
+                loading ? 0xFF37C3BB : 0xFFFF8A6A, Math.min(0.035F, Math.max(0.012F, rect.height() * 0.16F)), ProjectionTextAlign.CENTER, ProjectionOverflowMode.SCALE);
     }
 
     private static boolean shouldShowNetworkPlaceholder(ProjectionComponentSettings.NetworkImage settings, ProjectionNetworkImageCache.State state) {
@@ -955,13 +962,11 @@ public final class PlatformProjectorRenderer {
     }
 
     private static void drawPlatformTitleHorizontal(PoseStack poseStack, SubmitNodeCollector collector, Font font, ComponentRect rect, String primary, String secondary, ProjectionComponentSettings.PlatformTitleGroup settings) {
-        ProjectionComponentSettings.Text primaryText = textSettings(settings.primaryColor(), settings.primaryFontSize(), settings.align(), settings.primaryOverflow());
-        ProjectionComponentSettings.Text secondaryText = textSettings(settings.secondaryColor(), settings.secondaryFontSize(), settings.align(), settings.secondaryOverflow());
         if (secondary == null || secondary.isBlank()) {
-            ProjectionComponentSettings.Text text = settings.missingSecondaryMode() == ProjectionComponentSettings.MissingTranslationMode.EXPAND_PRIMARY
-                    ? textSettings(settings.primaryColor(), settings.primaryFontSize() * settings.missingPrimaryScale(), settings.align(), settings.primaryOverflow())
-                    : primaryText;
-            drawComponentLine(poseStack, collector, font, primary, rect, text);
+            float fontSize = settings.missingSecondaryMode() == ProjectionComponentSettings.MissingTranslationMode.EXPAND_PRIMARY
+                    ? settings.primaryFontSize() * settings.missingPrimaryScale()
+                    : settings.primaryFontSize();
+            drawComponentLine(poseStack, collector, font, primary, rect, settings.primaryColor(), fontSize, settings.align(), settings.primaryOverflow());
             return;
         }
         float primaryH = settings.primaryFontSize();
@@ -969,15 +974,15 @@ public final class PlatformProjectorRenderer {
         float gap = settings.gap();
         float total = Math.min(rect.height(), primaryH + secondaryH + gap);
         float top = rect.top() - Math.max(0.0F, rect.height() - total) * 0.5F;
-        drawComponentLine(poseStack, collector, font, primary, new ComponentRect(rect.x(), top - primaryH, rect.width(), primaryH), primaryText);
-        drawComponentLine(poseStack, collector, font, secondary, new ComponentRect(rect.x(), top - primaryH - gap - secondaryH, rect.width(), secondaryH), secondaryText);
+        drawComponentLine(poseStack, collector, font, primary, new ComponentRect(rect.x(), top - primaryH, rect.width(), primaryH), settings.primaryColor(), settings.primaryFontSize(), settings.align(), settings.primaryOverflow());
+        drawComponentLine(poseStack, collector, font, secondary, new ComponentRect(rect.x(), top - primaryH - gap - secondaryH, rect.width(), secondaryH), settings.secondaryColor(), settings.secondaryFontSize(), settings.align(), settings.secondaryOverflow());
     }
 
     private static void drawLineText(PoseStack poseStack, SubmitNodeCollector collector, Font font, ComponentRect rect, PlatformRenderInfo info, ProjectionComponentSettings.PlatformLine settings) {
         if (!settings.showLabel()) {
             return;
         }
-        info.line().ifPresent(line -> drawComponentLine(poseStack, collector, font, line.name(), rect, textSettings(settings.textColor(), settings.fontSize(), ProjectionTextAlign.CENTER, settings.overflow())));
+        info.line().ifPresent(line -> drawComponentLine(poseStack, collector, font, line.name(), rect, settings.textColor(), settings.fontSize(), ProjectionTextAlign.CENTER, settings.overflow()));
     }
 
     private static void drawLineIconText(PoseStack poseStack, SubmitNodeCollector collector, Font font, ComponentRect rect, PlatformRenderInfo info, ProjectionComponentSettings.PlatformLineIcon settings) {
@@ -986,7 +991,7 @@ public final class PlatformProjectorRenderer {
         }
         info.line().ifPresent(line -> {
             String label = shortLabel(line.name());
-            drawComponentLine(poseStack, collector, font, label, rect, textSettings(settings.textColor(), settings.fontSize(), ProjectionTextAlign.CENTER, ProjectionOverflowMode.SCALE));
+            drawComponentLine(poseStack, collector, font, label, rect, settings.textColor(), settings.fontSize(), ProjectionTextAlign.CENTER, ProjectionOverflowMode.SCALE);
         });
     }
 
@@ -1009,11 +1014,11 @@ public final class PlatformProjectorRenderer {
                     poseStack.pushPose();
                     poseStack.translate(textRect.x() + textRect.width() * 0.5F, textRect.y() + textRect.height() * 0.5F, 0.0F);
                     poseStack.mulPose(Axis.ZP.rotationDegrees(text.rotationDegrees()));
-                    drawComponentLine(poseStack, collector, font, text.value(), new ComponentRect(-textRect.width() * 0.5F, -textRect.height() * 0.5F, textRect.width(), textRect.height()), textSettings(text.color(), text.fontSize(), text.align(), text.overflow()));
+                    drawComponentLine(poseStack, collector, font, text.value(), new ComponentRect(-textRect.width() * 0.5F, -textRect.height() * 0.5F, textRect.width(), textRect.height()), text.color(), text.fontSize(), text.align(), text.overflow());
                     poseStack.popPose();
                     continue;
                 }
-                drawComponentLine(poseStack, collector, font, text.value(), textRect, textSettings(text.color(), text.fontSize(), text.align(), text.overflow()));
+                drawComponentLine(poseStack, collector, font, text.value(), textRect, text.color(), text.fontSize(), text.align(), text.overflow());
             }
         }
     }
@@ -1022,55 +1027,58 @@ public final class PlatformProjectorRenderer {
         PlatformStatusTagProjectionEngine.Layout layout = info.statusTagLayout(settings, rect.width(), rect.height());
         for (PlatformStatusTagProjectionEngine.Primitive primitive : layout.primitives()) {
             if (primitive instanceof PlatformStatusTagProjectionEngine.Text text) {
-                drawComponentLine(poseStack, collector, font, text.value(), normalizedRect(rect, text.x(), text.y(), text.width(), text.height()), textSettings(text.color(), text.fontSize(), text.align(), text.overflow()));
+                drawComponentLine(poseStack, collector, font, text.value(), normalizedRect(rect, text.x(), text.y(), text.width(), text.height()), text.color(), text.fontSize(), text.align(), text.overflow());
             }
         }
     }
 
     private static void drawComponentLine(PoseStack poseStack, SubmitNodeCollector collector, Font font, String text, ComponentRect rect, ProjectionComponentSettings.Text settings) {
+        drawComponentLine(poseStack, collector, font, text, rect, settings.textColor(), settings.fontSize(), settings.align(), settings.overflow(), settings.orientation());
+    }
+
+    private static void drawComponentLine(PoseStack poseStack, SubmitNodeCollector collector, Font font, String text, ComponentRect rect, int color, float fontSize, ProjectionTextAlign align, ProjectionOverflowMode overflow) {
+        drawComponentLine(poseStack, collector, font, text, rect, color, fontSize, align, overflow, ProjectionComponentSettings.TextOrientation.HORIZONTAL);
+    }
+
+    private static void drawComponentLine(PoseStack poseStack, SubmitNodeCollector collector, Font font, String text, ComponentRect rect, int color, float fontSize, ProjectionTextAlign align, ProjectionOverflowMode overflow, ProjectionComponentSettings.TextOrientation orientation) {
         String value = text == null ? "" : text.trim();
         if (value.isEmpty()) {
             return;
         }
-        if (settings.orientation() == ProjectionComponentSettings.TextOrientation.ROTATE_CW || settings.orientation() == ProjectionComponentSettings.TextOrientation.ROTATE_CCW) {
+        if (orientation == ProjectionComponentSettings.TextOrientation.ROTATE_CW || orientation == ProjectionComponentSettings.TextOrientation.ROTATE_CCW) {
             poseStack.pushPose();
             poseStack.translate(rect.x() + rect.width() * 0.5F, rect.y() + rect.height() * 0.5F, 0.0F);
-            poseStack.mulPose(Axis.ZP.rotationDegrees(settings.orientation() == ProjectionComponentSettings.TextOrientation.ROTATE_CW ? -90.0F : 90.0F));
-            drawHorizontalComponentLine(poseStack, collector, font, value, new ComponentRect(-rect.height() * 0.5F, -rect.width() * 0.5F, rect.height(), rect.width()), settings);
+            poseStack.mulPose(Axis.ZP.rotationDegrees(orientation == ProjectionComponentSettings.TextOrientation.ROTATE_CW ? -90.0F : 90.0F));
+            drawHorizontalComponentLine(poseStack, collector, font, value, new ComponentRect(-rect.height() * 0.5F, -rect.width() * 0.5F, rect.height(), rect.width()), color, fontSize, align, overflow);
             poseStack.popPose();
             return;
         }
-        drawHorizontalComponentLine(poseStack, collector, font, value, rect, settings);
+        drawHorizontalComponentLine(poseStack, collector, font, value, rect, color, fontSize, align, overflow);
     }
 
-    private static void drawHorizontalComponentLine(PoseStack poseStack, SubmitNodeCollector collector, Font font, String value, ComponentRect rect, ProjectionComponentSettings.Text settings) {
-        float preferredScale = Math.max(0.004F, settings.fontSize() / Math.max(1.0F, font.lineHeight));
+    private static void drawHorizontalComponentLine(PoseStack poseStack, SubmitNodeCollector collector, Font font, String value, ComponentRect rect, int color, float fontSize, ProjectionTextAlign align, ProjectionOverflowMode overflowMode) {
+        float preferredScale = Math.max(0.004F, fontSize / Math.max(1.0F, font.lineHeight));
         float maxWidth = rect.width() * 0.92F;
-        boolean overflow = ProjectionTextMeasureCache.width(font, value) * preferredScale > maxWidth;
-        float scale = settings.overflow() == ProjectionOverflowMode.SCALE ? Math.min(preferredScale, maxWidth / Math.max(1.0F, ProjectionTextMeasureCache.width(font, value))) : preferredScale;
+        boolean overflowing = ProjectionTextMeasureCache.width(font, value) * preferredScale > maxWidth;
+        float scale = overflowMode == ProjectionOverflowMode.SCALE ? Math.min(preferredScale, maxWidth / Math.max(1.0F, ProjectionTextMeasureCache.width(font, value))) : preferredScale;
         scale = Math.max(0.004F, scale);
         float textHeight = font.lineHeight * scale;
         float topY = rect.y() + rect.height() * 0.5F + textHeight * 0.5F;
-        int color = settings.textColor();
-        if (settings.overflow() == ProjectionOverflowMode.MARQUEE && overflow) {
+        if (overflowMode == ProjectionOverflowMode.MARQUEE && overflowing) {
             drawMarqueeText(poseStack, collector, font, value, rect.x() + rect.width() * 0.04F, topY, scale, color, maxWidth, value.hashCode());
             return;
         }
-        if (settings.overflow() == ProjectionOverflowMode.HIDE && overflow) {
+        if (overflowMode == ProjectionOverflowMode.HIDE && overflowing) {
             return;
         }
-        String rendered = settings.overflow() == ProjectionOverflowMode.PLUS_COUNT && overflow ? ellipsizeForWorld(font, value, maxWidth / scale) : value;
+        String rendered = overflowMode == ProjectionOverflowMode.PLUS_COUNT && overflowing ? ellipsizeForWorld(font, value, maxWidth / scale) : value;
         float textWidth = ProjectionTextMeasureCache.width(font, rendered) * scale;
-        float x = switch (settings.align()) {
+        float x = switch (align) {
             case CENTER -> rect.x() + (rect.width() - textWidth) * 0.5F;
             case RIGHT -> rect.x() + rect.width() - textWidth - rect.width() * 0.04F;
             case LEFT -> rect.x() + rect.width() * 0.04F;
         };
         drawText(poseStack, collector, rendered, x, topY, scale, color, false);
-    }
-
-    private static ProjectionComponentSettings.Text textSettings(int color, float fontSize, ProjectionTextAlign align, ProjectionOverflowMode overflow) {
-        return new ProjectionComponentSettings.Text(ProjectionComponentType.CUSTOM_TEXT, "", "", color, fontSize, align, overflow, ProjectionComponentSettings.TextOrientation.HORIZONTAL, 0.02F, 1);
     }
 
     private static String badgeLabel(PlatformRenderInfo info, ProjectionComponentSettings.PlatformBadge settings) {
@@ -1519,7 +1527,7 @@ public final class PlatformProjectorRenderer {
     private static void drawTransferPrimitiveTexts(PoseStack poseStack, SubmitNodeCollector collector, Font font, ComponentRect rect, PlatformTransferProjectionEngine.Layout layout) {
         for (PlatformTransferProjectionEngine.Primitive primitive : layout.primitives()) {
             if (primitive instanceof PlatformTransferProjectionEngine.Text text) {
-                drawComponentLine(poseStack, collector, font, text.value(), normalizedRect(rect, text.x(), text.y(), text.width(), text.height()), textSettings(text.color(), text.fontSize(), text.align(), text.overflow()));
+                drawComponentLine(poseStack, collector, font, text.value(), normalizedRect(rect, text.x(), text.y(), text.width(), text.height()), text.color(), text.fontSize(), text.align(), text.overflow());
             }
         }
     }

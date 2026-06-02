@@ -20,8 +20,11 @@ import org.joml.Vector3f;
 
 public final class ProjectionWorldTextRenderer {
     private static final Matrix4f IDENTITY_POSE = new Matrix4f();
+    private static final GlyphVertex[] EMPTY_GLYPH_VERTICES = new GlyphVertex[0];
     private static final int MAX_PREPARED_TEXT_ENTRIES = 4096;
     private static final Map<PreparedTextKey, PreparedTextBatch> PREPARED_TEXT = new LinkedHashMap<>(256, 0.75F, true);
+    private static final ThreadLocal<TextRenderScratch> TEXT_RENDER_SCRATCH = ThreadLocal.withInitial(TextRenderScratch::new);
+    private static final ThreadLocal<PreparedTextLookupKey> PREPARED_TEXT_LOOKUP = ThreadLocal.withInitial(PreparedTextLookupKey::new);
 
     private ProjectionWorldTextRenderer() {}
 
@@ -29,6 +32,8 @@ public final class ProjectionWorldTextRenderer {
         synchronized (PREPARED_TEXT) {
             PREPARED_TEXT.clear();
         }
+        TEXT_RENDER_SCRATCH.remove();
+        PREPARED_TEXT_LOOKUP.remove();
         ClientRenderCompatibility.clearCaches();
     }
 
@@ -65,39 +70,52 @@ public final class ProjectionWorldTextRenderer {
         poseStack.pushPose();
         poseStack.translate(x, topY, 0.0F);
         poseStack.scale(scale, -scale, scale);
-        for (Map.Entry<RenderType, List<GlyphVertex>> entry : prepared.byType().entrySet()) {
-            List<GlyphVertex> typedVertices = entry.getValue();
-            ClientRenderCompatibility.submitCustomGeometry(collector, poseStack, ClientRenderCompatibility.text(entry.getKey()), (pose, buffer) -> {
-                ClippedTextVertexConsumer clipped = new ClippedTextVertexConsumer(buffer, pose.pose(), localClip, minX, maxX, canvasClip, worldToCanvas, canvasMinX, canvasMinY, canvasMaxX, canvasMaxY);
-                for (GlyphVertex vertex : typedVertices) {
-                    vertex.emitTo(clipped);
-                }
-            });
+        PreparedTextLayer[] layers = prepared.layers();
+        for (int layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+            PreparedTextLayer layer = layers[layerIndex];
+            TextGeometryRenderer renderer = TEXT_RENDER_SCRATCH.get().renderer;
+            renderer.setup(layer.vertices(), localClip, minX, maxX, canvasClip, worldToCanvas, canvasMinX, canvasMinY, canvasMaxX, canvasMaxY);
+            try {
+                ClientRenderCompatibility.submitCustomGeometry(collector, poseStack, ClientRenderCompatibility.text(layer.renderType()), renderer);
+            } finally {
+                renderer.reset();
+            }
         }
         poseStack.popPose();
     }
 
     private static PreparedTextBatch prepare(Font font, String text, int color, boolean shadow) {
-        PreparedTextKey key = new PreparedTextKey(System.identityHashCode(font), text, color, shadow);
-        synchronized (PREPARED_TEXT) {
-            PreparedTextBatch cached = PREPARED_TEXT.get(key);
-            if (cached != null) {
-                return cached;
+        int fontIdentity = System.identityHashCode(font);
+        PreparedTextLookupKey lookupKey = PREPARED_TEXT_LOOKUP.get().set(fontIdentity, text, color, shadow);
+        try {
+            synchronized (PREPARED_TEXT) {
+                PreparedTextBatch cached = PREPARED_TEXT.get(lookupKey);
+                if (cached != null) {
+                    return cached;
+                }
             }
+            TextCaptureBufferSource bufferSource = new TextCaptureBufferSource();
+            font.drawInBatch(Component.literal(text).getVisualOrderText(), 0.0F, 0.0F, color, shadow, IDENTITY_POSE, bufferSource, Font.DisplayMode.NORMAL, 0, LightCoordsUtil.FULL_BRIGHT);
+            Map<RenderType, List<GlyphVertex>> byType = bufferSource.verticesByType();
+            PreparedTextLayer[] layers = new PreparedTextLayer[byType.size()];
+            int layerIndex = 0;
+            for (Map.Entry<RenderType, List<GlyphVertex>> entry : byType.entrySet()) {
+                layers[layerIndex] = new PreparedTextLayer(entry.getKey(), entry.getValue().toArray(GlyphVertex[]::new));
+                layerIndex++;
+            }
+            PreparedTextBatch batch = new PreparedTextBatch(layers);
+            synchronized (PREPARED_TEXT) {
+                PreparedTextBatch cached = PREPARED_TEXT.get(lookupKey);
+                if (cached != null) {
+                    return cached;
+                }
+                PREPARED_TEXT.put(new PreparedTextKey(fontIdentity, text, color, shadow), batch);
+                trimPreparedTextLocked();
+            }
+            return batch;
+        } finally {
+            lookupKey.clear();
         }
-        TextCaptureBufferSource bufferSource = new TextCaptureBufferSource();
-        font.drawInBatch(Component.literal(text).getVisualOrderText(), 0.0F, 0.0F, color, shadow, IDENTITY_POSE, bufferSource, Font.DisplayMode.NORMAL, 0, LightCoordsUtil.FULL_BRIGHT);
-        Map<RenderType, List<GlyphVertex>> immutable = new LinkedHashMap<>();
-        Map<RenderType, List<GlyphVertex>> byType = bufferSource.verticesByType();
-        for (Map.Entry<RenderType, List<GlyphVertex>> entry : byType.entrySet()) {
-            immutable.put(entry.getKey(), List.copyOf(entry.getValue()));
-        }
-        PreparedTextBatch batch = new PreparedTextBatch(java.util.Collections.unmodifiableMap(immutable));
-        synchronized (PREPARED_TEXT) {
-            PREPARED_TEXT.put(key, batch);
-            trimPreparedTextLocked();
-        }
-        return batch;
     }
 
     private static void trimPreparedTextLocked() {
@@ -227,32 +245,94 @@ public final class ProjectionWorldTextRenderer {
         @Override
         protected void finishVertex() {
             if (this.current != null) {
-                this.vertices.add(this.current.copy());
+                this.vertices.add(this.current);
             }
             super.finishVertex();
         }
     }
 
+    private static final class TextRenderScratch {
+        private final ClippedTextVertexConsumer clipped = new ClippedTextVertexConsumer();
+        private final TextGeometryRenderer renderer = new TextGeometryRenderer(this.clipped);
+    }
+
+    private static final class TextGeometryRenderer implements SubmitNodeCollector.CustomGeometryRenderer {
+        private final ClippedTextVertexConsumer clipped;
+        private GlyphVertex[] vertices = EMPTY_GLYPH_VERTICES;
+        private boolean localClip;
+        private float minX;
+        private float maxX;
+        private boolean canvasClip;
+        private Matrix4fc worldToCanvas;
+        private float canvasMinX;
+        private float canvasMinY;
+        private float canvasMaxX;
+        private float canvasMaxY;
+
+        private TextGeometryRenderer(ClippedTextVertexConsumer clipped) {
+            this.clipped = clipped;
+        }
+
+        private void setup(GlyphVertex[] vertices, boolean localClip, float minX, float maxX,
+                boolean canvasClip, Matrix4fc worldToCanvas, float canvasMinX, float canvasMinY, float canvasMaxX, float canvasMaxY) {
+            this.vertices = vertices;
+            this.localClip = localClip;
+            this.minX = minX;
+            this.maxX = maxX;
+            this.canvasClip = canvasClip;
+            this.worldToCanvas = worldToCanvas;
+            this.canvasMinX = canvasMinX;
+            this.canvasMinY = canvasMinY;
+            this.canvasMaxX = canvasMaxX;
+            this.canvasMaxY = canvasMaxY;
+        }
+
+        private void reset() {
+            this.vertices = EMPTY_GLYPH_VERTICES;
+            this.localClip = false;
+            this.minX = 0.0F;
+            this.maxX = 0.0F;
+            this.canvasClip = false;
+            this.worldToCanvas = null;
+            this.canvasMinX = 0.0F;
+            this.canvasMinY = 0.0F;
+            this.canvasMaxX = 0.0F;
+            this.canvasMaxY = 0.0F;
+        }
+
+        @Override
+        public void render(PoseStack.Pose pose, VertexConsumer buffer) {
+            this.clipped.setup(buffer, pose.pose(), this.localClip, this.minX, this.maxX, this.canvasClip, this.worldToCanvas, this.canvasMinX, this.canvasMinY, this.canvasMaxX, this.canvasMaxY);
+            try {
+                for (int i = 0; i < this.vertices.length; i++) {
+                    this.vertices[i].emitTo(this.clipped);
+                }
+            } finally {
+                this.clipped.reset();
+            }
+        }
+    }
+
     private static final class ClippedTextVertexConsumer extends TextVertexConsumerBase {
-        private final VertexConsumer delegate;
-        private final Matrix4fc transform;
-        private final boolean localClip;
-        private final float minX;
-        private final float maxX;
-        private final boolean canvasClip;
-        private final Matrix4fc worldToCanvas;
-        private final float canvasMinX;
-        private final float canvasMinY;
-        private final float canvasMaxX;
-        private final float canvasMaxY;
-        private final GlyphVertex[] quad = new GlyphVertex[] {
-                new GlyphVertex(), new GlyphVertex(), new GlyphVertex(), new GlyphVertex()
-        };
+        private VertexConsumer delegate;
+        private Matrix4fc transform;
+        private boolean localClip;
+        private float minX;
+        private float maxX;
+        private boolean canvasClip;
+        private Matrix4fc worldToCanvas;
+        private float canvasMinX;
+        private float canvasMinY;
+        private float canvasMaxX;
+        private float canvasMaxY;
+        private final GlyphVertex[] quad = newVertices(4);
+        private final GlyphVertex[] scratchA = newVertices(16);
+        private final GlyphVertex[] scratchB = newVertices(16);
         private final Vector3f transformed = new Vector3f();
         private final Vector3f canvasPoint = new Vector3f();
         private int vertexCount;
 
-        private ClippedTextVertexConsumer(VertexConsumer delegate, Matrix4fc transform, boolean localClip, float minX, float maxX,
+        private void setup(VertexConsumer delegate, Matrix4fc transform, boolean localClip, float minX, float maxX,
                 boolean canvasClip, Matrix4fc worldToCanvas, float canvasMinX, float canvasMinY, float canvasMaxX, float canvasMaxY) {
             this.delegate = delegate;
             this.transform = transform;
@@ -265,20 +345,29 @@ public final class ProjectionWorldTextRenderer {
             this.canvasMinY = canvasMinY;
             this.canvasMaxX = canvasMaxX;
             this.canvasMaxY = canvasMaxY;
+            this.vertexCount = 0;
+        }
+
+        private void reset() {
+            this.delegate = null;
+            this.transform = null;
+            this.localClip = false;
+            this.minX = 0.0F;
+            this.maxX = 0.0F;
+            this.canvasClip = false;
+            this.worldToCanvas = null;
+            this.canvasMinX = 0.0F;
+            this.canvasMinY = 0.0F;
+            this.canvasMaxX = 0.0F;
+            this.canvasMaxY = 0.0F;
+            this.current = null;
+            this.vertexCount = 0;
         }
 
         @Override
         public VertexConsumer addVertex(float x, float y, float z) {
             this.current = this.quad[this.vertexCount % 4];
-            this.current.x = x;
-            this.current.y = y;
-            this.current.z = z;
-            this.current.clipX = x;
-            this.current.clipY = y;
-            this.current.color = 0xFFFFFFFF;
-            this.current.u = 0.0F;
-            this.current.v = 0.0F;
-            this.current.light = LightCoordsUtil.FULL_BRIGHT;
+            this.current.set(x, y, z, x, y, 0xFFFFFFFF, 0.0F, 0.0F, LightCoordsUtil.FULL_BRIGHT);
             return this;
         }
 
@@ -292,76 +381,136 @@ public final class ProjectionWorldTextRenderer {
         }
 
         private void flushQuad() {
+            if (this.delegate == null || this.transform == null) {
+                return;
+            }
             if (!this.localClip) {
-                List<GlyphVertex> transformedVertices = new ArrayList<>(4);
-                boolean canvasInside = true;
-                for (GlyphVertex vertex : this.quad) {
-                    GlyphVertex transformedVertex = this.transform(vertex);
-                    transformedVertices.add(transformedVertex);
-                    if (this.canvasClip && (transformedVertex.clipX < this.canvasMinX
-                            || transformedVertex.clipX > this.canvasMaxX
-                            || transformedVertex.clipY < this.canvasMinY
-                            || transformedVertex.clipY > this.canvasMaxY)) {
-                        canvasInside = false;
-                    }
-                }
-                if (!this.canvasClip || canvasInside) {
-                    this.emitPolygon(transformedVertices);
+                int count = this.transformQuad(this.scratchA);
+                if (!this.canvasClip || this.allCanvasInside(this.scratchA, count)) {
+                    this.emitPolygon(this.scratchA, count);
                     return;
                 }
-                transformedVertices = clipTop(clipBottom(clipRight(clipLeft(transformedVertices, this.canvasMinX), this.canvasMaxX), this.canvasMinY), this.canvasMaxY);
-                if (transformedVertices.size() >= 3) {
-                    this.emitPolygon(transformedVertices);
+                GlyphVertex[] input = this.scratchA;
+                GlyphVertex[] output = this.scratchB;
+                count = clipLeft(input, count, output, this.canvasMinX);
+                GlyphVertex[] swap = input;
+                input = output;
+                output = swap;
+                count = clipRight(input, count, output, this.canvasMaxX);
+                swap = input;
+                input = output;
+                output = swap;
+                count = clipBottom(input, count, output, this.canvasMinY);
+                swap = input;
+                input = output;
+                output = swap;
+                count = clipTop(input, count, output, this.canvasMaxY);
+                swap = input;
+                input = output;
+                output = swap;
+                if (count >= 3) {
+                    this.emitPolygon(input, count);
                 }
                 return;
             }
-            List<GlyphVertex> vertices = new ArrayList<>(4);
-            for (GlyphVertex vertex : this.quad) {
-                vertices.add(vertex.copy());
+
+            GlyphVertex[] input = this.scratchA;
+            GlyphVertex[] output = this.scratchB;
+            for (int i = 0; i < 4; i++) {
+                input[i].set(this.quad[i]);
             }
-            if (this.localClip) {
-                vertices = clipRight(clipLeft(vertices, this.minX), this.maxX);
-                if (vertices.size() < 3) {
-                    return;
-                }
+            int count = clipLeft(input, 4, output, this.minX);
+            GlyphVertex[] swap = input;
+            input = output;
+            output = swap;
+            count = clipRight(input, count, output, this.maxX);
+            swap = input;
+            input = output;
+            output = swap;
+            if (count < 3) {
+                return;
             }
-            List<GlyphVertex> transformedVertices = new ArrayList<>(vertices.size());
-            for (GlyphVertex vertex : vertices) {
-                transformedVertices.add(this.transform(vertex));
-            }
+
+            output = input == this.scratchA ? this.scratchB : this.scratchA;
+            this.transformPolygon(input, count, output);
+            input = output;
             if (this.canvasClip) {
-                transformedVertices = clipTop(clipBottom(clipRight(clipLeft(transformedVertices, this.canvasMinX), this.canvasMaxX), this.canvasMinY), this.canvasMaxY);
-                if (transformedVertices.size() < 3) {
+                if (this.allCanvasInside(input, count)) {
+                    this.emitPolygon(input, count);
+                    return;
+                }
+                output = input == this.scratchA ? this.scratchB : this.scratchA;
+                count = clipLeft(input, count, output, this.canvasMinX);
+                swap = input;
+                input = output;
+                output = swap;
+                count = clipRight(input, count, output, this.canvasMaxX);
+                swap = input;
+                input = output;
+                output = swap;
+                count = clipBottom(input, count, output, this.canvasMinY);
+                swap = input;
+                input = output;
+                output = swap;
+                count = clipTop(input, count, output, this.canvasMaxY);
+                swap = input;
+                input = output;
+                output = swap;
+                if (count < 3) {
                     return;
                 }
             }
-            this.emitPolygon(transformedVertices);
+            this.emitPolygon(input, count);
         }
 
-        private GlyphVertex transform(GlyphVertex vertex) {
-            this.transform.transformPosition(vertex.x, vertex.y, vertex.z, this.transformed);
+        private int transformQuad(GlyphVertex[] output) {
+            for (int i = 0; i < 4; i++) {
+                this.transformInto(this.quad[i], output[i]);
+            }
+            return 4;
+        }
+
+        private void transformPolygon(GlyphVertex[] input, int count, GlyphVertex[] output) {
+            for (int i = 0; i < count; i++) {
+                this.transformInto(input[i], output[i]);
+            }
+        }
+
+        private void transformInto(GlyphVertex source, GlyphVertex target) {
+            this.transform.transformPosition(source.x, source.y, source.z, this.transformed);
             if (this.canvasClip) {
                 this.worldToCanvas.transformPosition(this.transformed.x(), this.transformed.y(), this.transformed.z(), this.canvasPoint);
-                return vertex.withPositionAndClip(this.transformed.x(), this.transformed.y(), this.transformed.z(), this.canvasPoint.x(), this.canvasPoint.y());
-            }
-            return vertex.withPositionAndClip(this.transformed.x(), this.transformed.y(), this.transformed.z(), this.transformed.x(), this.transformed.y());
-        }
-
-        private void emitPolygon(List<GlyphVertex> vertices) {
-            if (vertices.size() < 3) {
+                target.setPositionAndClipFrom(source, this.transformed.x(), this.transformed.y(), this.transformed.z(), this.canvasPoint.x(), this.canvasPoint.y());
                 return;
             }
-            if (vertices.size() == 4) {
-                for (GlyphVertex vertex : vertices) {
-                    this.emit(vertex);
+            target.setPositionAndClipFrom(source, this.transformed.x(), this.transformed.y(), this.transformed.z(), this.transformed.x(), this.transformed.y());
+        }
+
+        private boolean allCanvasInside(GlyphVertex[] vertices, int count) {
+            for (int i = 0; i < count; i++) {
+                GlyphVertex vertex = vertices[i];
+                if (vertex.clipX < this.canvasMinX || vertex.clipX > this.canvasMaxX || vertex.clipY < this.canvasMinY || vertex.clipY > this.canvasMaxY) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private void emitPolygon(GlyphVertex[] vertices, int count) {
+            if (count < 3) {
+                return;
+            }
+            if (count == 4) {
+                for (int i = 0; i < 4; i++) {
+                    this.emit(vertices[i]);
                 }
                 return;
             }
-            GlyphVertex first = vertices.getFirst();
-            for (int i = 1; i < vertices.size() - 1; i++) {
+            GlyphVertex first = vertices[0];
+            for (int i = 1; i < count - 1; i++) {
                 this.emit(first);
-                this.emit(vertices.get(i));
-                this.emit(vertices.get(i + 1));
+                this.emit(vertices[i]);
+                this.emit(vertices[i + 1]);
                 this.emit(first);
             }
         }
@@ -374,43 +523,108 @@ public final class ProjectionWorldTextRenderer {
         }
     }
 
-    private static List<GlyphVertex> clipLeft(List<GlyphVertex> input, float minX) {
-        return clip(input, vertex -> vertex.clipX >= minX, (from, to) -> interpolateForX(from, to, minX));
-    }
-
-    private static List<GlyphVertex> clipRight(List<GlyphVertex> input, float maxX) {
-        return clip(input, vertex -> vertex.clipX <= maxX, (from, to) -> interpolateForX(from, to, maxX));
-    }
-
-    private static List<GlyphVertex> clipBottom(List<GlyphVertex> input, float minY) {
-        return clip(input, vertex -> vertex.clipY >= minY, (from, to) -> interpolateForY(from, to, minY));
-    }
-
-    private static List<GlyphVertex> clipTop(List<GlyphVertex> input, float maxY) {
-        return clip(input, vertex -> vertex.clipY <= maxY, (from, to) -> interpolateForY(from, to, maxY));
-    }
-
-    private static List<GlyphVertex> clip(List<GlyphVertex> input, Inside inside, Intersector intersector) {
-        if (input.isEmpty()) {
-            return List.of();
+    private static GlyphVertex[] newVertices(int count) {
+        GlyphVertex[] vertices = new GlyphVertex[count];
+        for (int i = 0; i < count; i++) {
+            vertices[i] = new GlyphVertex();
         }
-        List<GlyphVertex> output = new ArrayList<>(input.size() + 2);
-        GlyphVertex previous = input.getLast();
-        boolean previousInside = inside.test(previous);
-        for (GlyphVertex current : input) {
-            boolean currentInside = inside.test(current);
+        return vertices;
+    }
+
+    private static int clipLeft(GlyphVertex[] input, int count, GlyphVertex[] output, float minX) {
+        if (count <= 0) {
+            return 0;
+        }
+        int out = 0;
+        GlyphVertex previous = input[count - 1];
+        boolean previousInside = previous.clipX >= minX;
+        for (int i = 0; i < count; i++) {
+            GlyphVertex current = input[i];
+            boolean currentInside = current.clipX >= minX;
             if (currentInside) {
                 if (!previousInside) {
-                    output.add(intersector.intersect(previous, current));
+                    output[out++].interpolateForXFrom(previous, current, minX);
                 }
-                output.add(current);
+                output[out++].set(current);
             } else if (previousInside) {
-                output.add(intersector.intersect(previous, current));
+                output[out++].interpolateForXFrom(previous, current, minX);
             }
             previous = current;
             previousInside = currentInside;
         }
-        return output;
+        return out;
+    }
+
+    private static int clipRight(GlyphVertex[] input, int count, GlyphVertex[] output, float maxX) {
+        if (count <= 0) {
+            return 0;
+        }
+        int out = 0;
+        GlyphVertex previous = input[count - 1];
+        boolean previousInside = previous.clipX <= maxX;
+        for (int i = 0; i < count; i++) {
+            GlyphVertex current = input[i];
+            boolean currentInside = current.clipX <= maxX;
+            if (currentInside) {
+                if (!previousInside) {
+                    output[out++].interpolateForXFrom(previous, current, maxX);
+                }
+                output[out++].set(current);
+            } else if (previousInside) {
+                output[out++].interpolateForXFrom(previous, current, maxX);
+            }
+            previous = current;
+            previousInside = currentInside;
+        }
+        return out;
+    }
+
+    private static int clipBottom(GlyphVertex[] input, int count, GlyphVertex[] output, float minY) {
+        if (count <= 0) {
+            return 0;
+        }
+        int out = 0;
+        GlyphVertex previous = input[count - 1];
+        boolean previousInside = previous.clipY >= minY;
+        for (int i = 0; i < count; i++) {
+            GlyphVertex current = input[i];
+            boolean currentInside = current.clipY >= minY;
+            if (currentInside) {
+                if (!previousInside) {
+                    output[out++].interpolateForYFrom(previous, current, minY);
+                }
+                output[out++].set(current);
+            } else if (previousInside) {
+                output[out++].interpolateForYFrom(previous, current, minY);
+            }
+            previous = current;
+            previousInside = currentInside;
+        }
+        return out;
+    }
+
+    private static int clipTop(GlyphVertex[] input, int count, GlyphVertex[] output, float maxY) {
+        if (count <= 0) {
+            return 0;
+        }
+        int out = 0;
+        GlyphVertex previous = input[count - 1];
+        boolean previousInside = previous.clipY <= maxY;
+        for (int i = 0; i < count; i++) {
+            GlyphVertex current = input[i];
+            boolean currentInside = current.clipY <= maxY;
+            if (currentInside) {
+                if (!previousInside) {
+                    output[out++].interpolateForYFrom(previous, current, maxY);
+                }
+                output[out++].set(current);
+            } else if (previousInside) {
+                output[out++].interpolateForYFrom(previous, current, maxY);
+            }
+            previous = current;
+            previousInside = currentInside;
+        }
+        return out;
     }
 
     private static float ratio(float from, float to, float target) {
@@ -421,53 +635,94 @@ public final class ProjectionWorldTextRenderer {
         return Math.max(0.0F, Math.min(1.0F, (target - from) / delta));
     }
 
-    private static GlyphVertex interpolateForX(GlyphVertex from, GlyphVertex to, float targetX) {
-        GlyphVertex result = interpolate(from, to, ratio(from.clipX, to.clipX, targetX));
-        result.clipX = targetX;
-        return result;
-    }
-
-    private static GlyphVertex interpolateForY(GlyphVertex from, GlyphVertex to, float targetY) {
-        GlyphVertex result = interpolate(from, to, ratio(from.clipY, to.clipY, targetY));
-        result.clipY = targetY;
-        return result;
-    }
-
-    private static GlyphVertex interpolate(GlyphVertex from, GlyphVertex to, float ratio) {
-        GlyphVertex result = new GlyphVertex();
-        result.x = lerp(from.x, to.x, ratio);
-        result.y = lerp(from.y, to.y, ratio);
-        result.z = lerp(from.z, to.z, ratio);
-        result.clipX = lerp(from.clipX, to.clipX, ratio);
-        result.clipY = lerp(from.clipY, to.clipY, ratio);
-        result.u = lerp(from.u, to.u, ratio);
-        result.v = lerp(from.v, to.v, ratio);
-        result.color = from.color;
-        result.light = from.light;
-        return result;
-    }
-
     private static float lerp(float from, float to, float ratio) {
         return from + (to - from) * ratio;
     }
 
-    private interface Inside {
-        boolean test(GlyphVertex vertex);
+    private static int preparedTextHash(int fontIdentity, String text, int color, boolean shadow) {
+        int result = Integer.hashCode(fontIdentity);
+        result = 31 * result + text.hashCode();
+        result = 31 * result + Integer.hashCode(color);
+        result = 31 * result + Boolean.hashCode(shadow);
+        return result;
     }
 
-    private interface Intersector {
-        GlyphVertex intersect(GlyphVertex from, GlyphVertex to);
+    private static boolean preparedTextEquals(int fontIdentity, String text, int color, boolean shadow, Object other) {
+        if (other instanceof PreparedTextKey key) {
+            return fontIdentity == key.fontIdentity && color == key.color && shadow == key.shadow && text.equals(key.text);
+        }
+        if (other instanceof PreparedTextLookupKey key) {
+            return fontIdentity == key.fontIdentity && color == key.color && shadow == key.shadow && text.equals(key.text);
+        }
+        return false;
     }
 
-    private record PreparedTextKey(int fontIdentity, String text, int color, boolean shadow) {
-        private PreparedTextKey {
-            text = Objects.requireNonNullElse(text, "");
+    private static final class PreparedTextLookupKey {
+        private int fontIdentity;
+        private String text = "";
+        private int color;
+        private boolean shadow;
+        private int hash;
+
+        private PreparedTextLookupKey set(int fontIdentity, String text, int color, boolean shadow) {
+            this.fontIdentity = fontIdentity;
+            this.text = Objects.requireNonNullElse(text, "");
+            this.color = color;
+            this.shadow = shadow;
+            this.hash = preparedTextHash(this.fontIdentity, this.text, this.color, this.shadow);
+            return this;
+        }
+
+        private void clear() {
+            this.fontIdentity = 0;
+            this.text = "";
+            this.color = 0;
+            this.shadow = false;
+            this.hash = 0;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return preparedTextEquals(this.fontIdentity, this.text, this.color, this.shadow, other);
+        }
+
+        @Override
+        public int hashCode() {
+            return this.hash;
         }
     }
 
-    private record PreparedTextBatch(Map<RenderType, List<GlyphVertex>> byType) {
+    private static final class PreparedTextKey {
+        private final int fontIdentity;
+        private final String text;
+        private final int color;
+        private final boolean shadow;
+        private final int hash;
+
+        private PreparedTextKey(int fontIdentity, String text, int color, boolean shadow) {
+            this.fontIdentity = fontIdentity;
+            this.text = Objects.requireNonNullElse(text, "");
+            this.color = color;
+            this.shadow = shadow;
+            this.hash = preparedTextHash(this.fontIdentity, this.text, this.color, this.shadow);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return preparedTextEquals(this.fontIdentity, this.text, this.color, this.shadow, other);
+        }
+
+        @Override
+        public int hashCode() {
+            return this.hash;
+        }
+    }
+
+    private record PreparedTextLayer(RenderType renderType, GlyphVertex[] vertices) {}
+
+    private record PreparedTextBatch(PreparedTextLayer[] layers) {
         private boolean empty() {
-            return this.byType.isEmpty();
+            return this.layers.length == 0;
         }
     }
 
@@ -482,28 +737,50 @@ public final class ProjectionWorldTextRenderer {
         private float v;
         private int light;
 
-        private GlyphVertex copy() {
-            GlyphVertex copy = new GlyphVertex();
-            copy.x = this.x;
-            copy.y = this.y;
-            copy.z = this.z;
-            copy.clipX = this.clipX;
-            copy.clipY = this.clipY;
-            copy.color = this.color;
-            copy.u = this.u;
-            copy.v = this.v;
-            copy.light = this.light;
-            return copy;
+        private GlyphVertex set(float x, float y, float z, float clipX, float clipY, int color, float u, float v, int light) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.clipX = clipX;
+            this.clipY = clipY;
+            this.color = color;
+            this.u = u;
+            this.v = v;
+            this.light = light;
+            return this;
         }
 
-        private GlyphVertex withPositionAndClip(float x, float y, float z, float clipX, float clipY) {
-            GlyphVertex copy = this.copy();
-            copy.x = x;
-            copy.y = y;
-            copy.z = z;
-            copy.clipX = clipX;
-            copy.clipY = clipY;
-            return copy;
+        private GlyphVertex set(GlyphVertex other) {
+            return this.set(other.x, other.y, other.z, other.clipX, other.clipY, other.color, other.u, other.v, other.light);
+        }
+
+        private GlyphVertex setPositionAndClipFrom(GlyphVertex source, float x, float y, float z, float clipX, float clipY) {
+            return this.set(x, y, z, clipX, clipY, source.color, source.u, source.v, source.light);
+        }
+
+        private GlyphVertex interpolateForXFrom(GlyphVertex from, GlyphVertex to, float targetX) {
+            this.interpolateFrom(from, to, ratio(from.clipX, to.clipX, targetX));
+            this.clipX = targetX;
+            return this;
+        }
+
+        private GlyphVertex interpolateForYFrom(GlyphVertex from, GlyphVertex to, float targetY) {
+            this.interpolateFrom(from, to, ratio(from.clipY, to.clipY, targetY));
+            this.clipY = targetY;
+            return this;
+        }
+
+        private GlyphVertex interpolateFrom(GlyphVertex from, GlyphVertex to, float ratio) {
+            this.x = lerp(from.x, to.x, ratio);
+            this.y = lerp(from.y, to.y, ratio);
+            this.z = lerp(from.z, to.z, ratio);
+            this.clipX = lerp(from.clipX, to.clipX, ratio);
+            this.clipY = lerp(from.clipY, to.clipY, ratio);
+            this.color = from.color;
+            this.u = lerp(from.u, to.u, ratio);
+            this.v = lerp(from.v, to.v, ratio);
+            this.light = from.light;
+            return this;
         }
 
         private void emitTo(VertexConsumer consumer) {

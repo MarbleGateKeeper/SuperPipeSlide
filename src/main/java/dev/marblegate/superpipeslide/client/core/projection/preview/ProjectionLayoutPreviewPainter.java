@@ -262,8 +262,7 @@ public final class ProjectionLayoutPreviewPainter {
         if (settings.borderEnabled() && (settings.borderColor() >>> 24) > 0) {
             graphics.outline(r.x(), r.y(), r.width(), r.height(), settings.borderColor());
         }
-        ProjectionComponentSettings.Text textSettings = new ProjectionComponentSettings.Text(ProjectionComponentType.CUSTOM_TEXT, "", "", settings.textColor(), settings.fontSize(), ProjectionTextAlign.CENTER, ProjectionOverflowMode.SCALE, 0.0F, 1);
-        drawText(graphics, font, r, text, textSettings, scale);
+        drawText(graphics, font, r, text, settings.textColor(), settings.fontSize(), ProjectionTextAlign.CENTER, ProjectionOverflowMode.SCALE, 0.0F, 1, scale);
     }
 
     private static void drawPlatformTitleGroup(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect r, ProjectionPreviewScenario data, ProjectionComponentSettings.PlatformTitleGroup settings, float scale) {
@@ -296,8 +295,7 @@ public final class ProjectionLayoutPreviewPainter {
             drawBorder(graphics, r, border, settings.borderColor());
         }
         String label = settings.prefix() + data.renderedPlatformNumber() + settings.suffix();
-        ProjectionComponentSettings.Text text = new ProjectionComponentSettings.Text(ProjectionComponentType.CUSTOM_TEXT, "", "", settings.style() == ProjectionComponentSettings.PlatformBadgeStyle.SOLID ? contrast(fill) : settings.textColor(), settings.fontSize(), ProjectionTextAlign.CENTER, ProjectionOverflowMode.SCALE, 0.0F, 1);
-        drawText(graphics, font, r, label, text, scale);
+        drawText(graphics, font, r, label, settings.style() == ProjectionComponentSettings.PlatformBadgeStyle.SOLID ? contrast(fill) : settings.textColor(), settings.fontSize(), ProjectionTextAlign.CENTER, ProjectionOverflowMode.SCALE, 0.0F, 1, scale);
     }
 
     private static void drawPlatformDirection(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect r, ProjectionPreviewScenario data, ProjectionComponentSettings.PlatformDirection settings, float scale) {
@@ -313,8 +311,7 @@ public final class ProjectionLayoutPreviewPainter {
         String arrow = arrowText(settings.arrow(), settings.source() != ProjectionComponentSettings.PlatformDirectionSource.PREVIOUS_STOP && settings.source() != ProjectionComponentSettings.PlatformDirectionSource.ORIGIN);
         if (!arrow.isBlank() && settings.arrowPlacement() == ProjectionComponentSettings.ArrowPlacement.BEFORE) label = arrow + " " + label;
         if (!arrow.isBlank() && settings.arrowPlacement() == ProjectionComponentSettings.ArrowPlacement.AFTER) label = label + " " + arrow;
-        ProjectionComponentSettings.Text text = new ProjectionComponentSettings.Text(ProjectionComponentType.CUSTOM_TEXT, "", "", settings.textColor(), settings.fontSize(), settings.align(), settings.overflow(), 0.0F, 1);
-        drawText(graphics, font, r, label, text, scale);
+        drawText(graphics, font, r, label, settings.textColor(), settings.fontSize(), settings.align(), settings.overflow(), 0.0F, 1, scale);
     }
 
     private static void drawPlatformStatusTags(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect r, ProjectionPreviewScenario data, ProjectionComponentSettings.PlatformStatusTags settings, float scale) {
@@ -330,8 +327,7 @@ public final class ProjectionLayoutPreviewPainter {
                 continue;
             }
             if (primitive instanceof PlatformStatusTagProjectionEngine.Text text) {
-                ProjectionComponentSettings.Text textSettings = new ProjectionComponentSettings.Text(ProjectionComponentType.CUSTOM_TEXT, "", "", text.color(), text.fontSize(), text.align(), text.overflow(), 0.0F, 1);
-                drawText(graphics, font, normalizedRect(r, text.x(), text.y(), text.width(), text.height()), text.value(), textSettings, scale);
+                drawText(graphics, font, normalizedRect(r, text.x(), text.y(), text.width(), text.height()), text.value(), text.color(), text.fontSize(), text.align(), text.overflow(), 0.0F, 1, scale);
             }
         }
     }
@@ -356,8 +352,8 @@ public final class ProjectionLayoutPreviewPainter {
             }
         }
         if (settings.showLabel()) {
-            ProjectionComponentSettings.Text text = new ProjectionComponentSettings.Text(ProjectionComponentType.CUSTOM_TEXT, "", "", settings.textColor(), settings.fontSize(), ProjectionTextAlign.CENTER, settings.overflow(), 0.0F, 1);
-            drawText(graphics, font, r, settings.style() == ProjectionComponentSettings.PlatformLineStyle.TERMINAL_STRIP ? data.renderedTerminalStop() : line.name(), text, scale);
+            drawText(graphics, font, r, settings.style() == ProjectionComponentSettings.PlatformLineStyle.TERMINAL_STRIP ? data.renderedTerminalStop() : line.name(),
+                    settings.textColor(), settings.fontSize(), ProjectionTextAlign.CENTER, settings.overflow(), 0.0F, 1, scale);
         }
     }
 
@@ -406,8 +402,7 @@ public final class ProjectionLayoutPreviewPainter {
             return;
         }
         if (primitive instanceof PlatformTransferProjectionEngine.Text text) {
-            ProjectionComponentSettings.Text textSettings = new ProjectionComponentSettings.Text(ProjectionComponentType.CUSTOM_TEXT, "", "", text.color(), text.fontSize(), text.align(), text.overflow(), 0.0F, 1);
-            drawText(graphics, font, normalizedRect(r, text.x(), text.y(), text.width(), text.height()), text.value(), textSettings, scale);
+            drawText(graphics, font, normalizedRect(r, text.x(), text.y(), text.width(), text.height()), text.value(), text.color(), text.fontSize(), text.align(), text.overflow(), 0.0F, 1, scale);
         }
     }
 
@@ -454,17 +449,16 @@ public final class ProjectionLayoutPreviewPainter {
             return;
         }
         if (primitive instanceof PlatformLayoutProjectionEngine.Text text) {
-            ProjectionComponentSettings.Text textSettings = new ProjectionComponentSettings.Text(ProjectionComponentType.CUSTOM_TEXT, "", "", text.color(), text.fontSize(), text.align(), text.overflow(), 0.0F, 1);
             SPSGui.Rect textRect = normalizedRect(r, text.x(), text.y(), text.width(), text.height());
             if (Math.abs(text.rotationDegrees()) > 0.01F) {
                 graphics.pose().pushMatrix();
                 graphics.pose().translate(textRect.x() + textRect.width() * 0.5F, textRect.y() + textRect.height() * 0.5F);
                 graphics.pose().rotate((float) Math.toRadians(text.rotationDegrees()));
-                drawText(graphics, font, new SPSGui.Rect(-textRect.width() / 2, -textRect.height() / 2, textRect.width(), textRect.height()), text.value(), textSettings, scale);
+                drawText(graphics, font, new SPSGui.Rect(-textRect.width() / 2, -textRect.height() / 2, textRect.width(), textRect.height()), text.value(), text.color(), text.fontSize(), text.align(), text.overflow(), 0.0F, 1, scale);
                 graphics.pose().popMatrix();
                 return;
             }
-            drawText(graphics, font, textRect, text.value(), textSettings, scale);
+            drawText(graphics, font, textRect, text.value(), text.color(), text.fontSize(), text.align(), text.overflow(), 0.0F, 1, scale);
         }
     }
 
@@ -505,20 +499,18 @@ public final class ProjectionLayoutPreviewPainter {
         int primaryHeight = Math.max(1, Math.round(settings.primaryFontSize() * scale));
         int translationHeight = Math.max(1, Math.round(settings.translationFontSize() * scale));
         int gap = Math.max(0, Math.round(settings.gap() * scale));
-        ProjectionComponentSettings.Text primaryText = titleText(settings.primaryColor(), settings.primaryFontSize(), settings.align(), settings.primaryOverflow(), ProjectionComponentSettings.TextOrientation.HORIZONTAL);
-        ProjectionComponentSettings.Text translationText = titleText(settings.translationColor(), settings.translationFontSize(), settings.align(), settings.translationOverflow(), ProjectionComponentSettings.TextOrientation.HORIZONTAL);
         if (!translation.isEmpty()) {
             int totalHeight = Math.min(r.height(), primaryHeight + gap + translationHeight);
             int top = r.y() + (r.height() - totalHeight) / 2;
             SPSGui.Rect primaryRect = new SPSGui.Rect(r.x(), top, r.width(), Math.max(1, Math.min(primaryHeight, totalHeight)));
             SPSGui.Rect translationRect = new SPSGui.Rect(r.x(), top + primaryRect.height() + gap, r.width(), Math.max(1, Math.min(translationHeight, r.bottom() - top - primaryRect.height() - gap)));
-            drawText(graphics, font, primaryRect, primary, primaryText, scale);
-            drawText(graphics, font, translationRect, translation, translationText, scale);
+            drawText(graphics, font, primaryRect, primary, settings.primaryColor(), settings.primaryFontSize(), settings.align(), settings.primaryOverflow(), ProjectionComponentSettings.TextOrientation.HORIZONTAL, 0.02F, 1, scale);
+            drawText(graphics, font, translationRect, translation, settings.translationColor(), settings.translationFontSize(), settings.align(), settings.translationOverflow(), ProjectionComponentSettings.TextOrientation.HORIZONTAL, 0.02F, 1, scale);
             return;
         }
-        ProjectionComponentSettings.Text missingText = settings.missingTranslationMode() == ProjectionComponentSettings.MissingTranslationMode.EXPAND_PRIMARY
-                ? titleText(settings.primaryColor(), settings.primaryFontSize() * settings.missingPrimaryScale(), settings.align(), settings.primaryOverflow(), ProjectionComponentSettings.TextOrientation.HORIZONTAL)
-                : primaryText;
+        float missingFontSize = settings.missingTranslationMode() == ProjectionComponentSettings.MissingTranslationMode.EXPAND_PRIMARY
+                ? settings.primaryFontSize() * settings.missingPrimaryScale()
+                : settings.primaryFontSize();
         SPSGui.Rect primaryRect = switch (settings.missingTranslationMode()) {
             case KEEP_PRIMARY_SLOT -> {
                 int totalHeight = Math.min(r.height(), primaryHeight + gap + translationHeight);
@@ -526,7 +518,7 @@ public final class ProjectionLayoutPreviewPainter {
             }
             case CENTER_PRIMARY, EXPAND_PRIMARY -> r;
         };
-        drawText(graphics, font, primaryRect, primary, missingText, scale);
+        drawText(graphics, font, primaryRect, primary, settings.primaryColor(), missingFontSize, settings.align(), settings.primaryOverflow(), ProjectionComponentSettings.TextOrientation.HORIZONTAL, 0.02F, 1, scale);
     }
 
     private static void drawStationTitleGroupVertical(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect r, String primaryName, String translationName, ProjectionComponentSettings.StationTitleGroup settings, float scale) {
@@ -535,28 +527,22 @@ public final class ProjectionLayoutPreviewPainter {
         if (primary.isEmpty()) {
             return;
         }
-        ProjectionComponentSettings.Text primaryText = titleText(settings.primaryColor(), settings.primaryFontSize(), settings.align(), settings.primaryOverflow(), ProjectionComponentSettings.TextOrientation.VERTICAL_STACK);
-        ProjectionComponentSettings.Text translationText = titleText(settings.translationColor(), settings.translationFontSize(), settings.align(), settings.translationOverflow(), ProjectionComponentSettings.TextOrientation.VERTICAL_STACK);
         if (!translation.isEmpty()) {
             int gap = Math.max(0, Math.round(settings.gap() * scale));
             int primaryWidth = Math.max(1, Math.round(r.width() * 0.62F));
             SPSGui.Rect primaryRect = new SPSGui.Rect(r.x(), r.y(), Math.max(1, primaryWidth - gap / 2), r.height());
             SPSGui.Rect translationRect = new SPSGui.Rect(r.x() + primaryWidth + gap / 2, r.y(), Math.max(1, r.width() - primaryWidth - gap / 2), r.height());
-            drawText(graphics, font, primaryRect, primary, primaryText, scale);
-            drawText(graphics, font, translationRect, translation, translationText, scale);
+            drawText(graphics, font, primaryRect, primary, settings.primaryColor(), settings.primaryFontSize(), settings.align(), settings.primaryOverflow(), ProjectionComponentSettings.TextOrientation.VERTICAL_STACK, 0.02F, 1, scale);
+            drawText(graphics, font, translationRect, translation, settings.translationColor(), settings.translationFontSize(), settings.align(), settings.translationOverflow(), ProjectionComponentSettings.TextOrientation.VERTICAL_STACK, 0.02F, 1, scale);
             return;
         }
-        ProjectionComponentSettings.Text missingText = settings.missingTranslationMode() == ProjectionComponentSettings.MissingTranslationMode.EXPAND_PRIMARY
-                ? titleText(settings.primaryColor(), settings.primaryFontSize() * settings.missingPrimaryScale(), settings.align(), settings.primaryOverflow(), ProjectionComponentSettings.TextOrientation.VERTICAL_STACK)
-                : primaryText;
+        float missingFontSize = settings.missingTranslationMode() == ProjectionComponentSettings.MissingTranslationMode.EXPAND_PRIMARY
+                ? settings.primaryFontSize() * settings.missingPrimaryScale()
+                : settings.primaryFontSize();
         SPSGui.Rect primaryRect = settings.missingTranslationMode() == ProjectionComponentSettings.MissingTranslationMode.KEEP_PRIMARY_SLOT
                 ? new SPSGui.Rect(r.x(), r.y(), Math.max(1, Math.round(r.width() * 0.62F)), r.height())
                 : r;
-        drawText(graphics, font, primaryRect, primary, missingText, scale);
-    }
-
-    private static ProjectionComponentSettings.Text titleText(int color, float fontSize, ProjectionTextAlign align, ProjectionOverflowMode overflow, ProjectionComponentSettings.TextOrientation orientation) {
-        return new ProjectionComponentSettings.Text(ProjectionComponentType.CUSTOM_TEXT, "", "", color, fontSize, align, overflow, orientation, 0.02F, 1);
+        drawText(graphics, font, primaryRect, primary, settings.primaryColor(), missingFontSize, settings.align(), settings.primaryOverflow(), ProjectionComponentSettings.TextOrientation.VERTICAL_STACK, 0.02F, 1, scale);
     }
 
     private static void drawDivider(GuiGraphicsExtractor graphics, SPSGui.Rect r, ProjectionComponentSettings.Divider settings, float scale) {
@@ -573,65 +559,77 @@ public final class ProjectionLayoutPreviewPainter {
     }
 
     private static void drawText(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect r, String text, ProjectionComponentSettings.Text settings, float scale) {
-        if (settings.orientation() == ProjectionComponentSettings.TextOrientation.ROTATE_CW || settings.orientation() == ProjectionComponentSettings.TextOrientation.ROTATE_CCW) {
+        drawText(graphics, font, r, text, settings.textColor(), settings.fontSize(), settings.align(), settings.overflow(), settings.orientation(), settings.lineSpacing(), settings.maxLines(), scale);
+    }
+
+    private static void drawText(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect r, String text, int color, float fontSize,
+            ProjectionTextAlign align, ProjectionOverflowMode overflow, float lineSpacing, int maxLines, float scale) {
+        drawText(graphics, font, r, text, color, fontSize, align, overflow, ProjectionComponentSettings.TextOrientation.HORIZONTAL, lineSpacing, maxLines, scale);
+    }
+
+    private static void drawText(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect r, String text, int color, float fontSize,
+            ProjectionTextAlign align, ProjectionOverflowMode overflow, ProjectionComponentSettings.TextOrientation orientation, float lineSpacing, int maxLines, float scale) {
+        if (orientation == ProjectionComponentSettings.TextOrientation.ROTATE_CW || orientation == ProjectionComponentSettings.TextOrientation.ROTATE_CCW) {
             graphics.pose().pushMatrix();
             graphics.pose().translate(r.x() + r.width() * 0.5F, r.y() + r.height() * 0.5F);
-            graphics.pose().rotate((float) Math.toRadians(settings.orientation() == ProjectionComponentSettings.TextOrientation.ROTATE_CW ? 90.0D : -90.0D));
+            graphics.pose().rotate((float) Math.toRadians(orientation == ProjectionComponentSettings.TextOrientation.ROTATE_CW ? 90.0D : -90.0D));
             SPSGui.Rect rotated = new SPSGui.Rect(-r.height() / 2, -r.width() / 2, r.height(), r.width());
-            drawHorizontalText(graphics, font, rotated, text, settings, scale, false);
+            drawHorizontalText(graphics, font, rotated, text, color, fontSize, align, overflow, lineSpacing, maxLines, scale, false);
             graphics.pose().popMatrix();
             return;
         }
-        if (settings.orientation() == ProjectionComponentSettings.TextOrientation.VERTICAL_STACK) {
-            drawVerticalStackText(graphics, font, r, text, settings, scale);
+        if (orientation == ProjectionComponentSettings.TextOrientation.VERTICAL_STACK) {
+            drawVerticalStackText(graphics, font, r, text, color, fontSize, align, lineSpacing, scale);
             return;
         }
-        drawHorizontalText(graphics, font, r, text, settings, scale, true);
+        drawHorizontalText(graphics, font, r, text, color, fontSize, align, overflow, lineSpacing, maxLines, scale, true);
     }
 
-    private static void drawHorizontalText(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect r, String text, ProjectionComponentSettings.Text settings, float scale, boolean clipToRect) {
+    private static void drawHorizontalText(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect r, String text, int color, float fontSize,
+            ProjectionTextAlign align, ProjectionOverflowMode overflowMode, float lineSpacing, int maxLines, float scale, boolean clipToRect) {
         String value = text == null ? "" : text.trim();
         if (value.isEmpty()) {
             return;
         }
         int padding = Math.max(1, Math.round(Math.min(r.width(), r.height()) * 0.05F));
         int maxWidth = Math.max(1, r.width() - padding * 2);
-        float textScale = Math.max(0.04F, settings.fontSize() * scale / Math.max(1.0F, font.lineHeight));
-        if (settings.overflow() == ProjectionOverflowMode.WRAP) {
-            drawWrappedText(graphics, font, r, value, settings, textScale, maxWidth);
+        float textScale = Math.max(0.04F, fontSize * scale / Math.max(1.0F, font.lineHeight));
+        if (overflowMode == ProjectionOverflowMode.WRAP) {
+            drawWrappedText(graphics, font, r, value, color, align, lineSpacing, maxLines, textScale, maxWidth);
             return;
         }
         boolean overflow = font.width(value) * textScale > maxWidth;
-        if (settings.overflow() == ProjectionOverflowMode.HIDE && overflow) {
+        if (overflowMode == ProjectionOverflowMode.HIDE && overflow) {
             return;
         }
-        if (settings.overflow() == ProjectionOverflowMode.SCALE && overflow) {
+        if (overflowMode == ProjectionOverflowMode.SCALE && overflow) {
             textScale = Math.max(0.04F, Math.min(textScale, maxWidth / Math.max(1.0F, font.width(value))));
         }
-        if (settings.overflow() == ProjectionOverflowMode.MARQUEE && overflow) {
+        if (overflowMode == ProjectionOverflowMode.MARQUEE && overflow) {
             int y = r.y() + (r.height() - Math.round(font.lineHeight * textScale)) / 2;
             if (clipToRect) {
-                drawSmoothMarquee(graphics, font, value, r.x() + padding, y, maxWidth, r.height(), textScale, settings.textColor(), value.hashCode());
+                drawSmoothMarquee(graphics, font, value, r.x() + padding, y, maxWidth, r.height(), textScale, color, value.hashCode());
             } else {
                 ProjectionTextScroller.TextWindow window = ProjectionTextScroller.window(font, value, maxWidth / Math.max(0.001F, textScale), value.hashCode());
-                SPSGui.smallText(graphics, font, window.text(), Math.round(r.x() + padding - window.leadingOffset() * textScale), y, settings.textColor(), textScale);
+                SPSGui.smallText(graphics, font, window.text(), Math.round(r.x() + padding - window.leadingOffset() * textScale), y, color, textScale);
             }
             return;
         }
-        String rendered = settings.overflow() == ProjectionOverflowMode.PLUS_COUNT && overflow
+        String rendered = overflowMode == ProjectionOverflowMode.PLUS_COUNT && overflow
                 ? fittedLabel(font, value, Math.round(maxWidth / textScale))
                 : value;
         int textWidth = Math.round(font.width(rendered) * textScale);
-        int x = switch (settings.align()) {
+        int x = switch (align) {
             case CENTER -> r.x() + (r.width() - textWidth) / 2;
             case RIGHT -> r.right() - textWidth - padding;
             case LEFT -> r.x() + padding;
         };
         int y = r.y() + (r.height() - Math.round(font.lineHeight * textScale)) / 2;
-        SPSGui.smallText(graphics, font, rendered, x, y, settings.textColor(), textScale);
+        SPSGui.smallText(graphics, font, rendered, x, y, color, textScale);
     }
 
-    private static void drawVerticalStackText(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect r, String text, ProjectionComponentSettings.Text settings, float scale) {
+    private static void drawVerticalStackText(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect r, String text, int color,
+            float fontSize, ProjectionTextAlign align, float lineSpacing, float scale) {
         String value = text == null ? "" : text.trim();
         if (value.isEmpty()) {
             return;
@@ -649,41 +647,42 @@ public final class ProjectionLayoutPreviewPainter {
         if (glyphs.isEmpty()) {
             return;
         }
-        float preferredScale = Math.max(0.04F, settings.fontSize() * scale / Math.max(1.0F, font.lineHeight));
-        float lineGap = Math.max(0.0F, settings.lineSpacing() * scale);
+        float preferredScale = Math.max(0.04F, fontSize * scale / Math.max(1.0F, font.lineHeight));
+        float lineGap = Math.max(0.0F, lineSpacing * scale);
         float totalUnits = glyphs.size() * font.lineHeight + Math.max(0, glyphs.size() - 1) * (lineGap / Math.max(0.001F, preferredScale));
         float fitWidth = r.width() * 0.86F / Math.max(1.0F, maxGlyphWidth);
         float fitHeight = r.height() * 0.94F / Math.max(1.0F, totalUnits);
         float textScale = Math.max(0.04F, Math.min(preferredScale, Math.min(fitWidth, fitHeight)));
-        float scaledGap = Math.max(0.0F, settings.lineSpacing() * scale);
+        float scaledGap = Math.max(0.0F, lineSpacing * scale);
         float totalHeight = glyphs.size() * font.lineHeight * textScale + Math.max(0, glyphs.size() - 1) * scaledGap;
         float y = r.y() + (r.height() - totalHeight) * 0.5F;
         for (String glyph : glyphs) {
             int glyphWidth = Math.round(font.width(glyph) * textScale);
-            int x = switch (settings.align()) {
+            int x = switch (align) {
                 case CENTER -> r.x() + (r.width() - glyphWidth) / 2;
                 case RIGHT -> r.right() - glyphWidth - Math.max(1, Math.round(r.width() * 0.06F));
                 case LEFT -> r.x() + Math.max(1, Math.round(r.width() * 0.06F));
             };
-            SPSGui.smallText(graphics, font, glyph, x, Math.round(y), settings.textColor(), textScale);
+            SPSGui.smallText(graphics, font, glyph, x, Math.round(y), color, textScale);
             y += font.lineHeight * textScale + scaledGap;
         }
     }
 
-    private static void drawWrappedText(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect r, String value, ProjectionComponentSettings.Text settings, float scale, int maxWidth) {
-        List<String> lines = wrapLines(font, value, Math.max(1, Math.round(maxWidth / scale)), settings.maxLines());
-        int lineSpacing = Math.round(settings.lineSpacing() * scale);
-        int totalHeight = Math.round(lines.size() * font.lineHeight * scale + Math.max(0, lines.size() - 1) * lineSpacing);
+    private static void drawWrappedText(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect r, String value, int color,
+            ProjectionTextAlign align, float lineSpacing, int maxLines, float textScale, int maxWidth) {
+        List<String> lines = wrapLines(font, value, Math.max(1, Math.round(maxWidth / textScale)), maxLines);
+        int scaledLineSpacing = Math.round(lineSpacing * textScale);
+        int totalHeight = Math.round(lines.size() * font.lineHeight * textScale + Math.max(0, lines.size() - 1) * scaledLineSpacing);
         int y = r.y() + Math.max(0, (r.height() - totalHeight) / 2);
         for (String line : lines) {
-            int textWidth = Math.round(font.width(line) * scale);
-            int x = switch (settings.align()) {
+            int textWidth = Math.round(font.width(line) * textScale);
+            int x = switch (align) {
                 case CENTER -> r.x() + (r.width() - textWidth) / 2;
                 case RIGHT -> r.right() - textWidth - 2;
                 case LEFT -> r.x() + 2;
             };
-            SPSGui.smallText(graphics, font, line, x, y, settings.textColor(), scale);
-            y += Math.round(font.lineHeight * scale) + lineSpacing;
+            SPSGui.smallText(graphics, font, line, x, y, color, textScale);
+            y += Math.round(font.lineHeight * textScale) + scaledLineSpacing;
         }
     }
 
@@ -724,8 +723,7 @@ public final class ProjectionLayoutPreviewPainter {
         }
         ProjectionPreviewScenario.RoutePreview route = window.items().getFirst();
         String label = settings.shortName() ? shortRoute(route.name()) : route.name();
-        ProjectionComponentSettings.Text text = new ProjectionComponentSettings.Text(ProjectionComponentType.CUSTOM_TEXT, "", "", settings.textColor(), settings.fontSize(), settings.align(), ProjectionOverflowMode.MARQUEE, 0.02F, 1);
-        drawText(graphics, font, r, label, text, scale);
+        drawText(graphics, font, r, label, settings.textColor(), settings.fontSize(), settings.align(), ProjectionOverflowMode.MARQUEE, 0.02F, 1, scale);
         drawPlusCount(graphics, font, r, window.hidden(), settings.plusTextColor(), scale, settings.overflow());
     }
 
