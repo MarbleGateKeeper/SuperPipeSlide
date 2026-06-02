@@ -11,10 +11,12 @@ import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorKin
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.material.MapColor;
+import net.minecraft.world.level.material.PushReaction;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 public final class SPSBlocks {
+    private static final float DATA_BLOCK_EXPLOSION_RESISTANCE = 3_600_000.0F;
     public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(SuperPipeSlide.MODID);
 
     public static final DeferredBlock<Block> PIPE_ANCHOR = BLOCKS.registerBlock(
@@ -26,6 +28,8 @@ public final class SPSBlocks {
                     .noOcclusion()
                     .requiresCorrectToolForDrops()
                     .strength(2.0F, 6.0F)
+                    .explosionResistance(DATA_BLOCK_EXPLOSION_RESISTANCE)
+                    .pushReaction(PushReaction.BLOCK)
                     .sound(SoundType.COPPER));
 
     public static final DeferredBlock<Block> BRANCH_ANCHOR = BLOCKS.registerBlock(
@@ -37,6 +41,8 @@ public final class SPSBlocks {
                     .noOcclusion()
                     .requiresCorrectToolForDrops()
                     .strength(2.0F, 6.0F)
+                    .explosionResistance(DATA_BLOCK_EXPLOSION_RESISTANCE)
+                    .pushReaction(PushReaction.BLOCK)
                     .sound(SoundType.AMETHYST));
 
     public static final DeferredBlock<Block> SPACE_FOLD_ANCHOR = BLOCKS.registerBlock(
@@ -48,6 +54,8 @@ public final class SPSBlocks {
                     .noOcclusion()
                     .requiresCorrectToolForDrops()
                     .strength(2.0F, 6.0F)
+                    .explosionResistance(DATA_BLOCK_EXPLOSION_RESISTANCE)
+                    .pushReaction(PushReaction.BLOCK)
                     .sound(SoundType.AMETHYST));
 
     public static final DeferredBlock<Block> DIMENSION_FOLD_ANCHOR = BLOCKS.registerBlock(
@@ -59,6 +67,8 @@ public final class SPSBlocks {
                     .noOcclusion()
                     .requiresCorrectToolForDrops()
                     .strength(2.0F, 6.0F)
+                    .explosionResistance(DATA_BLOCK_EXPLOSION_RESISTANCE)
+                    .pushReaction(PushReaction.BLOCK)
                     .sound(SoundType.AMETHYST));
 
     public static final DeferredBlock<Block> STATION_BLOCK = BLOCKS.registerBlock(
@@ -68,6 +78,8 @@ public final class SPSBlocks {
                     .mapColor(MapColor.COLOR_LIGHT_BLUE)
                     .noOcclusion()
                     .strength(2.0F, 6.0F)
+                    .explosionResistance(DATA_BLOCK_EXPLOSION_RESISTANCE)
+                    .pushReaction(PushReaction.BLOCK)
                     .sound(SoundType.COPPER));
 
     public static final DeferredBlock<Block> STATION_NAME_PROJECTOR = BLOCKS.registerBlock(

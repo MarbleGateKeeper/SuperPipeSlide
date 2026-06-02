@@ -1,5 +1,6 @@
 package dev.marblegate.superpipeslide.common.block.station;
 
+import dev.marblegate.superpipeslide.common.block.SPSBaseBlock;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.ServerPipeNetworkView;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
@@ -32,7 +33,7 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-public class StationBlock extends Block {
+public class StationBlock extends SPSBaseBlock {
     public static final EnumProperty<Direction> FACING = BlockStateProperties.HORIZONTAL_FACING;
     private static final VoxelShape SHAPE_NORTH = Shapes.join(Shapes.box(0.0625, 0, 0.0625, 0.9375, 0.6875, 0.9375),
             Shapes.join(Shapes.box(0.0625, 0.6875, 0.25, 0.9375, 0.8125, 0.9375),
@@ -44,17 +45,17 @@ public class StationBlock extends Block {
 
     public StationBlock(BlockBehaviour.Properties properties) {
         super(properties);
-        this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH));
+        this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(WATERLOGGED, false));
     }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING);
+        builder.add(FACING, WATERLOGGED);
     }
 
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
-        return this.defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+        return this.withWaterloggedPlacement(context, this.defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite()));
     }
 
     @Override

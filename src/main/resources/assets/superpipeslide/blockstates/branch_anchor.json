@@ -1,6 +1,9 @@
 {
   "variants": {
-    "": {
+    "waterlogged=false": {
+      "model": "superpipeslide:block/branch_anchor"
+    },
+    "waterlogged=true": {
       "model": "superpipeslide:block/branch_anchor"
     }
   }

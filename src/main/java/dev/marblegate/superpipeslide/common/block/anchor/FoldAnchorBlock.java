@@ -1,5 +1,6 @@
 package dev.marblegate.superpipeslide.common.block.anchor;
 
+import dev.marblegate.superpipeslide.common.block.SPSBaseBlock;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorDirectory;
 import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorKind;
@@ -15,7 +16,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
@@ -25,7 +25,7 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-public class FoldAnchorBlock extends Block {
+public class FoldAnchorBlock extends SPSBaseBlock {
     private static final VoxelShape SHAPE = Shapes.box(0.25, 0.125, 0.25, 0.75, 0.875, 0.75);
     private final FoldAnchorKind kind;
 
