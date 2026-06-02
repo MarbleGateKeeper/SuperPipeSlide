@@ -172,6 +172,7 @@ public final class ClientSlideFeedbackPlayerRenderer {
         ModelPose targetPose = ModelPose.capture(model);
         basePose.applyTo(model);
         modelPoseBlendState(state.id, snapshot.frame().sessionId()).sample(basePose, targetPose).applyTo(model);
+        resetOuterSkinLocalPose(model);
         slideLegOffsetsDirty = true;
     }
 
@@ -304,7 +305,6 @@ public final class ClientSlideFeedbackPlayerRenderer {
         float vertical = (float) Mth.clamp(poseFrame.verticalAmount(), 0.0D, 1.0D);
         if (horizontalFacing.lengthSqr() < 1.0E-6D || vertical > 0.92F) {
             model.head.xRot += entity.getXRot() * ((float) Math.PI / 180.0F) * (1.0F - vertical) * 0.35F;
-            syncHat(model);
             return;
         }
         float alpha = (float) Mth.clamp(pose.poseAlpha(), 0.0D, 1.0D);
@@ -316,13 +316,15 @@ public final class ClientSlideFeedbackPlayerRenderer {
         float headPitch = Mth.clamp(entity.getXRot(), -maxPitch, maxPitch) * alpha * 0.82F;
         model.head.yRot += headYaw * ((float) Math.PI / 180.0F);
         model.head.xRot += headPitch * ((float) Math.PI / 180.0F);
-        syncHat(model);
     }
 
-    private static void syncHat(PlayerModel model) {
-        model.hat.xRot = model.head.xRot;
-        model.hat.yRot = model.head.yRot;
-        model.hat.zRot = model.head.zRot;
+    private static void resetOuterSkinLocalPose(PlayerModel model) {
+        model.hat.resetPose();
+        model.jacket.resetPose();
+        model.rightSleeve.resetPose();
+        model.leftSleeve.resetPose();
+        model.rightPants.resetPose();
+        model.leftPants.resetPose();
     }
 
     private static void resetSlideLegOffsets(PlayerModel model) {
