@@ -26,8 +26,7 @@ public final class SuperPipeSlideSodiumConfig implements ConfigEntryPoint {
     private static final StorageEventHandler SAVE_CLIENT_CONFIG = ClientConfig::save;
 
     @Override
-    public void registerConfigEarly(ConfigBuilder builder) {
-    }
+    public void registerConfigEarly(ConfigBuilder builder) {}
 
     @Override
     public void registerConfigLate(ConfigBuilder builder) {

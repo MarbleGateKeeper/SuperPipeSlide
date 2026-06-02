@@ -20,8 +20,8 @@ import dev.marblegate.superpipeslide.client.core.slide.ClientSlideNoticeControll
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlidePoseController;
 import dev.marblegate.superpipeslide.client.core.sync.ClientDataResyncRequests;
 import dev.marblegate.superpipeslide.client.fullmap.screen.FullRouteMapScreen;
-import dev.marblegate.superpipeslide.client.renderer.anchor.ClientAnchorVisibilityRenderer;
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
+import dev.marblegate.superpipeslide.client.renderer.anchor.ClientAnchorVisibilityRenderer;
 import dev.marblegate.superpipeslide.client.renderer.fold.ClientFoldTraversalEffectRenderer;
 import dev.marblegate.superpipeslide.client.renderer.fold.ClientFoldTraversalPostEffectRenderer;
 import dev.marblegate.superpipeslide.client.renderer.gaze.ClientGazeChoiceGeometryRenderer;

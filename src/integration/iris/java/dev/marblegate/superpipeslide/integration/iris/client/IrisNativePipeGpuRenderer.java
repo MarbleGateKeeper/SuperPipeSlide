@@ -308,11 +308,11 @@ final class IrisNativePipeGpuRenderer {
                         GpuBuffer sequentialIndexBuffer = indexBuffer.getBuffer(maxIndices(draws));
                         CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
                         try (RenderPass renderPass = encoder.createRenderPass(
-                                    () -> "SuperPipeSlide Iris native pipe " + renderType,
-                                    colorTexture,
-                                    targetOverride.colorClear(),
-                                    depthTexture,
-                                    targetOverride.depthClear())) {
+                                () -> "SuperPipeSlide Iris native pipe " + renderType,
+                                colorTexture,
+                                targetOverride.colorClear(),
+                                depthTexture,
+                                targetOverride.depthClear())) {
                             extension.prepareInstancedRenderPass(renderPass, shadowPass);
                             ScissorState scissorState = RenderSystem.getScissorStateForRenderTypeDraws();
                             if (scissorState.enabled()) {

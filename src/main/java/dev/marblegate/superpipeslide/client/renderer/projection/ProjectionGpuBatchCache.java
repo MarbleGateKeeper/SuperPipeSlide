@@ -263,11 +263,11 @@ final class ProjectionGpuBatchCache {
                 CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
                 try (ClientRenderCompatibility.Scope ignored = ClientRenderCompatibility.pipelineBypassScope();
                         RenderPass renderPass = encoder.createRenderPass(
-                        () -> "SuperPipeSlide projection " + this.renderType,
-                        colorTexture,
-                        OptionalInt.empty(),
-                        depthTexture,
-                        OptionalDouble.empty())) {
+                                () -> "SuperPipeSlide projection " + this.renderType,
+                                colorTexture,
+                                OptionalInt.empty(),
+                                depthTexture,
+                                OptionalDouble.empty())) {
                     renderPass.setPipeline(this.renderType.pipeline());
                     ScissorState scissorState = RenderSystem.getScissorStateForRenderTypeDraws();
                     if (scissorState.enabled()) {
