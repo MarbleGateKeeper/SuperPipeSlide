@@ -156,7 +156,8 @@ public final class ClientPipeRenderer {
     private static final int MAX_MESH_CACHE_ENTRIES = 8192;
     private static final int LIGHT_BAKE_RETRY_FRAMES = 8;
     private static final int PIPE_INSTANCE_RECORD_VEC4S = 8;
-    private static final int PIPE_INSTANCE_CHUNK_CAPACITY = 128;
+    private static final int PIPE_INSTANCE_CHUNK_CAPACITY = 256;
+    private static final int DYNAMIC_TRANSFORM_UNIFORM_CACHE_ENTRIES = 32;
     private static final int PIPE_INSTANCE_RECORD_BYTES = PIPE_INSTANCE_RECORD_VEC4S * 16;
     private static final int PIPE_INSTANCE_CHUNK_BYTES = PIPE_INSTANCE_CHUNK_CAPACITY * PIPE_INSTANCE_RECORD_BYTES;
     private static final int PIPE_RENDER_STATE_BYTES = 112;
@@ -323,7 +324,12 @@ public final class ClientPipeRenderer {
     private static DynamicUniformStorage<PipeRenderStateUniform> pipeRenderStateUniforms;
     @Nullable
     private static DynamicUniformStorage<PipeDynamicTransformUniform> pipeDynamicTransformUniforms;
-    private static GpuBufferSlice[] pipeDynamicTransformScratch = new GpuBufferSlice[0];
+    private static final Map<Integer, PipeDynamicTransformUniform[]> CACHED_DYNAMIC_TRANSFORM_UNIFORMS = new LinkedHashMap<>(16, 0.75F, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Integer, PipeDynamicTransformUniform[]> eldest) {
+            return this.size() > DYNAMIC_TRANSFORM_UNIFORM_CACHE_ENTRIES;
+        }
+    };
     @Nullable
     private static DynamicTexture defaultShadowTexture;
     @Nullable
@@ -360,7 +366,6 @@ public final class ClientPipeRenderer {
     @Nullable
     private static String shaderpackEntityRenderStateKey;
     private static boolean shaderpackEntityPhotic;
-    private static final PipeDynamicTransformUniform PIPE_DYNAMIC_TRANSFORM_UNIFORM = new PipeDynamicTransformUniform();
     private static final Matrix4f IDENTITY_TEXTURE_MATRIX = new Matrix4f();
 
     private ClientPipeRenderer() {}
@@ -625,48 +630,137 @@ public final class ClientPipeRenderer {
                 camera,
                 externalLighting));
         PipeInstanceDrawStats.Mutable stats = new PipeInstanceDrawStats.Mutable();
+        List<PipeInstancedBucket> buckets = new ArrayList<>();
         if (shadowPass) {
-            renderInstancedBucket(PIPE_ATLAS_SHADOW_CUTOUT, frame.shadowAtlasDraws(), camera, renderState, true, renderMode, externalPipelineActive, stats);
-            renderInstancedBucket(PIPE_ATLAS_SHADOW_CUTOUT_CULL, frame.shadowCulledAtlasDraws(), camera, renderState, true, renderMode, externalPipelineActive, stats);
-            renderInstancedBucketMap(ClientPipeRenderer::generatedPipeShadowCutout, frame.shadowGeneratedDraws(), camera, renderState, true, renderMode, externalPipelineActive, stats);
-            renderInstancedBucketMap(ClientPipeRenderer::generatedPipeShadowCutoutCull, frame.shadowCulledGeneratedDraws(), camera, renderState, true, renderMode, externalPipelineActive, stats);
+            addInstancedBucket(buckets, PIPE_ATLAS_SHADOW_CUTOUT, frame.shadowAtlasDraws());
+            addInstancedBucket(buckets, PIPE_ATLAS_SHADOW_CUTOUT_CULL, frame.shadowCulledAtlasDraws());
+            addInstancedBucketMap(buckets, ClientPipeRenderer::generatedPipeShadowCutout, frame.shadowGeneratedDraws());
+            addInstancedBucketMap(buckets, ClientPipeRenderer::generatedPipeShadowCutoutCull, frame.shadowCulledGeneratedDraws());
+            renderInstancedPass(buckets, camera, renderState, true, renderMode, externalPipelineActive, stats);
             return stats.toImmutable();
         }
         if (!translucent) {
-            renderInstancedBucket(PIPE_ATLAS_CUTOUT, frame.atlasDraws(), camera, renderState, shadowPass, renderMode, externalPipelineActive, stats);
-            renderInstancedBucket(PIPE_ATLAS_CUTOUT_CULL, frame.culledAtlasDraws(), camera, renderState, shadowPass, renderMode, externalPipelineActive, stats);
-            renderInstancedBucket(PIPE_ATLAS_CUTOUT_EMISSIVE, frame.emissiveAtlasDraws(), camera, renderState, shadowPass, renderMode, externalPipelineActive, stats);
-            renderInstancedBucket(PIPE_ATLAS_CUTOUT_CULL_EMISSIVE, frame.emissiveCulledAtlasDraws(), camera, renderState, shadowPass, renderMode, externalPipelineActive, stats);
-            renderInstancedBucketMap(ClientPipeRenderer::generatedPipeCutout, frame.generatedDraws(), camera, renderState, shadowPass, renderMode, externalPipelineActive, stats);
-            renderInstancedBucketMap(ClientPipeRenderer::generatedPipeCutoutCull, frame.culledGeneratedDraws(), camera, renderState, shadowPass, renderMode, externalPipelineActive, stats);
-            renderInstancedBucketMap(ClientPipeRenderer::generatedPipeCutoutEmissive, frame.emissiveGeneratedDraws(), camera, renderState, shadowPass, renderMode, externalPipelineActive, stats);
-            renderInstancedBucketMap(ClientPipeRenderer::generatedPipeCutoutCullEmissive, frame.emissiveCulledGeneratedDraws(), camera, renderState, shadowPass, renderMode, externalPipelineActive, stats);
+            addInstancedBucket(buckets, PIPE_ATLAS_CUTOUT, frame.atlasDraws());
+            addInstancedBucket(buckets, PIPE_ATLAS_CUTOUT_CULL, frame.culledAtlasDraws());
+            addInstancedBucket(buckets, PIPE_ATLAS_CUTOUT_EMISSIVE, frame.emissiveAtlasDraws());
+            addInstancedBucket(buckets, PIPE_ATLAS_CUTOUT_CULL_EMISSIVE, frame.emissiveCulledAtlasDraws());
+            addInstancedBucketMap(buckets, ClientPipeRenderer::generatedPipeCutout, frame.generatedDraws());
+            addInstancedBucketMap(buckets, ClientPipeRenderer::generatedPipeCutoutCull, frame.culledGeneratedDraws());
+            addInstancedBucketMap(buckets, ClientPipeRenderer::generatedPipeCutoutEmissive, frame.emissiveGeneratedDraws());
+            addInstancedBucketMap(buckets, ClientPipeRenderer::generatedPipeCutoutCullEmissive, frame.emissiveCulledGeneratedDraws());
+            renderInstancedPass(buckets, camera, renderState, shadowPass, renderMode, externalPipelineActive, stats);
             return stats.toImmutable();
         }
 
-        renderInstancedBucket(PIPE_ATLAS_TRANSLUCENT, frame.translucentAtlasDraws(), camera, renderState, false, renderMode, externalPipelineActive, stats);
-        renderInstancedBucket(PIPE_ATLAS_TRANSLUCENT_EMISSIVE, frame.emissiveTranslucentAtlasDraws(), camera, renderState, false, renderMode, externalPipelineActive, stats);
-        renderInstancedBucketMap(ClientPipeRenderer::generatedPipeTranslucent, frame.translucentGeneratedDraws(), camera, renderState, false, renderMode, externalPipelineActive, stats);
-        renderInstancedBucketMap(ClientPipeRenderer::generatedPipeTranslucentEmissive, frame.emissiveTranslucentGeneratedDraws(), camera, renderState, false, renderMode, externalPipelineActive, stats);
+        addInstancedBucket(buckets, PIPE_ATLAS_TRANSLUCENT, frame.translucentAtlasDraws());
+        addInstancedBucket(buckets, PIPE_ATLAS_TRANSLUCENT_EMISSIVE, frame.emissiveTranslucentAtlasDraws());
+        addInstancedBucketMap(buckets, ClientPipeRenderer::generatedPipeTranslucent, frame.translucentGeneratedDraws());
+        addInstancedBucketMap(buckets, ClientPipeRenderer::generatedPipeTranslucentEmissive, frame.emissiveTranslucentGeneratedDraws());
+        renderInstancedPass(buckets, camera, renderState, false, renderMode, externalPipelineActive, stats);
         return stats.toImmutable();
     }
 
-    private static void renderInstancedBucketMap(java.util.function.Function<Identifier, RenderType> renderTypeFactory, Map<Identifier, List<PipeInstanceDrawChunk>> batchesByTexture, Vec3 camera, GpuBufferSlice renderState, boolean shadowPass, PipeRenderMode renderMode, boolean externalPipelineActive, PipeInstanceDrawStats.Mutable stats) {
+    private static void addInstancedBucket(List<PipeInstancedBucket> buckets, RenderType renderType, List<PipeInstanceDrawChunk> chunks) {
+        if (!chunks.isEmpty()) {
+            buckets.add(new PipeInstancedBucket(renderType, chunks));
+        }
+    }
+
+    private static void addInstancedBucketMap(List<PipeInstancedBucket> buckets, java.util.function.Function<Identifier, RenderType> renderTypeFactory, Map<Identifier, List<PipeInstanceDrawChunk>> batchesByTexture) {
         if (batchesByTexture.isEmpty()) {
             return;
         }
         for (Map.Entry<Identifier, List<PipeInstanceDrawChunk>> entry : batchesByTexture.entrySet()) {
-            renderInstancedBucket(renderTypeFactory.apply(entry.getKey()), entry.getValue(), camera, renderState, shadowPass, renderMode, externalPipelineActive, stats);
+            addInstancedBucket(buckets, renderTypeFactory.apply(entry.getKey()), entry.getValue());
         }
     }
 
-    private static void renderInstancedBucket(RenderType renderType, List<PipeInstanceDrawChunk> chunks, Vec3 camera, GpuBufferSlice renderState, boolean shadowPass, PipeRenderMode renderMode, boolean externalPipelineActive, PipeInstanceDrawStats.Mutable stats) {
-        if (chunks.isEmpty()) {
+    private static void renderInstancedPass(List<PipeInstancedBucket> buckets, Vec3 camera, GpuBufferSlice renderState, boolean shadowPass, PipeRenderMode renderMode, boolean externalPipelineActive, PipeInstanceDrawStats.Mutable stats) {
+        if (buckets.isEmpty()) {
             return;
         }
         PipeRenderTargetOverride targetOverride = externalPipelineActive
                 ? renderExtension.instancedRenderTargetOverride(shadowPass)
                 : PipeRenderTargetOverride.none();
+        int start = 0;
+        while (start < buckets.size()) {
+            PipeRenderPassTarget target = renderPassTarget(buckets.get(start).renderType(), targetOverride);
+            int end = start + 1;
+            while (end < buckets.size() && renderPassTarget(buckets.get(end).renderType(), targetOverride).equals(target)) {
+                end++;
+            }
+            renderInstancedTargetPass(buckets, start, end, target, camera, renderState, shadowPass, renderMode, externalPipelineActive, stats);
+            start = end;
+        }
+    }
+
+    private static PipeRenderPassTarget renderPassTarget(RenderType renderType, PipeRenderTargetOverride targetOverride) {
+        RenderTarget target = renderType.outputTarget().getRenderTarget();
+        GpuTextureView colorTexture = targetOverride.colorTexture() != null
+                ? targetOverride.colorTexture()
+                : RenderSystem.outputColorTextureOverride != null
+                        ? RenderSystem.outputColorTextureOverride
+                        : target.getColorTextureView();
+        GpuTextureView depthTexture = targetOverride.depthTexture() != null
+                ? targetOverride.depthTexture()
+                : target.useDepth
+                        ? (RenderSystem.outputDepthTextureOverride != null ? RenderSystem.outputDepthTextureOverride : target.getDepthTextureView())
+                        : null;
+        return new PipeRenderPassTarget(colorTexture, depthTexture, targetOverride.colorClear(), targetOverride.depthClear());
+    }
+
+    private static void renderInstancedTargetPass(List<PipeInstancedBucket> buckets, int start, int end, PipeRenderPassTarget target, Vec3 camera, GpuBufferSlice renderState, boolean shadowPass, PipeRenderMode renderMode, boolean externalPipelineActive, PipeInstanceDrawStats.Mutable stats) {
+        List<PipePreparedInstancedBucket> preparedBuckets = new ArrayList<>(end - start);
+        for (int i = start; i < end; i++) {
+            preparedBuckets.add(prepareInstancedBucket(buckets.get(i), camera));
+        }
+        GpuTextureView shadowTextureView = null;
+        GpuSampler shadowSampler = null;
+        boolean bindInternalShadowSampler = !shadowPass && !externalPipelineActive && !renderMode.usesShaderpackEntityRenderer();
+        if (bindInternalShadowSampler) {
+            shadowTextureView = defaultShadowTextureView();
+            shadowSampler = defaultShadowSampler();
+        }
+        CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
+        try {
+            try (PipeRenderExtension.Scope phaseScope = renderMode.usesShaderpackRenderer()
+                    ? renderExtension.instancedPipeDrawScope(renderMode, shadowPass)
+                    : PipeRenderExtension.NOOP_SCOPE;
+                    RenderPass renderPass = encoder.createRenderPass(
+                            () -> "SuperPipeSlide instanced pipe pass",
+                            target.colorTexture(),
+                            target.colorClear(),
+                            target.depthTexture(),
+                            target.depthClear())) {
+                if (renderMode.usesShaderpackRenderer()) {
+                    renderExtension.prepareInstancedRenderPass(renderPass, shadowPass);
+                }
+                ScissorState scissorState = RenderSystem.getScissorStateForRenderTypeDraws();
+                if (scissorState.enabled()) {
+                    renderPass.enableScissor(scissorState.x(), scissorState.y(), scissorState.width(), scissorState.height());
+                }
+                PipeInstancedPassContext passContext = new PipeInstancedPassContext(renderPass, renderState);
+                if (bindInternalShadowSampler) {
+                    passContext.bindTexture("PipeShadowSampler", shadowTextureView, shadowSampler);
+                    passContext.bindTexture("PipeShadowWithPipesSampler", shadowTextureView, shadowSampler);
+                }
+                if (externalPipelineActive && renderMode.usesShaderpackPerformanceRenderer()) {
+                    renderExtension.bindInstancedRenderPassTextures(renderPass, shadowPass);
+                }
+                for (int i = 0; i < preparedBuckets.size(); i++) {
+                    renderInstancedBucket(passContext, preparedBuckets.get(i), stats);
+                }
+            }
+        } finally {
+            if (renderMode.usesShaderpackRenderer()) {
+                renderExtension.restoreInstancedRenderPassTarget(shadowPass);
+            }
+        }
+    }
+
+    private static PipePreparedInstancedBucket prepareInstancedBucket(PipeInstancedBucket bucket, Vec3 camera) {
+        RenderType renderType = bucket.renderType();
+        List<PipeInstanceDrawChunk> chunks = bucket.chunks();
         RenderSetup renderSetup = ((RenderTypeAccessor) renderType).superpipeslide$state();
         RenderSetupAccessor renderSetupAccessor = (RenderSetupAccessor) (Object) renderSetup;
         CachedTextureBindings textures = cachedTextureBindings(renderSetup);
@@ -680,102 +774,41 @@ public final class ClientPipeRenderer {
         try {
             TextureTransform textureTransform = renderSetupAccessor.superpipeslide$textureTransform();
             Matrix4f textureMatrix = textureTransform == TextureTransform.DEFAULT_TEXTURING ? IDENTITY_TEXTURE_MATRIX : textureTransform.getMatrix();
-            GpuBufferSlice[] chunkTransforms = pipeDynamicTransformScratch(chunks.size());
-            GpuBufferSlice lastOriginTransform = null;
-            Vec3 lastOrigin = null;
-            int totalInstances = 0;
-            try {
-                for (int i = 0; i < chunks.size(); i++) {
-                    PipeInstanceDrawChunk chunk = chunks.get(i);
-                    if (lastOrigin == null || !lastOrigin.equals(chunk.origin())) {
-                        lastOrigin = chunk.origin();
-                        lastOriginTransform = writePipeDynamicTransform(
-                                RenderSystem.getModelViewMatrix(),
-                                (float) (lastOrigin.x - camera.x),
-                                (float) (lastOrigin.y - camera.y),
-                                (float) (lastOrigin.z - camera.z),
-                                textureMatrix);
-                    }
-                    chunkTransforms[i] = lastOriginTransform;
-                    totalInstances += chunk.instanceCount();
-                }
-                RenderTarget target = renderType.outputTarget().getRenderTarget();
-                GpuTextureView colorTexture = targetOverride.colorTexture() != null
-                        ? targetOverride.colorTexture()
-                        : RenderSystem.outputColorTextureOverride != null
-                                ? RenderSystem.outputColorTextureOverride
-                                : target.getColorTextureView();
-                GpuTextureView depthTexture = targetOverride.depthTexture() != null
-                        ? targetOverride.depthTexture()
-                        : target.useDepth
-                                ? (RenderSystem.outputDepthTextureOverride != null ? RenderSystem.outputDepthTextureOverride : target.getDepthTextureView())
-                                : null;
-                GpuTextureView shadowTextureView = null;
-                GpuSampler shadowSampler = null;
-                boolean bindInternalShadowSampler = !shadowPass && !externalPipelineActive && !renderMode.usesShaderpackEntityRenderer();
-                if (bindInternalShadowSampler) {
-                    shadowTextureView = defaultShadowTextureView();
-                    shadowSampler = defaultShadowSampler();
-                }
-                RenderSystem.AutoStorageIndexBuffer indexBuffer = RenderSystem.getSequentialBuffer(renderType.mode());
-                GpuBuffer sequentialIndexBuffer = indexBuffer.getBuffer(6);
-                CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
-                try {
-                    try (PipeRenderExtension.Scope phaseScope = renderMode.usesShaderpackRenderer()
-                            ? renderExtension.instancedPipeDrawScope(renderMode, shadowPass)
-                            : PipeRenderExtension.NOOP_SCOPE;
-                            RenderPass renderPass = encoder.createRenderPass(
-                                    () -> "SuperPipeSlide instanced pipe " + renderType,
-                                    colorTexture,
-                                    targetOverride.colorClear(),
-                                    depthTexture,
-                                    targetOverride.depthClear())) {
-                        if (renderMode.usesShaderpackRenderer()) {
-                            renderExtension.prepareInstancedRenderPass(renderPass, shadowPass);
-                        }
-                        renderPass.setPipeline(renderType.pipeline());
-                        ScissorState scissorState = RenderSystem.getScissorStateForRenderTypeDraws();
-                        if (scissorState.enabled()) {
-                            renderPass.enableScissor(scissorState.x(), scissorState.y(), scissorState.width(), scissorState.height());
-                        }
-                        RenderSystem.bindDefaultUniforms(renderPass);
-                        renderPass.setVertexBuffer(0, pipeInstanceTemplateVertexBuffer());
-                        textures.bind(renderPass);
-                        if (bindInternalShadowSampler) {
-                            renderPass.bindTexture("PipeShadowSampler", shadowTextureView, shadowSampler);
-                            renderPass.bindTexture("PipeShadowWithPipesSampler", shadowTextureView, shadowSampler);
-                        }
-                        if (externalPipelineActive && renderMode.usesShaderpackPerformanceRenderer()) {
-                            renderExtension.bindInstancedRenderPassTextures(renderPass, shadowPass);
-                        }
-                        renderPass.setIndexBuffer(sequentialIndexBuffer, indexBuffer.type());
-                        renderPass.setUniform("PipeRenderState", renderState);
-                        GpuBufferSlice lastBoundTransform = null;
-                        for (int i = 0; i < chunks.size(); i++) {
-                            PipeInstanceDrawChunk chunk = chunks.get(i);
-                            GpuBufferSlice chunkTransform = chunkTransforms[i];
-                            if (chunkTransform != lastBoundTransform) {
-                                renderPass.setUniform("DynamicTransforms", chunkTransform);
-                                lastBoundTransform = chunkTransform;
-                            }
-                            renderPass.setUniform("PipeInstances", chunk.instances());
-                            renderPass.drawIndexed(0, 0, 6, chunk.instanceCount());
-                        }
-                    }
-                } finally {
-                    if (renderMode.usesShaderpackRenderer()) {
-                        renderExtension.restoreInstancedRenderPassTarget(shadowPass);
-                    }
-                }
-                stats.add(chunks.size(), totalInstances);
-            } finally {
-                Arrays.fill(chunkTransforms, 0, chunks.size(), null);
-            }
+            GpuBufferSlice[] transforms = writePipeDynamicTransforms(chunks, camera, textureMatrix);
+            return new PipePreparedInstancedBucket(renderType, chunks, textures, transforms);
         } finally {
             if (pushedLayer) {
                 modelViewStack.popMatrix();
             }
         }
+    }
+
+    private static void renderInstancedBucket(PipeInstancedPassContext passContext, PipePreparedInstancedBucket bucket, PipeInstanceDrawStats.Mutable stats) {
+        RenderType renderType = bucket.renderType();
+        List<PipeInstanceDrawChunk> chunks = bucket.chunks();
+        GpuBufferSlice[] transforms = bucket.transforms();
+        Vec3 lastOrigin = null;
+        int transformIndex = -1;
+        int totalInstances = 0;
+        GpuBufferSlice lastBoundTransform = null;
+        passContext.setPipeline(renderType);
+        bucket.textures().bind(passContext);
+        for (int i = 0; i < chunks.size(); i++) {
+            PipeInstanceDrawChunk chunk = chunks.get(i);
+            if (lastOrigin == null || !lastOrigin.equals(chunk.origin())) {
+                lastOrigin = chunk.origin();
+                transformIndex++;
+            }
+            GpuBufferSlice transform = transforms[transformIndex];
+            if (transform != lastBoundTransform) {
+                passContext.setDynamicTransform(transform);
+                lastBoundTransform = transform;
+            }
+            passContext.setPipeInstances(chunk.instances());
+            passContext.draw(chunk.instanceCount());
+            totalInstances += chunk.instanceCount();
+        }
+        stats.add(chunks.size(), totalInstances);
     }
 
     public static int pipeEntityLight(LitTexturedQuad litQuad, int vertex, boolean photic) {
@@ -949,15 +982,51 @@ public final class ClientPipeRenderer {
         return pipeDynamicTransformUniforms;
     }
 
-    private static GpuBufferSlice writePipeDynamicTransform(Matrix4f modelView, float offsetX, float offsetY, float offsetZ, Matrix4f textureMatrix) {
-        return pipeDynamicTransformUniformStorage().writeUniform(PIPE_DYNAMIC_TRANSFORM_UNIFORM.set(modelView, offsetX, offsetY, offsetZ, textureMatrix));
+    private static GpuBufferSlice[] writePipeDynamicTransforms(List<PipeInstanceDrawChunk> chunks, Vec3 camera, Matrix4f textureMatrix) {
+        int transformCount = countDynamicTransformOrigins(chunks);
+        PipeDynamicTransformUniform[] uniforms = pipeDynamicTransformUniforms(transformCount);
+        Matrix4f modelView = RenderSystem.getModelViewMatrix();
+        Vec3 lastOrigin = null;
+        int transformIndex = 0;
+        for (int i = 0; i < chunks.size(); i++) {
+            Vec3 origin = chunks.get(i).origin();
+            if (lastOrigin == null || !lastOrigin.equals(origin)) {
+                uniforms[transformIndex].set(
+                        modelView,
+                        (float) (origin.x - camera.x),
+                        (float) (origin.y - camera.y),
+                        (float) (origin.z - camera.z),
+                        textureMatrix);
+                lastOrigin = origin;
+                transformIndex++;
+            }
+        }
+        return pipeDynamicTransformUniformStorage().writeUniforms(uniforms);
     }
 
-    private static GpuBufferSlice[] pipeDynamicTransformScratch(int size) {
-        if (pipeDynamicTransformScratch.length < size) {
-            pipeDynamicTransformScratch = new GpuBufferSlice[Mth.smallestEncompassingPowerOfTwo(size)];
+    private static int countDynamicTransformOrigins(List<PipeInstanceDrawChunk> chunks) {
+        Vec3 lastOrigin = null;
+        int count = 0;
+        for (int i = 0; i < chunks.size(); i++) {
+            Vec3 origin = chunks.get(i).origin();
+            if (lastOrigin == null || !lastOrigin.equals(origin)) {
+                lastOrigin = origin;
+                count++;
+            }
         }
-        return pipeDynamicTransformScratch;
+        return count;
+    }
+
+    private static PipeDynamicTransformUniform[] pipeDynamicTransformUniforms(int count) {
+        PipeDynamicTransformUniform[] uniforms = CACHED_DYNAMIC_TRANSFORM_UNIFORMS.get(count);
+        if (uniforms == null) {
+            uniforms = new PipeDynamicTransformUniform[count];
+            for (int i = 0; i < count; i++) {
+                uniforms[i] = new PipeDynamicTransformUniform();
+            }
+            CACHED_DYNAMIC_TRANSFORM_UNIFORMS.put(count, uniforms);
+        }
+        return uniforms;
     }
 
     private static CachedTextureBindings cachedTextureBindings(RenderSetup renderSetup) {
@@ -1058,8 +1127,8 @@ public final class ClientPipeRenderer {
         drainPendingInstanceBatchReleases();
         MESH_CACHE.clear();
         CACHED_TEXTURE_BINDINGS.clear();
+        CACHED_DYNAMIC_TRANSFORM_UNIFORMS.clear();
         clearGeneratedRenderTypeCache();
-        pipeDynamicTransformScratch = new GpuBufferSlice[0];
         if (pipeInstanceTemplateVertexBuffer != null && !pipeInstanceTemplateVertexBuffer.isClosed()) {
             pipeInstanceTemplateVertexBuffer.close();
         }
@@ -2703,6 +2772,107 @@ public final class ClientPipeRenderer {
         }
     }
 
+    private record PipeInstancedBucket(RenderType renderType, List<PipeInstanceDrawChunk> chunks) {}
+
+    private record PipePreparedInstancedBucket(RenderType renderType, List<PipeInstanceDrawChunk> chunks, CachedTextureBindings textures, GpuBufferSlice[] transforms) {}
+
+    private record PipeRenderPassTarget(GpuTextureView colorTexture, @Nullable GpuTextureView depthTexture, OptionalInt colorClear, OptionalDouble depthClear) {}
+
+    private static final class PipeInstancedPassContext {
+        private final RenderPass renderPass;
+        private final GpuBufferSlice renderState;
+        @Nullable
+        private RenderPipeline pipeline;
+        @Nullable
+        private VertexFormat.Mode indexMode;
+        @Nullable
+        private GpuBuffer indexBuffer;
+        private String[] textureNames = new String[8];
+        private GpuTextureView[] textureViews = new GpuTextureView[8];
+        private GpuSampler[] textureSamplers = new GpuSampler[8];
+        private int textureCount;
+
+        private PipeInstancedPassContext(RenderPass renderPass, GpuBufferSlice renderState) {
+            this.renderPass = renderPass;
+            this.renderState = renderState;
+        }
+
+        void setPipeline(RenderType renderType) {
+            RenderPipeline nextPipeline = renderType.pipeline();
+            if (this.pipeline != nextPipeline) {
+                this.pipeline = nextPipeline;
+                this.renderPass.setPipeline(nextPipeline);
+                RenderSystem.bindDefaultUniforms(this.renderPass);
+                this.renderPass.setVertexBuffer(0, pipeInstanceTemplateVertexBuffer());
+                this.renderPass.setUniform("PipeRenderState", this.renderState);
+                this.indexMode = null;
+                this.indexBuffer = null;
+                this.textureCount = 0;
+            }
+            this.setIndexBuffer(renderType.mode());
+        }
+
+        private void setIndexBuffer(VertexFormat.Mode mode) {
+            RenderSystem.AutoStorageIndexBuffer sequential = RenderSystem.getSequentialBuffer(mode);
+            GpuBuffer buffer = sequential.getBuffer(6);
+            if (this.indexMode != mode || this.indexBuffer != buffer) {
+                this.indexMode = mode;
+                this.indexBuffer = buffer;
+                this.renderPass.setIndexBuffer(buffer, sequential.type());
+            }
+        }
+
+        void bindTexture(String name, GpuTextureView textureView, GpuSampler sampler) {
+            int index = this.textureIndex(name);
+            if (index >= 0) {
+                if (this.textureViews[index] == textureView && this.textureSamplers[index] == sampler) {
+                    return;
+                }
+                this.textureViews[index] = textureView;
+                this.textureSamplers[index] = sampler;
+                this.renderPass.bindTexture(name, textureView, sampler);
+                return;
+            }
+            this.ensureTextureCapacity(this.textureCount + 1);
+            this.textureNames[this.textureCount] = name;
+            this.textureViews[this.textureCount] = textureView;
+            this.textureSamplers[this.textureCount] = sampler;
+            this.textureCount++;
+            this.renderPass.bindTexture(name, textureView, sampler);
+        }
+
+        private int textureIndex(String name) {
+            for (int i = 0; i < this.textureCount; i++) {
+                if (this.textureNames[i].equals(name)) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private void ensureTextureCapacity(int required) {
+            if (required <= this.textureNames.length) {
+                return;
+            }
+            int capacity = Mth.smallestEncompassingPowerOfTwo(required);
+            this.textureNames = Arrays.copyOf(this.textureNames, capacity);
+            this.textureViews = Arrays.copyOf(this.textureViews, capacity);
+            this.textureSamplers = Arrays.copyOf(this.textureSamplers, capacity);
+        }
+
+        void setDynamicTransform(GpuBufferSlice transform) {
+            this.renderPass.setUniform("DynamicTransforms", transform);
+        }
+
+        void setPipeInstances(GpuBufferSlice instances) {
+            this.renderPass.setUniform("PipeInstances", instances);
+        }
+
+        void draw(int instanceCount) {
+            this.renderPass.drawIndexed(0, 0, 6, instanceCount);
+        }
+    }
+
     private record CachedTextureBindings(String[] names, RenderSetup.TextureAndSampler[] bindings) {
         private static final CachedTextureBindings EMPTY = new CachedTextureBindings(new String[0], new RenderSetup.TextureAndSampler[0]);
 
@@ -2722,10 +2892,10 @@ public final class ClientPipeRenderer {
             return new CachedTextureBindings(names, bindings);
         }
 
-        void bind(RenderPass renderPass) {
+        void bind(PipeInstancedPassContext passContext) {
             for (int i = 0; i < this.names.length; i++) {
                 RenderSetup.TextureAndSampler binding = this.bindings[i];
-                renderPass.bindTexture(this.names[i], binding.textureView(), binding.sampler());
+                passContext.bindTexture(this.names[i], binding.textureView(), binding.sampler());
             }
         }
     }

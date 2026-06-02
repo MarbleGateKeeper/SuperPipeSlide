@@ -165,7 +165,7 @@ void main() {
     fragColor = vec4(1.0);
 #else
 #ifndef EMISSIVE
-    float shadowFactor = superpipeslide_shadow_factor(pipeShadowPosition, pipeNormal);
+    float shadowFactor = lightMapUv.y <= 0.5 ? 1.0 : superpipeslide_shadow_factor(pipeShadowPosition, pipeNormal);
 #endif
 #ifdef PER_FACE_LIGHTING
     vec4 faceVertexColor = gl_FrontFacing ? vertexPerFaceColorFront : vertexPerFaceColorBack;
