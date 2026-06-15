@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "N": "minecraft:nether_star",
+    "O": "minecraft:crying_obsidian",
+    "S": "superpipeslide:anchor_upgrade_space_fold",
+    "X": "minecraft:end_crystal"
+  },
+  "pattern": [
+    "OSO",
+    "XNX",
+    "OSO"
+  ],
+  "result": {
+    "count": 2,
+    "id": "superpipeslide:anchor_upgrade_dimension_fold"
+  }
+}

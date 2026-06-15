@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": "superpipeslide:acceleration_pipe_coating",
+    "B": "minecraft:blue_ice",
+    "Z": "minecraft:blaze_powder"
+  },
+  "pattern": [
+    "AZA",
+    "ZBZ",
+    "AZA"
+  ],
+  "result": {
+    "count": 4,
+    "id": "superpipeslide:highway_pipe_coating"
+  }
+}

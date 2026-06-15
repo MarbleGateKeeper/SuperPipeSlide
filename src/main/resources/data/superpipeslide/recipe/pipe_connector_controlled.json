@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "C": "minecraft:copper_ingot",
+    "G": "minecraft:glass_pane",
+    "Q": "minecraft:comparator",
+    "R": "minecraft:redstone",
+    "S": "minecraft:stick"
+  },
+  "pattern": [
+    "CGC",
+    "RQR",
+    " S "
+  ],
+  "result": {
+    "id": "superpipeslide:pipe_connector_controlled"
+  }
+}

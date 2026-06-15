@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "B": "minecraft:writable_book",
+    "C": "minecraft:copper_ingot",
+    "G": "minecraft:glass_pane",
+    "K": "minecraft:compass",
+    "R": "minecraft:redstone"
+  },
+  "pattern": [
+    "CGC",
+    "RBR",
+    "CKC"
+  ],
+  "result": {
+    "id": "superpipeslide:route_editor"
+  }
+}

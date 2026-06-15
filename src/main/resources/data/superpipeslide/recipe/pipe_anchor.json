@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "C": "minecraft:copper_ingot",
+    "R": "minecraft:redstone",
+    "n": "minecraft:iron_nugget"
+  },
+  "pattern": [
+    "CnC",
+    "nRn",
+    "CnC"
+  ],
+  "result": {
+    "count": 2,
+    "id": "superpipeslide:pipe_anchor"
+  }
+}

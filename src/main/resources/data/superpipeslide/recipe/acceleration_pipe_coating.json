@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "L": "minecraft:slime_ball",
+    "R": "minecraft:redstone",
+    "U": "minecraft:sugar"
+  },
+  "pattern": [
+    "URU",
+    "RLR",
+    "URU"
+  ],
+  "result": {
+    "count": 4,
+    "id": "superpipeslide:acceleration_pipe_coating"
+  }
+}

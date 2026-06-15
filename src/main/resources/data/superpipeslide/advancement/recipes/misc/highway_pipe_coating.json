@@ -1,0 +1,32 @@
+{
+  "parent": "minecraft:recipes/root",
+  "criteria": {
+    "has_acceleration_pipe_coating": {
+      "conditions": {
+        "items": [
+          {
+            "items": "superpipeslide:acceleration_pipe_coating"
+          }
+        ]
+      },
+      "trigger": "minecraft:inventory_changed"
+    },
+    "has_the_recipe": {
+      "conditions": {
+        "recipe": "superpipeslide:highway_pipe_coating"
+      },
+      "trigger": "minecraft:recipe_unlocked"
+    }
+  },
+  "requirements": [
+    [
+      "has_the_recipe",
+      "has_acceleration_pipe_coating"
+    ]
+  ],
+  "rewards": {
+    "recipes": [
+      "superpipeslide:highway_pipe_coating"
+    ]
+  }
+}
