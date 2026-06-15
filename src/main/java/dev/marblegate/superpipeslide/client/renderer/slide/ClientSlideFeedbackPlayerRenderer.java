@@ -134,6 +134,7 @@ public final class ClientSlideFeedbackPlayerRenderer {
         rotateAround(poseStack, baseRight, worldPose.pitchDegrees());
         rotateAround(poseStack, baseFacing, worldPose.rollDegrees());
         applyDismountWorldPose(poseStack, feedback, baseFacing);
+        applySlideActionWorldPose(poseStack, feedback, baseFacing);
     }
 
     public static void onRenderPlayerPost(RenderPlayerEvent.Post<?> event) {
@@ -168,6 +169,7 @@ public final class ClientSlideFeedbackPlayerRenderer {
         ModelPose basePose = ModelPose.capture(model);
         ClientSlideBalancePoseSolver.solveModel(snapshot, poseFrame, fixedStanceSide(snapshot)).apply(model);
         applyDismountModelPose(snapshot, model, (float) Mth.clamp(snapshot.poseAlpha(), 0.0D, 1.0D));
+        applySlideActionModelPose(snapshot, model, (float) Mth.clamp(snapshot.poseAlpha(), 0.0D, 1.0D));
         applyHeadLook(snapshot, poseFrame, model, entity);
         ModelPose targetPose = ModelPose.capture(model);
         basePose.applyTo(model);
@@ -265,29 +267,44 @@ public final class ClientSlideFeedbackPlayerRenderer {
         double progress = pose.dismountProgress();
         Vec3 right = safeNormalize(facing.cross(WORLD_UP), new Vec3(1.0D, 0.0D, 0.0D));
         if (pose.dismountKind() == ClientSlidePoseController.DismountKind.FLIP) {
-            double load = smoothstep(0.0D, 0.16D, progress);
-            double release = smoothstep(0.12D, 0.24D, progress);
-            double spin = smoothstep(0.20D, 0.76D, progress);
-            double open = smoothstep(0.66D, 0.94D, progress);
-            double hop = Math.sin(progress * Math.PI);
-            double preload = load * (1.0D - smoothstep(0.12D, 0.26D, progress));
-            Vec3 horizontalFacing = new Vec3(facing.x, 0.0D, facing.z);
-            if (horizontalFacing.lengthSqr() > 1.0E-6D) {
-                double backward = 0.22D * smoothstep(0.16D, 0.82D, progress) * (1.0D - open * 0.18D);
-                Vec3 drift = horizontalFacing.normalize().scale(-backward);
-                poseStack.translate(drift.x, 0.0D, drift.z);
-            }
-            double centerArc = hop * 0.34D - preload * 0.060D - open * 0.035D;
-            double centerPivot = 0.86D + release * 0.08D - open * 0.05D;
-            poseStack.translate(0.0D, centerArc, 0.0D);
-            poseStack.translate(0.0D, centerPivot, 0.0D);
-            rotateAround(poseStack, right, -3.0D * preload - 360.0D * spin + 8.0D * open);
-            poseStack.translate(0.0D, -centerPivot, 0.0D);
-            rotateAround(poseStack, facing, Math.sin(progress * Math.PI) * 3.5D);
+            applyFlipWorldPose(poseStack, facing, right, progress, true);
         } else {
             rotateAround(poseStack, right, -10.0D * Math.sin(progress * Math.PI));
             rotateAround(poseStack, facing, 7.0D * Math.sin(progress * Math.PI * 1.4D));
         }
+    }
+
+    private static void applySlideActionWorldPose(PoseStack poseStack, ClientSlidePoseController.PoseSnapshot pose, Vec3 facing) {
+        if (pose.slideActionKind() != ClientSlidePoseController.SlideActionKind.PIPE_JUMP_FLIP) {
+            return;
+        }
+        Vec3 right = safeNormalize(facing.cross(WORLD_UP), new Vec3(1.0D, 0.0D, 0.0D));
+        applyFlipWorldPose(poseStack, facing, right, pose.slideActionProgress(), false);
+    }
+
+    private static void applyFlipWorldPose(PoseStack poseStack, Vec3 facing, Vec3 right, double progress, boolean dismountDrift) {
+        double p = Mth.clamp(progress, 0.0D, 1.0D);
+        double load = smoothstep(0.0D, 0.16D, p);
+        double release = smoothstep(0.12D, 0.24D, p);
+        double spin = smoothstep(0.20D, 0.76D, p);
+        double open = smoothstep(0.66D, 0.94D, p);
+        double hop = Math.sin(p * Math.PI);
+        double preload = load * (1.0D - smoothstep(0.12D, 0.26D, p));
+        if (dismountDrift) {
+            Vec3 horizontalFacing = new Vec3(facing.x, 0.0D, facing.z);
+            if (horizontalFacing.lengthSqr() > 1.0E-6D) {
+                double backward = 0.22D * smoothstep(0.16D, 0.82D, p) * (1.0D - open * 0.18D);
+                Vec3 drift = horizontalFacing.normalize().scale(-backward);
+                poseStack.translate(drift.x, 0.0D, drift.z);
+            }
+        }
+        double centerArc = hop * 0.34D - preload * 0.060D - open * 0.035D;
+        double centerPivot = 0.86D + release * 0.08D - open * 0.05D;
+        poseStack.translate(0.0D, centerArc, 0.0D);
+        poseStack.translate(0.0D, centerPivot, 0.0D);
+        rotateAround(poseStack, right, -3.0D * preload - 360.0D * spin + 8.0D * open);
+        poseStack.translate(0.0D, -centerPivot, 0.0D);
+        rotateAround(poseStack, facing, Math.sin(p * Math.PI) * 3.5D);
     }
 
     private static double dismountLift(ClientSlidePoseController.PoseSnapshot pose) {
@@ -337,22 +354,7 @@ public final class ClientSlideFeedbackPlayerRenderer {
         }
         float p = (float) Mth.clamp(pose.dismountProgress(), 0.0D, 1.0D);
         if (pose.dismountKind() == ClientSlidePoseController.DismountKind.FLIP) {
-            float load = (float) smoothstep(0.0D, 0.16D, p);
-            float release = (float) smoothstep(0.12D, 0.24D, p);
-            float tuck = (float) (smoothstep(0.22D, 0.40D, p) * (1.0D - smoothstep(0.58D, 0.84D, p)));
-            float open = (float) smoothstep(0.66D, 0.94D, p);
-            float preload = load * (1.0F - release);
-            model.body.xRot += (preload * 0.24F + tuck * 0.40F - open * 0.12F) * alpha;
-            model.rightLeg.xRot = (preload * 0.42F + tuck * 1.02F - open * 0.07F) * alpha;
-            model.leftLeg.xRot = (preload * 0.24F + tuck * 0.92F - open * 0.08F) * alpha;
-            model.rightLeg.zRot += (preload * 0.04F + tuck * 0.11F + open * 0.025F) * alpha;
-            model.leftLeg.zRot -= (preload * 0.04F + tuck * 0.11F + open * 0.025F) * alpha;
-            model.rightArm.xRot = (-0.62F * preload - 1.08F * release - tuck * 0.30F + open * 0.26F) * alpha;
-            model.leftArm.xRot = (-0.62F * preload - 1.08F * release - tuck * 0.30F + open * 0.26F) * alpha;
-            model.rightArm.yRot = (-0.18F - tuck * 0.08F + open * 0.08F) * alpha;
-            model.leftArm.yRot = (0.18F + tuck * 0.08F - open * 0.08F) * alpha;
-            model.rightArm.zRot = (0.40F * preload + 0.62F * release + tuck * 0.22F + open * 0.14F) * alpha;
-            model.leftArm.zRot = (-0.40F * preload - 0.62F * release - tuck * 0.22F - open * 0.14F) * alpha;
+            applyFlipModelPose(model, p, alpha);
         } else {
             float tuck = (float) Math.sin(p * Math.PI);
             model.body.xRot += tuck * 0.12F * alpha;
@@ -361,6 +363,33 @@ public final class ClientSlideFeedbackPlayerRenderer {
             model.rightArm.zRot += tuck * 0.24F * alpha;
             model.leftArm.zRot -= tuck * 0.24F * alpha;
         }
+    }
+
+    private static void applySlideActionModelPose(ClientSlidePoseController.PoseSnapshot pose, PlayerModel model, float alpha) {
+        if (pose.slideActionKind() != ClientSlidePoseController.SlideActionKind.PIPE_JUMP_FLIP) {
+            return;
+        }
+        applyFlipModelPose(model, (float) Mth.clamp(pose.slideActionProgress(), 0.0D, 1.0D), alpha);
+    }
+
+    private static void applyFlipModelPose(PlayerModel model, float progress, float alpha) {
+        float p = Mth.clamp(progress, 0.0F, 1.0F);
+        float load = (float) smoothstep(0.0D, 0.16D, p);
+        float release = (float) smoothstep(0.12D, 0.24D, p);
+        float tuck = (float) (smoothstep(0.22D, 0.40D, p) * (1.0D - smoothstep(0.58D, 0.84D, p)));
+        float open = (float) smoothstep(0.66D, 0.94D, p);
+        float preload = load * (1.0F - release);
+        model.body.xRot += (preload * 0.24F + tuck * 0.40F - open * 0.12F) * alpha;
+        model.rightLeg.xRot = (preload * 0.42F + tuck * 1.02F - open * 0.07F) * alpha;
+        model.leftLeg.xRot = (preload * 0.24F + tuck * 0.92F - open * 0.08F) * alpha;
+        model.rightLeg.zRot += (preload * 0.04F + tuck * 0.11F + open * 0.025F) * alpha;
+        model.leftLeg.zRot -= (preload * 0.04F + tuck * 0.11F + open * 0.025F) * alpha;
+        model.rightArm.xRot = (-0.62F * preload - 1.08F * release - tuck * 0.30F + open * 0.26F) * alpha;
+        model.leftArm.xRot = (-0.62F * preload - 1.08F * release - tuck * 0.30F + open * 0.26F) * alpha;
+        model.rightArm.yRot = (-0.18F - tuck * 0.08F + open * 0.08F) * alpha;
+        model.leftArm.yRot = (0.18F + tuck * 0.08F - open * 0.08F) * alpha;
+        model.rightArm.zRot = (0.40F * preload + 0.62F * release + tuck * 0.22F + open * 0.14F) * alpha;
+        model.leftArm.zRot = (-0.40F * preload - 0.62F * release - tuck * 0.22F - open * 0.14F) * alpha;
     }
 
     private static void rotateAround(PoseStack poseStack, Vec3 axis, double degrees) {

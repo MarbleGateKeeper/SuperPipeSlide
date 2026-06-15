@@ -12,6 +12,7 @@ import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import javax.annotation.Nullable;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -28,6 +29,8 @@ public final class ClientSlidePoseController {
 
     @Nullable
     private static LocalDismount localDismount;
+    @Nullable
+    private static LocalSlideAction localSlideAction;
 
     private ClientSlidePoseController() {}
 
@@ -39,6 +42,16 @@ public final class ClientSlidePoseController {
                 localDismount = localDismount.tick();
                 if (localDismount.finished()) {
                     localDismount = null;
+                }
+            }
+        }
+        if (localSlideAction != null) {
+            if (!ClientSlideController.isSliding()) {
+                localSlideAction = null;
+            } else {
+                localSlideAction = localSlideAction.tick();
+                if (localSlideAction.finished()) {
+                    localSlideAction = null;
                 }
             }
         }
@@ -61,8 +74,17 @@ public final class ClientSlidePoseController {
         localDismount = new LocalDismount(kind, frame.get(), descriptorFor(frame.get()), 0, duration);
     }
 
+    public static void beginSlideAction(SlideActionKind kind, UUID slideSessionId, int duration) {
+        if (kind == SlideActionKind.NONE || duration <= 0) {
+            localSlideAction = null;
+            return;
+        }
+        localSlideAction = new LocalSlideAction(kind, slideSessionId, 0, duration);
+    }
+
     public static void cancelLocalPose() {
         localDismount = null;
+        localSlideAction = null;
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player != null) {
             SMOOTHED_POSES.remove(minecraft.player.getId());
@@ -71,6 +93,7 @@ public final class ClientSlidePoseController {
 
     public static void clear() {
         localDismount = null;
+        localSlideAction = null;
         DESCRIPTOR_CACHE.clear();
         SMOOTHED_POSES.clear();
     }
@@ -106,15 +129,26 @@ public final class ClientSlidePoseController {
 
     private static PoseSnapshot activePose(ClientSlideFeedbackController.Frame frame, boolean local) {
         double mount = smoothstep(0.0D, MOUNT_TICKS, frame.ticksSliding());
+        LocalSlideAction action = local ? activeSlideAction(frame.sessionId()) : null;
         return new PoseSnapshot(
                 frame,
                 descriptorFor(frame),
                 local,
                 true,
                 DismountKind.NONE,
+                action == null ? SlideActionKind.NONE : action.kind(),
                 mount,
                 0.0D,
+                action == null ? 0.0D : action.progress(),
                 Mth.clamp(frame.alpha(), 0.0D, 1.0D));
+    }
+
+    @Nullable
+    private static LocalSlideAction activeSlideAction(UUID slideSessionId) {
+        if (localSlideAction == null || !localSlideAction.slideSessionId().equals(slideSessionId)) {
+            return null;
+        }
+        return localSlideAction;
     }
 
     private static RidePoseDescriptor descriptorFor(ClientSlideFeedbackController.Frame frame) {
@@ -362,8 +396,10 @@ public final class ClientSlidePoseController {
                 current.local(),
                 current.sliding(),
                 current.dismountKind(),
+                current.slideActionKind(),
                 lerp(previous.mountProgress(), current.mountProgress(), t),
                 lerp(previous.dismountProgress(), current.dismountProgress(), t),
+                lerp(previous.slideActionProgress(), current.slideActionProgress(), t),
                 lerp(previous.poseAlpha(), current.poseAlpha(), t));
     }
 
@@ -437,7 +473,7 @@ public final class ClientSlidePoseController {
             double alpha = this.kind == DismountKind.FLIP
                     ? 1.0D - smoothstep(0.72D, 1.0D, progress)
                     : 1.0D - smoothstep(0.58D, 1.0D, progress);
-            return new PoseSnapshot(this.frame, this.ride, true, false, this.kind, 1.0D, progress, alpha);
+            return new PoseSnapshot(this.frame, this.ride, true, false, this.kind, SlideActionKind.NONE, 1.0D, progress, 0.0D, alpha);
         }
 
         private boolean finished() {
@@ -449,6 +485,31 @@ public final class ClientSlidePoseController {
         NONE,
         STEP,
         FLIP
+    }
+
+    public enum SlideActionKind {
+        NONE,
+        PIPE_JUMP_FLIP
+    }
+
+    private record LocalSlideAction(SlideActionKind kind, UUID slideSessionId, int age, int duration) {
+        private LocalSlideAction {
+            kind = kind == null ? SlideActionKind.NONE : kind;
+            age = Math.max(0, age);
+            duration = Math.max(1, duration);
+        }
+
+        private LocalSlideAction tick() {
+            return new LocalSlideAction(this.kind, this.slideSessionId, this.age + 1, this.duration);
+        }
+
+        private double progress() {
+            return Mth.clamp(this.age / (double) this.duration, 0.0D, 1.0D);
+        }
+
+        private boolean finished() {
+            return this.age >= this.duration;
+        }
     }
 
     public enum RidePoseFamily {
@@ -478,9 +539,16 @@ public final class ClientSlidePoseController {
             boolean local,
             boolean sliding,
             DismountKind dismountKind,
+            SlideActionKind slideActionKind,
             double mountProgress,
             double dismountProgress,
+            double slideActionProgress,
             double poseAlpha) {
+        public PoseSnapshot {
+            dismountKind = dismountKind == null ? DismountKind.NONE : dismountKind;
+            slideActionKind = slideActionKind == null ? SlideActionKind.NONE : slideActionKind;
+        }
+
         public Vec3 position() {
             return this.frame.position();
         }

@@ -91,9 +91,15 @@ public final class ClientSlideController {
     private static final int BRANCH_EXIT_COLOR = 0xFF80D8FF;
     private static final int ROUTE_COLOR = 0xFF7CCBFF;
     private static final int SAFETY_PROMPT_COOLDOWN_TICKS = 20;
+    private static final double PIPE_JUMP_SEARCH_RADIUS = 8.0D;
+    private static final double PIPE_JUMP_ARC_HEIGHT = 0.38D;
+    private static final int PIPE_JUMP_MIN_DURATION_TICKS = 4;
+    private static final int PIPE_JUMP_MAX_DURATION_TICKS = 8;
 
     @Nullable
     private static ClientSlideState active;
+    @Nullable
+    private static PipeJumpTransfer activePipeJumpTransfer;
     @Nullable
     private static CaptureCooldown cooldown;
     @Nullable
@@ -128,6 +134,7 @@ public final class ClientSlideController {
     private static StationCenterAction pendingStationCenterAction;
     private static final Map<UUID, RouteCandidate> openStationCandidates = new HashMap<>();
     private static final Set<NoticeKey> localNotices = new HashSet<>();
+    private static boolean jumpKeyWasDown;
 
     private ClientSlideController() {}
 
@@ -141,21 +148,28 @@ public final class ClientSlideController {
             return;
         }
 
+        boolean jumpKeyDown = wantsJumpExit(player);
+        boolean jumpPressedThisTick = jumpKeyDown && !jumpKeyWasDown;
+        jumpKeyWasDown = jumpKeyDown;
         tickCooldown(player);
         applyPendingTeleportCommit(player);
         if (waitingTeleportSessionId != null) {
             ClientSlideMotion.freeze(player);
             return;
         }
+        if (activePipeJumpTransfer != null) {
+            tickPipeJumpTransfer(player);
+            return;
+        }
         if (active != null) {
-            continueSliding(player, active);
+            continueSliding(player, active, jumpPressedThisTick);
             return;
         }
 
         if (minecraft.screen instanceof SlideSafetyWarningScreen) {
             return;
         }
-        if (!wantsSneakExit(player) && !wantsJumpExit(player)) {
+        if (!wantsSneakExit(player) && !jumpKeyDown) {
             tryCapture(player);
         }
     }
@@ -343,7 +357,9 @@ public final class ClientSlideController {
             player.noPhysics = active.previousNoPhysics();
         }
         active = null;
+        activePipeJumpTransfer = null;
         cooldown = null;
+        jumpKeyWasDown = false;
         ClientSlidePoseController.cancelLocalPose();
         clearRuntimeState();
         ClientGazeChoiceController.clear();
@@ -543,7 +559,7 @@ public final class ClientSlideController {
         ClientSlideMotion.apply(player, capturedConnection, capturedProjection.distanceOnConnection(), direction, active.speed());
     }
 
-    private static void continueSliding(LocalPlayer player, ClientSlideState state) {
+    private static void continueSliding(LocalPlayer player, ClientSlideState state, boolean jumpPressedThisTick) {
         Optional<PipeConnection> connection = ClientPipeNetworkCache.globalConnection(state.connectionId());
         if (connection.isEmpty() || !connection.get().levelKey().equals(player.level().dimension())) {
             holdForLocalData(player, state);
@@ -563,8 +579,8 @@ public final class ClientSlideController {
             detach(player, state, 8, true);
             return;
         }
-        if (wantsJumpExit(player)) {
-            detachByJump(player, state, current);
+        if (jumpPressedThisTick) {
+            handleSlideJump(player, state, current);
             return;
         }
 
@@ -610,6 +626,107 @@ public final class ClientSlideController {
             updatedState = speedState.withSpeed(updatedSpeed);
         }
         advanceAlongPipe(player, updatedState, current);
+    }
+
+    private static void handleSlideJump(LocalPlayer player, ClientSlideState state, PipeConnection current) {
+        if (ClientNavigationController.isNavigating()) {
+            detachByJump(player, state, current);
+            return;
+        }
+        List<PipeConnection> candidates = ClientPipeNetworkCache.connectionsNear(player.level().dimension(), player.position(), PIPE_JUMP_SEARCH_RADIUS);
+        Optional<SlideJumpTargetResolver.Target> target = SlideJumpTargetResolver.resolve(player, state, current, candidates);
+        if (target.isEmpty()) {
+            detachByJump(player, state, current);
+            return;
+        }
+        if (target.get().kind() == SlideJumpTargetResolver.TargetKind.SAME_PIPE_REVERSE) {
+            reverseOnCurrentPipe(player, state, current, target.get());
+            return;
+        }
+        beginPipeJumpTransfer(player, state, current, target.get());
+    }
+
+    private static void reverseOnCurrentPipe(LocalPlayer player, ClientSlideState state, PipeConnection current, SlideJumpTargetResolver.Target target) {
+        double speed = Math.max(0.08D, state.speed());
+        ClientSlideState reversed = state.advance(current.id(), target.direction(), target.distanceOnConnection(), speed);
+        active = reversed;
+        activePipeJumpTransfer = null;
+        ClientSlideMotion.snap(player, current, reversed.distanceOnConnection(), reversed.direction(), reversed.speed());
+        clearOpenChoicesAfterHandoff();
+        if (activeRouteLayoutId != null) {
+            clearActiveRoute();
+        }
+    }
+
+    private static void beginPipeJumpTransfer(LocalPlayer player, ClientSlideState state, PipeConnection current, SlideJumpTargetResolver.Target target) {
+        PipeConnection targetConnection = target.connection();
+        Vec3 startPosition = current.positionAt(state.distanceOnConnection());
+        Vec3 targetPosition = targetConnection.positionAt(target.distanceOnConnection());
+        double jumpDistance = startPosition.distanceTo(targetPosition);
+        int duration = Mth.clamp((int) Math.ceil(jumpDistance * 0.9D) + 2, PIPE_JUMP_MIN_DURATION_TICKS, PIPE_JUMP_MAX_DURATION_TICKS);
+        double targetSpeed = speedAfterHandoff(Math.max(0.08D, state.speed()), targetConnection);
+        active = state.withSpeed(0.0D);
+        activePipeJumpTransfer = new PipeJumpTransfer(
+                state.sessionId(),
+                current.id(),
+                targetConnection.id(),
+                target.direction(),
+                target.distanceOnConnection(),
+                targetSpeed,
+                startPosition,
+                0,
+                duration);
+        clearOpenChoicesAfterHandoff();
+        ClientFoldTraversalEffectController.clear();
+        ClientSlidePoseController.beginSlideAction(ClientSlidePoseController.SlideActionKind.PIPE_JUMP_FLIP, state.sessionId(), Math.max(duration + 4, 10));
+        ClientSlideMotion.freeze(player);
+    }
+
+    private static void tickPipeJumpTransfer(LocalPlayer player) {
+        PipeJumpTransfer transfer = activePipeJumpTransfer;
+        ClientSlideState state = active;
+        if (transfer == null || state == null || !transfer.sessionId().equals(state.sessionId())) {
+            activePipeJumpTransfer = null;
+            return;
+        }
+        Optional<PipeConnection> targetConnection = ClientPipeNetworkCache.globalConnection(transfer.targetConnectionId());
+        if (targetConnection.isEmpty() || !targetConnection.get().levelKey().equals(player.level().dimension())) {
+            activePipeJumpTransfer = null;
+            holdForLocalData(player, state);
+            return;
+        }
+        PipeConnection target = targetConnection.get();
+        int nextAge = transfer.age() + 1;
+        double progress = Mth.clamp((double) nextAge / transfer.duration(), 0.0D, 1.0D);
+        double eased = smoothStep(progress);
+        Vec3 targetPosition = target.positionAt(transfer.targetDistance());
+        double arcHeight = Math.sin(progress * Math.PI) * PIPE_JUMP_ARC_HEIGHT;
+        Vec3 interpolated = transfer.startPosition().lerp(targetPosition, eased).add(0.0D, arcHeight, 0.0D);
+        player.noPhysics = true;
+        player.setDeltaMovement(interpolated.subtract(player.position()));
+        player.setPos(interpolated.x, interpolated.y, interpolated.z);
+        player.resetFallDistance();
+
+        if (nextAge < transfer.duration()) {
+            activePipeJumpTransfer = transfer.withAge(nextAge);
+            return;
+        }
+
+        activePipeJumpTransfer = null;
+        double targetSpeed = speedAfterHandoff(transfer.targetSpeed(), target);
+        ClientSlideState landed = state.advance(target.id(), transfer.targetDirection(), transfer.targetDistance(), targetSpeed);
+        active = landed;
+        if (activeRouteLayoutId != null) {
+            clearActiveRoute();
+        }
+        ClientSlideMotion.apply(player, target, landed.distanceOnConnection(), landed.direction(), landed.speed());
+        clearPassedStateForConnection(transfer.sourceConnectionId());
+        clearOpenChoicesAfterHandoff();
+    }
+
+    private static double smoothStep(double progress) {
+        double value = Mth.clamp(progress, 0.0D, 1.0D);
+        return value * value * (3.0D - 2.0D * value);
     }
 
     private static boolean reconcileAheadFromPosition(LocalPlayer player, ClientSlideState state) {
@@ -1339,6 +1456,7 @@ public final class ClientSlideController {
 
     private static void requestFoldTeleport(LocalPlayer player, ClientSlideState state, ResourceKey<Level> targetLevel, Vec3 targetPosition, Optional<UUID> targetConnectionId, int direction, double distanceOnConnection, double speed) {
         active = state;
+        activePipeJumpTransfer = null;
         waitingTeleportSessionId = state.sessionId();
         ClientSlideMotion.freeze(player);
         ClientGazeChoiceController.clear();
@@ -1397,6 +1515,7 @@ public final class ClientSlideController {
             return;
         }
         boolean previousNoPhysics = active == null ? player.noPhysics : active.previousNoPhysics();
+        activePipeJumpTransfer = null;
         active = ClientSlideState.start(payload.sessionId(), connection.get().id(), payload.direction(), payload.distanceOnConnection(), payload.speed(), previousNoPhysics);
         updateActiveRouteProgress(connection.get().id(), true);
         pendingStationCenterAction = null;
@@ -1495,6 +1614,8 @@ public final class ClientSlideController {
             player.noPhysics = active.previousNoPhysics();
             active = null;
         }
+        activePipeJumpTransfer = null;
+        jumpKeyWasDown = false;
         ClientSlidePoseController.cancelLocalPose();
         clearRuntimeState();
         ClientGazeChoiceController.clear();
@@ -1510,6 +1631,7 @@ public final class ClientSlideController {
     }
 
     private static void clearRuntimeState() {
+        activePipeJumpTransfer = null;
         pendingBranchChoiceId = null;
         pendingStationChoiceId = null;
         activeRouteLayoutId = null;
@@ -2354,6 +2476,36 @@ public final class ClientSlideController {
     }
 
     private record CaptureCooldown(UUID connectionId, int ticks, boolean requireExit) {}
+
+    private record PipeJumpTransfer(
+            UUID sessionId,
+            UUID sourceConnectionId,
+            UUID targetConnectionId,
+            int targetDirection,
+            double targetDistance,
+            double targetSpeed,
+            Vec3 startPosition,
+            int age,
+            int duration) {
+        private PipeJumpTransfer {
+            targetDirection = targetDirection < 0 ? -1 : 1;
+            age = Math.max(0, age);
+            duration = Math.max(1, duration);
+        }
+
+        PipeJumpTransfer withAge(int age) {
+            return new PipeJumpTransfer(
+                    this.sessionId,
+                    this.sourceConnectionId,
+                    this.targetConnectionId,
+                    this.targetDirection,
+                    this.targetDistance,
+                    this.targetSpeed,
+                    this.startPosition,
+                    age,
+                    this.duration);
+        }
+    }
 
     private record NoticeKey(UUID platformStopId, UUID slideSessionId, String kind) {}
 
