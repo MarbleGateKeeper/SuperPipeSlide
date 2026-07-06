@@ -73,7 +73,7 @@ public class SuperPipeSlideClient {
             "key.superpipeslide.full_route_map",
             KeyConflictContext.IN_GAME,
             InputConstants.Type.KEYSYM,
-            InputConstants.KEY_M,
+            InputConstants.KEY_P,
             KEY_CATEGORY);
 
     public SuperPipeSlideClient(IEventBus modEventBus, ModContainer container) {
