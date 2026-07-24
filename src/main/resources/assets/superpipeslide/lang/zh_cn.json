@@ -1353,7 +1353,7 @@
   "screen.superpipeslide.projection_image.decode_failed": "解码失败",
   "screen.superpipeslide.projection_image.webp_unsupported": "不支持 WebP",
   "message.superpipeslide.shaderpack_pipe_performance_mode": "SuperPipeSlide 正在为当前光影包下的管道使用“性能”模式。若管道或阴影显示异常，可以打开 Sodium 视频设置 > SuperPipeSlide，将“光影包管道渲染模式”切换为“原生”。",
-  "sodium.options.superpipeslide.page": "SuperPipeSlide",
+  "sodium.options.superpipeslide.page": "超级管道速滑显示设置",
   "sodium.options.superpipeslide.group.shaderpack": "光影包管道",
   "sodium.options.superpipeslide.group.accessibility": "安全与辅助功能",
   "sodium.options.superpipeslide.shaderpack_pipe_render_mode": "光影包管道渲染模式",

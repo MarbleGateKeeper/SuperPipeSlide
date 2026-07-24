@@ -1353,7 +1353,7 @@
   "screen.superpipeslide.projection_image.decode_failed": "Decode Failed",
   "screen.superpipeslide.projection_image.webp_unsupported": "WebP Unsupported",
   "message.superpipeslide.shaderpack_pipe_performance_mode": "SuperPipeSlide is using Performance mode for pipes with the active shader pack. If pipes or shadows look wrong, open Sodium Video Settings > SuperPipeSlide and switch Shader Pack Pipe Render Mode to Native.",
-  "sodium.options.superpipeslide.page": "SuperPipeSlide",
+  "sodium.options.superpipeslide.page": "SuperPipeSlide Rendering Config",
   "sodium.options.superpipeslide.group.shaderpack": "Shader Pack Pipes",
   "sodium.options.superpipeslide.group.accessibility": "Safety",
   "sodium.options.superpipeslide.shaderpack_pipe_render_mode": "Shader Pack Pipe Render Mode",

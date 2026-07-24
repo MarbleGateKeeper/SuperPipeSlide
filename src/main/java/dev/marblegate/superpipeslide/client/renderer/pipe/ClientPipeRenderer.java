@@ -1323,6 +1323,11 @@ public final class ClientPipeRenderer {
                 || !cachedLevelKey.equals(levelKey)) {
             MESH_CACHE.clear();
             releaseSectionCache();
+            // A full appearance sync closes all dynamic coating textures, so any cached
+            // texture binding or generated render type holding a resolved texture view is
+            // now stale and must be re-resolved against the live texture manager.
+            CACHED_TEXTURE_BINDINGS.clear();
+            clearGeneratedRenderTypeCache();
         } else {
             invalidateMeshesForConnectionIds(networkInvalidation.removedConnectionIds(), true);
             invalidateMeshesForConnectionIds(networkInvalidation.updatedConnectionIds(), true);
