@@ -95,6 +95,7 @@ public final class ClientSlideController {
     private static final double PIPE_JUMP_ARC_HEIGHT = 0.38D;
     private static final int PIPE_JUMP_MIN_DURATION_TICKS = 4;
     private static final int PIPE_JUMP_MAX_DURATION_TICKS = 8;
+    private static final int DETACH_CONFIRM_ARM_TICKS = 60;
 
     @Nullable
     private static ClientSlideState active;
@@ -135,6 +136,11 @@ public final class ClientSlideController {
     private static final Map<UUID, RouteCandidate> openStationCandidates = new HashMap<>();
     private static final Set<NoticeKey> localNotices = new HashSet<>();
     private static boolean jumpKeyWasDown;
+    private static int detachConfirmArmedTicks;
+    @Nullable
+    private static SlideJumpAction currentJumpAction;
+    @Nullable
+    private static SlideJumpTargetResolver.Target pendingJumpTarget;
 
     private ClientSlideController() {}
 
@@ -151,6 +157,9 @@ public final class ClientSlideController {
         boolean jumpKeyDown = wantsJumpExit(player);
         boolean jumpPressedThisTick = jumpKeyDown && !jumpKeyWasDown;
         jumpKeyWasDown = jumpKeyDown;
+        if (detachConfirmArmedTicks > 0) {
+            detachConfirmArmedTicks--;
+        }
         tickCooldown(player);
         applyPendingTeleportCommit(player);
         if (waitingTeleportSessionId != null) {
@@ -188,6 +197,26 @@ public final class ClientSlideController {
     public static void clearRouteHudNavigationStopRetention() {
         retainedRouteHudNavigationStop = null;
     }
+
+    /**
+     * What SPACE would do if pressed right now, plus route/armed context, for the HUD
+     * action hint. Empty while not sliding.
+     */
+    static Optional<SlideJumpHint> slideJumpHint() {
+        if (active == null || currentJumpAction == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new SlideJumpHint(currentJumpAction, activeRouteLayoutId != null || ClientNavigationController.isNavigating(), detachConfirmArmedTicks > 0));
+    }
+
+    enum SlideJumpAction {
+        DETACH,
+        REVERSE,
+        PIPE_JUMP,
+        ROUTE_DETACH_CONFIRM
+    }
+
+    record SlideJumpHint(SlideJumpAction action, boolean onRoute, boolean armed) {}
 
     public static Optional<Vec3> currentSlideDirection(LocalPlayer player) {
         if (active == null) {
@@ -560,6 +589,8 @@ public final class ClientSlideController {
     }
 
     private static void continueSliding(LocalPlayer player, ClientSlideState state, boolean jumpPressedThisTick) {
+        currentJumpAction = null;
+        pendingJumpTarget = null;
         Optional<PipeConnection> connection = ClientPipeNetworkCache.globalConnection(state.connectionId());
         if (connection.isEmpty() || !connection.get().levelKey().equals(player.level().dimension())) {
             holdForLocalData(player, state);
@@ -575,6 +606,7 @@ public final class ClientSlideController {
             detach(player, state, 12);
             return;
         }
+        currentJumpAction = computeSlideJumpAction(player, state, current);
         if (wantsSneakExit(player)) {
             detach(player, state, 8, true);
             return;
@@ -628,22 +660,60 @@ public final class ClientSlideController {
         advanceAlongPipe(player, updatedState, current);
     }
 
-    private static void handleSlideJump(LocalPlayer player, ClientSlideState state, PipeConnection current) {
-        if (ClientNavigationController.isNavigating()) {
-            detachByJump(player, state, current);
-            return;
+    /**
+     * The single source of truth for what SPACE will do this tick. The result is stored in
+     * currentJumpAction every tick so the HUD hint and the actual jump handler can never
+     * disagree. On a route (or while navigating) only detaching is offered: instantly at a
+     * station platform, with a press-again confirmation anywhere else.
+     */
+    private static SlideJumpAction computeSlideJumpAction(LocalPlayer player, ClientSlideState state, PipeConnection current) {
+        if (activeRouteLayoutId != null || ClientNavigationController.isNavigating()) {
+            return isAtStationPlatform(state, current) ? SlideJumpAction.DETACH : SlideJumpAction.ROUTE_DETACH_CONFIRM;
         }
         List<PipeConnection> candidates = ClientPipeNetworkCache.connectionsNear(player.level().dimension(), player.position(), PIPE_JUMP_SEARCH_RADIUS);
         Optional<SlideJumpTargetResolver.Target> target = SlideJumpTargetResolver.resolve(player, state, current, candidates);
         if (target.isEmpty()) {
+            return SlideJumpAction.DETACH;
+        }
+        pendingJumpTarget = target.get();
+        return target.get().kind() == SlideJumpTargetResolver.TargetKind.SAME_PIPE_REVERSE ? SlideJumpAction.REVERSE : SlideJumpAction.PIPE_JUMP;
+    }
+
+    private static boolean isAtStationPlatform(ClientSlideState state, PipeConnection current) {
+        return current.platformStopId().isPresent() || isHoldingAtStationCenter(state, current);
+    }
+
+    private static void handleSlideJump(LocalPlayer player, ClientSlideState state, PipeConnection current) {
+        SlideJumpAction action = currentJumpAction != null ? currentJumpAction : computeSlideJumpAction(player, state, current);
+        if (action == SlideJumpAction.ROUTE_DETACH_CONFIRM) {
+            if (detachConfirmArmedTicks > 0) {
+                detachConfirmArmedTicks = 0;
+                detachByJump(player, state, current);
+            } else {
+                detachConfirmArmedTicks = DETACH_CONFIRM_ARM_TICKS;
+                sendLocalNotice(
+                        ClientboundSlideNoticePayload.Kind.WARNING,
+                        List.of(0xFFFFB13B),
+                        Component.translatable("notice.superpipeslide.slide.detach_confirm"),
+                        List.of());
+            }
+            return;
+        }
+        if (activeRouteLayoutId != null || ClientNavigationController.isNavigating()) {
+            detachConfirmArmedTicks = 0;
             detachByJump(player, state, current);
             return;
         }
-        if (target.get().kind() == SlideJumpTargetResolver.TargetKind.SAME_PIPE_REVERSE) {
-            reverseOnCurrentPipe(player, state, current, target.get());
+        SlideJumpTargetResolver.Target target = pendingJumpTarget;
+        if (target == null) {
+            detachByJump(player, state, current);
             return;
         }
-        beginPipeJumpTransfer(player, state, current, target.get());
+        if (target.kind() == SlideJumpTargetResolver.TargetKind.SAME_PIPE_REVERSE) {
+            reverseOnCurrentPipe(player, state, current, target);
+            return;
+        }
+        beginPipeJumpTransfer(player, state, current, target);
     }
 
     private static void reverseOnCurrentPipe(LocalPlayer player, ClientSlideState state, PipeConnection current, SlideJumpTargetResolver.Target target) {
@@ -1616,6 +1686,9 @@ public final class ClientSlideController {
         }
         activePipeJumpTransfer = null;
         jumpKeyWasDown = false;
+        detachConfirmArmedTicks = 0;
+        currentJumpAction = null;
+        pendingJumpTarget = null;
         ClientSlidePoseController.cancelLocalPose();
         clearRuntimeState();
         ClientGazeChoiceController.clear();
@@ -1645,6 +1718,7 @@ public final class ClientSlideController {
         clearOpenChoicesAfterHandoff();
         heldStationChoicePlatformStopId = null;
         pendingStationCenterAction = null;
+        detachConfirmArmedTicks = 0;
         localNotices.clear();
     }
 
@@ -1656,6 +1730,7 @@ public final class ClientSlideController {
         activeRouteDirection = 1;
         retainedRouteHudNavigationStop = null;
         pendingStationCenterAction = null;
+        detachConfirmArmedTicks = 0;
     }
 
     private static void clearOpenChoicesAfterHandoff() {

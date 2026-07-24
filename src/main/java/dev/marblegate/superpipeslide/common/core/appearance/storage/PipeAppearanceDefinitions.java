@@ -29,7 +29,6 @@ public final class PipeAppearanceDefinitions {
     public static final String PARAM_RIM_WIDTH = "rim_width";
     public static final String PARAM_WALL_SLOPE = "wall_slope";
     public static final String PARAM_FLOOR_RATIO = "floor_ratio";
-    public static final String PARAM_EDGE_WIDTH = "edge_width";
 
     private static final List<MaterialSlotDefinition> BODY = slots("body");
     private static final List<MaterialSlotDefinition> BODY_RIB = slots("body", "rib");
@@ -163,8 +162,7 @@ public final class PipeAppearanceDefinitions {
                 parameter(PARAM_RADIUS, 0.22D, 0.12D, 0.62D, 0.01D)), 1.8F, 5, false);
         style("monorail_pipe", "track", PipeStyleShape.MONORAIL, "monorail_basic", BEAM_TRACK, List.of(
                 parameter(PARAM_WIDTH, 0.36D, 0.18D, 1.10D, 0.02D),
-                parameter(PARAM_HEIGHT, 0.32D, 0.14D, 1.00D, 0.02D),
-                parameter(PARAM_EDGE_WIDTH, 0.060D, 0.025D, 0.18D, 0.005D)), 2.0F, 5, false);
+                parameter(PARAM_HEIGHT, 0.32D, 0.14D, 1.00D, 0.02D)), 2.0F, 5, false);
         style("covered_tube", "tech", PipeStyleShape.COVERED, "covered_half", BASE_CANOPY, List.of(
                 parameter(PARAM_WIDTH, 1.25D, 1.05D, 1.95D, 0.02D),
                 parameter(PARAM_HEIGHT, 2.00D, 1.88D, 3.00D, 0.02D),

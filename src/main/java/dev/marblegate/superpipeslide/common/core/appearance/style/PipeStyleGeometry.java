@@ -62,8 +62,7 @@ public record PipeStyleGeometry(
             case MONORAIL -> {
                 double halfWidth = style.parameterValue(parameters, PipeAppearanceDefinitions.PARAM_WIDTH) * 0.5D * size;
                 double halfHeight = style.parameterValue(parameters, PipeAppearanceDefinitions.PARAM_HEIGHT) * 0.5D * size;
-                double edgeWidth = style.parameterValue(parameters, PipeAppearanceDefinitions.PARAM_EDGE_WIDTH) * size;
-                yield geometry(style.shape(), Math.max(halfWidth, halfHeight), halfWidth, halfHeight, halfHeight * 2.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, edgeWidth);
+                yield geometry(style.shape(), Math.max(halfWidth, halfHeight), halfWidth, halfHeight, halfHeight * 2.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D);
             }
             case COVERED -> {
                 double halfWidth = style.parameterValue(parameters, PipeAppearanceDefinitions.PARAM_WIDTH) * 0.5D * size;

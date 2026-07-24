@@ -235,7 +235,7 @@ public record PipeSurfaceModel(
     private static void monorailSurfaces(SurfaceBuilder builder, PipeStyleGeometry geometry, boolean heavy) {
         double w = geometry.halfWidth();
         double h = geometry.halfHeight();
-        double trackHalf = Math.min(w * 0.55D, Math.max(geometry.edgeWidth(), w * 0.34D));
+        double trackHalf = w * 0.34D;
         builder.add("track", -trackHalf, 0.0D, trackHalf, 0.0D, true);
         if (heavy) {
             builder.add("edge", trackHalf, 0.0D, w, -h * 0.28D, true);
@@ -339,7 +339,6 @@ public record PipeSurfaceModel(
                 addHorizontalMarker(builder, INTERNAL_MARKER_PLATFORM_SLOT, 0.0D, 0.040D, PLATFORM_ANCHOR_WIDTH);
             }
             case MONORAIL -> {
-                double trackHalf = Math.min(geometry.halfWidth() * 0.55D, Math.max(geometry.edgeWidth(), geometry.halfWidth() * 0.34D));
                 addHorizontalMarker(builder, INTERNAL_MARKER_ACCELERATION_SLOT, 0.0D, 0.038D, ACCELERATION_ANCHOR_WIDTH);
                 addVerticalMarker(builder, INTERNAL_MARKER_HIGHWAY_SLOT, geometry.halfWidth() + 0.018D, -geometry.halfHeight() * 0.62D, HIGHWAY_ANCHOR_WIDTH);
                 addVerticalMarker(builder, INTERNAL_MARKER_DIRECTION_SLOT, -geometry.halfWidth() - 0.018D, -geometry.halfHeight() * 0.62D, DIRECTION_ANCHOR_WIDTH);

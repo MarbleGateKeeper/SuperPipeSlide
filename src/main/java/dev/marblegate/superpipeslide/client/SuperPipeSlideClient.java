@@ -15,6 +15,7 @@ import dev.marblegate.superpipeslide.client.core.projection.cache.ProjectionText
 import dev.marblegate.superpipeslide.client.core.projection.render.ProjectionWorldTextRenderer;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteHudController;
+import dev.marblegate.superpipeslide.client.core.slide.ClientSlideActionHintController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideFeedbackController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideNoticeController;
@@ -88,9 +89,11 @@ public class SuperPipeSlideClient {
         Identifier routeHudLayer = Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "route_hud");
         Identifier navigationHudLayer = Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "navigation_hud");
         Identifier slideNoticeLayer = Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "slide_notice");
+        Identifier slideActionHintLayer = Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "slide_action_hint");
         event.registerAbove(VanillaGuiLayers.HOTBAR, routeHudLayer, ClientRouteHudController::render);
         event.registerAbove(routeHudLayer, navigationHudLayer, ClientNavigationHudController::render);
         event.registerAbove(navigationHudLayer, slideNoticeLayer, ClientSlideNoticeController::render);
+        event.registerAbove(slideNoticeLayer, slideActionHintLayer, ClientSlideActionHintController::render);
     }
 
     private static void registerKeyMappings(RegisterKeyMappingsEvent event) {
