@@ -114,7 +114,8 @@ final class ClientSlideBalancePoseSolver {
                 * (float) balance.ride().turnLeanScale()
                 * (1.0F - balance.vertical() * 0.55F);
         float anticipation = (balance.previewTurn() - balance.turn()) * (0.030F + balance.speed() * 0.032F) * (1.0F - balance.vertical() * 0.50F);
-        float bodyPitch = speedLean + slopeLean + railCrouch + verticalCrouch + wallTension + 0.030F * balance.mount();
+        float bodyPitch = speedLean + slopeLean + railCrouch + verticalCrouch + wallTension + 0.030F * balance.mount()
+                + (balance.breathe() * 0.008F + balance.bob() * 0.010F + balance.flutter() * 0.006F) * (1.0F - balance.station() * 0.45F);
         float bodyYaw = sideYaw;
         float bodyRoll = steeringRoll + anticipation + balance.descend() * balance.turn() * 0.055F - balance.ascend() * balance.turn() * 0.036F;
         return new BodyPose(bodyPitch * balance.alpha(), bodyYaw * balance.alpha(), bodyRoll * balance.alpha());
@@ -207,8 +208,12 @@ final class ClientSlideBalancePoseSolver {
         float midlinePull = (monorail ? 1.08F : 0.98F) * (0.024F + balance.inline() * 0.020F + balance.vertical() * 0.014F + Math.abs(balance.slope()) * 0.009F);
         float centerDepth = supportCenterDepth(balance) * (monorail ? 1.0F : 0.94F);
         float separation = supportSeparationScale(balance, monorail ? 0.98F : 0.92F);
+        // Leg roots stay at the hip: with Minecraft's rigid one-piece legs, translating
+        // the root visibly detaches the leg from the torso. The fore-aft stance and slope
+        // adaptation are expressed through leg swings below instead of root offsets.
         float frontDepth = centerDepth + separation * ((monorail ? 0.017F : 0.015F) + balance.speed() * 0.004F + balance.uphillPress() * 0.003F - balance.downhillBrace() * 0.002F);
         float rearDepth = centerDepth - separation * ((monorail ? 0.013F : 0.012F) + balance.speed() * 0.003F + balance.downhillBrace() * 0.003F - balance.uphillPress() * 0.001F);
+        float climbStep = balance.vertical() * balance.shuffle();
         float frontToe = -balance.sideStance() * (monorail ? 0.054F : 0.048F) * (1.0F + balance.speed() * 0.32F);
         float rearToe = balance.sideStance() * (monorail ? 0.045F : 0.040F) * (1.0F + balance.speed() * 0.28F);
         float front = (monorail ? 0.245F : 0.220F)
@@ -220,13 +225,19 @@ final class ClientSlideBalancePoseSolver {
                 + balance.downhillBrace() * (monorail ? 0.180F : 0.160F)
                 - balance.uphillPress() * (monorail ? 0.060F : 0.054F);
         float frontLeg = -front + balance.crouch() * (monorail ? 0.18F : 0.20F)
-                - balance.downhillBrace() * (monorail ? 0.045F : 0.040F)
+                - balance.downhillBrace() * (monorail ? 0.45F : 0.40F)
+                - balance.uphillPress() * (monorail ? 0.12F : 0.10F)
                 + balance.descend() * balance.verticalBrace() * (monorail ? 0.18F : 0.17F)
-                - balance.ascend() * balance.verticalBrace() * 0.10F;
+                - balance.ascend() * balance.verticalBrace() * 0.10F
+                - balance.descend() * (monorail ? 0.30F : 0.26F)
+                + climbStep * balance.ascend() * 0.25F;
         float rearLeg = back + balance.crouch() * (monorail ? 0.18F : 0.20F)
-                + balance.uphillPress() * (monorail ? 0.050F : 0.046F)
+                + balance.uphillPress() * (monorail ? 0.42F : 0.38F)
+                - balance.downhillBrace() * (monorail ? 0.12F : 0.10F)
                 + balance.ascend() * balance.verticalBrace() * 0.12F
-                - balance.descend() * balance.verticalBrace() * 0.08F;
+                - balance.descend() * balance.verticalBrace() * 0.08F
+                + balance.descend() * 0.10F
+                - climbStep * balance.ascend() * 0.25F;
         float verticalRollScale = 1.0F - balance.vertical() * 0.45F;
         float frontRollScale = monorail ? 0.52F : 0.50F;
         float rearRollScale = monorail ? 0.34F : 0.32F;
@@ -261,15 +272,18 @@ final class ClientSlideBalancePoseSolver {
         float separation = supportSeparationScale(balance, 0.96F);
         float frontDepth = centerDepth + separation * (0.014F + balance.speed() * 0.004F + balance.uphillPress() * 0.003F - balance.downhillBrace() * 0.002F);
         float rearDepth = centerDepth - separation * (0.012F + balance.speed() * 0.003F + balance.downhillBrace() * 0.003F - balance.uphillPress() * 0.001F);
+        float climbStep = balance.vertical() * balance.shuffle();
+        float leadSwing = -balance.downhillBrace() * 0.38F - balance.uphillPress() * 0.10F + climbStep * balance.ascend() * 0.22F;
+        float trailSwing = balance.uphillPress() * 0.36F - balance.downhillBrace() * 0.10F - climbStep * balance.ascend() * 0.22F;
         LegPose right = new LegPose(
-                ((balance.rightLead() ? -front : back) + balance.crouch() * 0.30F + balance.descend() * balance.verticalBrace() * 0.36F - balance.ascend() * balance.verticalBrace() * 0.18F) * balance.alpha() * (1.0F - balance.forwardStability()),
+                ((balance.rightLead() ? -front : back) + balance.crouch() * 0.30F + balance.descend() * balance.verticalBrace() * 0.36F - balance.ascend() * balance.verticalBrace() * 0.18F - balance.descend() * 0.24F + (balance.rightLead() ? leadSwing : trailSwing)) * balance.alpha() * (1.0F - balance.forwardStability()),
                 (-0.040F - balance.footYaw() + balance.turn() * 0.034F + balance.sideStance() * 0.048F) * balance.alpha(),
                 (balance.footRoll() * (1.0F - balance.vertical() * 0.45F) + balance.sideLoad() * 0.13F + (balance.rightLead() ? -0.018F : 0.024F) + balance.descend() * 0.018F) * balance.alpha(),
                 RIGHT_LEG_ROOT_X + midlinePull,
                 LEG_ROOT_Y,
                 balance.rightLead() ? frontDepth : rearDepth);
         LegPose left = new LegPose(
-                ((balance.rightLead() ? back : -front) + balance.crouch() * 0.30F + balance.ascend() * balance.verticalBrace() * 0.24F - balance.descend() * balance.verticalBrace() * 0.14F) * balance.alpha() * (1.0F - balance.forwardStability()),
+                ((balance.rightLead() ? back : -front) + balance.crouch() * 0.30F + balance.ascend() * balance.verticalBrace() * 0.24F - balance.descend() * balance.verticalBrace() * 0.14F + balance.descend() * 0.09F + (balance.rightLead() ? trailSwing : leadSwing)) * balance.alpha() * (1.0F - balance.forwardStability()),
                 (0.040F + balance.footYaw() + balance.turn() * 0.034F + balance.sideStance() * 0.048F) * balance.alpha(),
                 (-balance.footRoll() * (1.0F - balance.vertical() * 0.45F) + balance.sideLoad() * 0.13F + (balance.rightLead() ? -0.024F : 0.018F) - balance.ascend() * 0.014F) * balance.alpha(),
                 LEFT_LEG_ROOT_X - midlinePull,
@@ -304,7 +318,7 @@ final class ClientSlideBalancePoseSolver {
     }
 
     private static ArmPairPose solveArms(BalanceState balance) {
-        float armFloat = (float) Math.cos(balance.phase()) * (0.003F + balance.speed() * 0.004F) * (1.0F - balance.station() * 0.50F);
+        float armFloat = (float) Math.cos(balance.phase()) * (0.028F + balance.speed() * 0.038F) * (1.0F - balance.station() * 0.50F);
         float turnAmount = Math.abs(balance.previewTurn());
         float armSpread = (float) balance.ride().armBaseSpread()
                 + balance.speed() * 0.48F
@@ -337,7 +351,27 @@ final class ClientSlideBalancePoseSolver {
                         + leftForward * turnAmount * 0.040F) * balance.alpha(),
                 (0.060F + balance.speed() * 0.040F + balance.previewTurn() * 0.125F - balance.sideStance() * 0.048F - balance.ascend() * 0.020F) * balance.alpha(),
                 (-armOpen - leftOutside * turnAmount * 0.210F + leftForward * 0.045F + balance.sideLoad() * 0.135F) * balance.alpha());
+        if (balance.vertical() > 1.0E-4F) {
+            // Ascend: alternating climbing reach, one arm high, one pulling through.
+            ArmPose ascendRight = new ArmPose((-2.45F + balance.shuffle() * 0.35F) * balance.alpha(), -0.10F * balance.alpha(), 0.30F * balance.alpha());
+            ArmPose ascendLeft = new ArmPose((-0.55F - balance.shuffle() * 0.30F) * balance.alpha(), 0.08F * balance.alpha(), -0.24F * balance.alpha());
+            // Descend: lead arm grips overhead, trailing arm guards the chest.
+            ArmPose descendRight = new ArmPose(-2.30F * balance.alpha(), -0.06F * balance.alpha(), 0.26F * balance.alpha());
+            ArmPose descendLeft = new ArmPose(-0.60F * balance.alpha(), 0.10F * balance.alpha(), -0.42F * balance.alpha());
+            right = blendArms(right, ascendRight, balance.ascend());
+            left = blendArms(left, ascendLeft, balance.ascend());
+            right = blendArms(right, descendRight, balance.descend());
+            left = blendArms(left, descendLeft, balance.descend());
+        }
         return new ArmPairPose(right, left);
+    }
+
+    private static ArmPose blendArms(ArmPose base, ArmPose target, float amount) {
+        float t = Mth.clamp(amount, 0.0F, 1.0F);
+        return new ArmPose(
+                Mth.lerp(t, base.xRot(), target.xRot()),
+                Mth.lerp(t, base.yRot(), target.yRot()),
+                Mth.lerp(t, base.zRot(), target.zRot()));
     }
 
     private static double turnSignal(double signedTurn, double signedTurnPreview, double previewWeight) {
@@ -436,7 +470,11 @@ final class ClientSlideBalancePoseSolver {
             float uphillPress,
             float downhillBrace,
             float verticalBrace,
-            float forwardStability) {
+            float forwardStability,
+            float bob,
+            float breathe,
+            float shuffle,
+            float flutter) {
         private static BalanceState of(ClientSlidePoseController.PoseSnapshot pose, ClientSlidePoseController.SlidePoseFrame frame, float sideStance) {
             ClientSlidePoseController.RidePoseDescriptor ride = pose.ride();
             float alpha = (float) Mth.clamp(pose.poseAlpha(), 0.0D, 1.0D);
@@ -489,7 +527,11 @@ final class ClientSlideBalancePoseSolver {
                     uphillPress,
                     downhillBrace,
                     vertical * (0.040F + speed * 0.026F),
-                    0.08F + uphillStability * 0.16F + vertical * 0.08F);
+                    0.08F + uphillStability * 0.16F + vertical * 0.08F,
+                    (float) Math.sin(pose.motionPhase() * Mth.TWO_PI * 2.0D) * (0.30F + speed * 0.70F) * (1.0F - station * 0.60F) * (1.0F - vertical * 0.40F),
+                    (float) Math.sin(pose.motionPhase() * Mth.TWO_PI * 0.5D) * (0.55F + speed * 0.45F),
+                    (float) Math.sin(pose.motionPhase() * Mth.TWO_PI),
+                    (float) Math.sin(pose.motionPhase() * Mth.TWO_PI * 3.7D + 1.3D) * speed * speed * speed * speed);
         }
     }
 }

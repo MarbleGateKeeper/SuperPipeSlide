@@ -601,6 +601,7 @@
   "tooltip.superpipeslide.pipe_appearance_tool.pick": "Sneak right-click a pipe segment to copy its appearance",
   "message.superpipeslide.pipe_appearance_picked": "Copied pipe appearance",
   "message.superpipeslide.pipe_appearance_brushed": "Brushed pipe appearance",
+  "message.superpipeslide.pipe_appearance_auto_applied": "Offhand appearance applied",
   "item.superpipeslide.pipe_editor": "Pipe Shape Editor",
   "tooltip.superpipeslide.pipe_editor.header": "Edits pipe shapes and anchor attach points directly in the world",
   "tooltip.superpipeslide.pipe_editor.open": "Right-click an anchor to move its attach point, or right-click a pipe to edit its shape",

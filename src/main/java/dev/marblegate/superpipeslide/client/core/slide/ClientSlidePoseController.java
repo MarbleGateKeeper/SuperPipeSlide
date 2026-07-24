@@ -7,6 +7,7 @@ import dev.marblegate.superpipeslide.common.core.appearance.storage.PipeAppearan
 import dev.marblegate.superpipeslide.common.core.appearance.style.PipeStyleDefinition;
 import dev.marblegate.superpipeslide.common.core.appearance.style.PipeStyleGeometry;
 import dev.marblegate.superpipeslide.common.core.appearance.style.PipeStyleShape;
+import dev.marblegate.superpipeslide.common.core.appearance.style.PipeSurfaceModel;
 import dev.marblegate.superpipeslide.common.core.appearance.style.PipeVariantDefinition;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import java.util.LinkedHashMap;
@@ -168,6 +169,7 @@ public final class ClientSlidePoseController {
                 .filter(candidate -> candidate.styleId().equals(style.id()))
                 .orElseGet(() -> PipeAppearanceDefinitions.variant(style.defaultVariantId()).orElse(PipeAppearanceDefinitions.defaultVariant()));
         PipeStyleGeometry geometry = PipeStyleGeometry.resolve(style, variant, profile.styleParameters());
+        double wallRadius = PipeStyleGeometry.profileHalfExtent(PipeSurfaceModel.build(style.shape(), variant, geometry));
         return switch (geometry.shape()) {
             case ROUND -> new RidePoseDescriptor(
                     RidePoseFamily.INLINE,
@@ -181,7 +183,8 @@ public final class ClientSlidePoseController {
                     1.05D,
                     0.18D,
                     0.78D,
-                    1.00D);
+                    1.00D,
+                    wallRadius);
             case FACETED -> new RidePoseDescriptor(
                     RidePoseFamily.INLINE,
                     geometry.shape(),
@@ -194,7 +197,8 @@ public final class ClientSlidePoseController {
                     1.00D,
                     0.17D,
                     0.74D,
-                    0.96D);
+                    0.96D,
+                    wallRadius);
             case BOX, TRIANGLE -> new RidePoseDescriptor(
                     RidePoseFamily.INLINE,
                     geometry.shape(),
@@ -207,7 +211,8 @@ public final class ClientSlidePoseController {
                     0.88D,
                     0.12D,
                     0.58D,
-                    0.82D);
+                    0.82D,
+                    wallRadius);
             case RAIL -> new RidePoseDescriptor(
                     RidePoseFamily.SPLIT_RAIL,
                     geometry.shape(),
@@ -220,7 +225,8 @@ public final class ClientSlidePoseController {
                     0.86D,
                     clamp((geometry.gauge() - 0.26D) / 0.58D, 0.18D, 1.00D),
                     0.54D,
-                    0.72D);
+                    0.72D,
+                    wallRadius);
             case SLIDE -> new RidePoseDescriptor(
                     RidePoseFamily.CRADLE,
                     geometry.shape(),
@@ -233,7 +239,8 @@ public final class ClientSlidePoseController {
                     0.70D,
                     0.24D,
                     0.42D,
-                    0.56D);
+                    0.56D,
+                    wallRadius);
             case MONORAIL -> new RidePoseDescriptor(
                     RidePoseFamily.MONORAIL,
                     geometry.shape(),
@@ -246,7 +253,8 @@ public final class ClientSlidePoseController {
                     1.12D,
                     0.12D,
                     0.88D,
-                    1.06D);
+                    1.06D,
+                    wallRadius);
             case COVERED -> new RidePoseDescriptor(
                     RidePoseFamily.CRADLE,
                     geometry.shape(),
@@ -259,7 +267,8 @@ public final class ClientSlidePoseController {
                     0.64D,
                     0.28D,
                     0.34D,
-                    0.48D);
+                    0.48D,
+                    wallRadius);
         };
     }
 
@@ -287,7 +296,7 @@ public final class ClientSlidePoseController {
         Vec3 up = safeNormalize(right.cross(forward), WORLD_UP);
         double slope = Math.abs(forward.y);
         double track = smoothstep(0.10D, 0.52D, slope);
-        double vertical = smoothstep(0.54D, 0.90D, slope);
+        double vertical = PipeStyleGeometry.verticalness(forward);
         double ascend = vertical * smoothstep(0.08D, 0.94D, Math.max(0.0D, forward.y));
         double descend = vertical * smoothstep(0.08D, 0.94D, Math.max(0.0D, -forward.y));
         return new SlidePoseFrame(center, forward, right, up, distance, length, track, vertical, ascend, descend);
@@ -407,7 +416,6 @@ public final class ClientSlidePoseController {
 
     private static boolean shouldSnap(PoseSnapshot previous, PoseSnapshot current) {
         return !previous.frame().sessionId().equals(current.frame().sessionId())
-                || !previous.frame().connectionId().equals(current.frame().connectionId())
                 || previous.frame().position().distanceToSqr(current.frame().position()) > 16.0D
                 || previous.ride().family() != current.ride().family()
                 || previous.ride().shape() != current.ride().shape();
@@ -533,7 +541,8 @@ public final class ClientSlidePoseController {
             double balanceScale,
             double railSpread,
             double verticalRideScale,
-            double wallRideScale) {}
+            double wallRideScale,
+            double wallRadius) {}
 
     public record PoseSnapshot(
             ClientSlideFeedbackController.Frame frame,

@@ -2,6 +2,7 @@ package dev.marblegate.superpipeslide.client.core.slide;
 
 import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
+import dev.marblegate.superpipeslide.common.core.appearance.style.PipeStyleGeometry;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.geometry.SlideGeometry;
 import dev.marblegate.superpipeslide.common.core.slide.ResolvedPipeSpeedRules;
@@ -111,7 +112,7 @@ public final class ClientSlideFeedbackController {
                 : Mth.clamp(speedDelta * 48.0D, 0.0D, 1.0D);
         double targetHighway = next.highway() ? Math.max(0.42D, targetSpeed01) : 0.0D;
         double targetPlatform = next.stationSlow() ? 1.0D : next.platformConnection() && targetSpeed01 < 0.20D ? 0.42D : 0.0D;
-        double targetVertical = smoothstep(0.62D, 0.86D, Math.abs(tangent.y));
+        double targetVertical = PipeStyleGeometry.verticalness(tangent);
         double targetUp = targetVertical * Math.max(0.0D, tangent.y);
         double targetDown = targetVertical * Math.max(0.0D, -tangent.y);
         TurnSample turn = TURN_ACCUMULATOR.sample(next.position(), tangent, newSession, turnSpeedScale(targetSpeed01, targetPerceptualSpeed));
@@ -215,7 +216,6 @@ public final class ClientSlideFeedbackController {
         }
         if (previousFrame == null
                 || !previousFrame.sessionId().equals(frame.sessionId())
-                || !previousFrame.connectionId().equals(frame.connectionId())
                 || previousFrame.position().distanceToSqr(frame.position()) > 16.0D) {
             return Optional.of(frame);
         }
@@ -1128,11 +1128,11 @@ public final class ClientSlideFeedbackController {
         }
 
         private TurnSample computeRawTurn(Vec3 tangent, double speedScale) {
-            TurnHistorySample reference = this.referenceSample();
-            if (reference == null || speedScale <= 0.0D) {
+            Vec3 referenceTangent = this.referenceTangent();
+            if (referenceTangent == null || speedScale <= 0.0D) {
                 return new TurnSample(0.0D, 0.0D);
             }
-            Vec3 fromHorizontal = new Vec3(reference.tangent().x, 0.0D, reference.tangent().z);
+            Vec3 fromHorizontal = new Vec3(referenceTangent.x, 0.0D, referenceTangent.z);
             Vec3 toHorizontal = new Vec3(tangent.x, 0.0D, tangent.z);
             double fromLength = fromHorizontal.length();
             double toLength = toHorizontal.length();
@@ -1149,22 +1149,41 @@ public final class ClientSlideFeedbackController {
             return new TurnSample(intensity, Math.signum(signedAngle) * intensity);
         }
 
+        /**
+         * Interpolated lookback tangent: instead of snapping to the single nearest history
+         * sample (which alternates between adjacent tick samples as the player advances
+         * and injects 20 Hz jitter into the measured angle), the two samples bracketing
+         * the lookback distance are interpolated by path distance.
+         */
         @Nullable
-        private TurnHistorySample referenceSample() {
-            TurnHistorySample best = null;
-            double bestScore = Double.MAX_VALUE;
+        private Vec3 referenceTangent() {
+            TurnHistorySample newer = null;
+            TurnHistorySample older = null;
             for (TurnHistorySample sample : this.history) {
                 double behind = this.pathDistance - sample.pathDistance();
                 if (behind < TURN_HISTORY_MIN_DISTANCE || behind > TURN_HISTORY_MAX_DISTANCE) {
                     continue;
                 }
-                double score = Math.abs(behind - TURN_HISTORY_LOOKBACK_DISTANCE);
-                if (score < bestScore) {
-                    best = sample;
-                    bestScore = score;
+                if (behind <= TURN_HISTORY_LOOKBACK_DISTANCE) {
+                    if (newer == null || sample.pathDistance() > newer.pathDistance()) {
+                        newer = sample;
+                    }
+                } else if (older == null || sample.pathDistance() > older.pathDistance()) {
+                    older = sample;
                 }
             }
-            return best;
+            if (newer == null) {
+                return older == null ? null : older.tangent();
+            }
+            if (older == null) {
+                return newer.tangent();
+            }
+            double newerBehind = this.pathDistance - newer.pathDistance();
+            double olderBehind = this.pathDistance - older.pathDistance();
+            double span = olderBehind - newerBehind;
+            double t = span < 1.0E-6D ? 0.0D : Mth.clamp((TURN_HISTORY_LOOKBACK_DISTANCE - newerBehind) / span, 0.0D, 1.0D);
+            Vec3 tangent = newer.tangent().lerp(older.tangent(), t);
+            return tangent.lengthSqr() < 1.0E-6D ? newer.tangent() : tangent.normalize();
         }
 
         private TurnSample filter(TurnSample raw) {

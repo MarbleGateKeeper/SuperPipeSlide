@@ -47,6 +47,11 @@ public class PipeAppearanceToolItem extends Item {
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        if (hand == InteractionHand.OFF_HAND) {
+            // The offhand slot is reserved as a passive appearance source for pipe
+            // connecting; the tool itself never opens or brushes from there.
+            return InteractionResult.PASS;
+        }
         if (level.isClientSide()) {
             return InteractionResult.SUCCESS;
         }

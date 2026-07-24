@@ -1,16 +1,20 @@
 package dev.marblegate.superpipeslide.common.item.pipe;
 
+import dev.marblegate.superpipeslide.common.core.appearance.model.PipeAppearanceProfile;
+import dev.marblegate.superpipeslide.common.core.appearance.storage.PipeAppearanceSavedData;
 import dev.marblegate.superpipeslide.common.core.geometry.CurveSpec;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.networkgraph.solver.PipeConnectionPlacementPlan;
 import dev.marblegate.superpipeslide.common.core.networkgraph.solver.PipeConnectionPlacementPlanner;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkSavedData;
+import dev.marblegate.superpipeslide.common.event.ServerEvents;
 import dev.marblegate.superpipeslide.common.registry.SPSBlocks;
 import dev.marblegate.superpipeslide.common.registry.SPSDataComponents;
 import dev.marblegate.superpipeslide.config.Config;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -255,6 +259,8 @@ public class PipeConnectorItem extends Item {
             return InteractionResult.FAIL;
         }
 
+        applyOffhandAppearanceDraft(player, level, data, connection);
+
         if (keepBuilding) {
             stack.set(SPSDataComponents.SELECTED_ANCHOR.get(), clicked);
             stack.set(SPSDataComponents.SELECTED_START_TANGENT.get(), connection.tangentAt(connection.length()));
@@ -276,6 +282,29 @@ public class PipeConnectorItem extends Item {
     private static void cleanupCreatedOrdinaryNode(PipeNetworkSavedData data, PipeAnchorId created, boolean createdOrdinaryNode) {
         if (createdOrdinaryNode) {
             data.removeOrdinaryNodeAndConnections(created);
+        }
+    }
+
+    /**
+     * When the player holds an appearance tool with a configured draft in the offhand,
+     * newly created connections immediately receive that appearance.
+     */
+    private static void applyOffhandAppearanceDraft(Player player, ServerLevel level, PipeNetworkSavedData data, PipeConnection connection) {
+        ItemStack offhand = player.getOffhandItem();
+        if (!(offhand.getItem() instanceof PipeAppearanceToolItem)) {
+            return;
+        }
+        PipeAppearanceProfile draft = Optional.ofNullable(offhand.get(SPSDataComponents.PIPE_APPEARANCE_DRAFT.get()))
+                .map(PipeAppearanceProfile::normalizedToDefinitions)
+                .orElse(null);
+        if (draft == null) {
+            return;
+        }
+        PipeAppearanceSavedData appearances = PipeAppearanceSavedData.get(level);
+        PipeAppearanceSavedData.ApplyResult result = appearances.applySingle(data, connection.connectionKey(), draft.withoutServerId());
+        if (result.accepted()) {
+            ServerEvents.broadcastPipeAppearanceDelta(level);
+            player.sendOverlayMessage(Component.translatable("message.superpipeslide.pipe_appearance_auto_applied").withStyle(ChatFormatting.AQUA));
         }
     }
 

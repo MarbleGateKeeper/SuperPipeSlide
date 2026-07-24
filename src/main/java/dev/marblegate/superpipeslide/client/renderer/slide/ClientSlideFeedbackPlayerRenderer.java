@@ -56,6 +56,9 @@ public final class ClientSlideFeedbackPlayerRenderer {
     private static boolean pushedSlidePose;
     private static int pushedSlidePosePlayerId = Integer.MIN_VALUE;
     private static boolean slideLegOffsetsDirty;
+    private static double smoothedCameraRoll;
+    private static double smoothedCameraPitch;
+    private static double smoothedFovBoost;
 
     private ClientSlideFeedbackPlayerRenderer() {}
 
@@ -65,9 +68,11 @@ public final class ClientSlideFeedbackPlayerRenderer {
         }
         Optional<ClientSlideFeedbackController.Frame> frame = ClientSlideFeedbackController.currentRenderFrame();
         if (frame.isEmpty()) {
+            smoothedFovBoost = 0.0D;
             return;
         }
-        event.setFOV(event.getFOV() + (float) frame.get().fovBoost());
+        smoothedFovBoost = smoothCameraValue(smoothedFovBoost, frame.get().fovBoost());
+        event.setFOV(event.getFOV() + (float) smoothedFovBoost);
     }
 
     public static void onComputeCameraAngles(ViewportEvent.ComputeCameraAngles event) {
@@ -76,6 +81,8 @@ public final class ClientSlideFeedbackPlayerRenderer {
         }
         Optional<ClientSlideFeedbackController.Frame> frame = ClientSlideFeedbackController.currentRenderFrame();
         if (frame.isEmpty()) {
+            smoothedCameraRoll = 0.0D;
+            smoothedCameraPitch = 0.0D;
             return;
         }
         ClientSlideFeedbackController.Frame feedback = frame.get();
@@ -87,8 +94,18 @@ public final class ClientSlideFeedbackPlayerRenderer {
         double directionalRoll = -horizontal * (0.40D + feedback.perceptualSpeed() * 0.85D) * (1.0D - feedback.verticalBlend() * 0.60D);
         double roll = (steeringRoll + directionalRoll) * feedback.alpha();
         double pitch = (feedback.downBlend() - feedback.upBlend()) * (1.45D + feedback.perceptualSpeed() * 2.35D + feedback.highwayBlend() * 0.45D) * feedback.alpha();
-        event.setRoll(event.getRoll() + (float) roll);
-        event.setPitch(event.getPitch() + (float) pitch);
+        // Time-based low-pass on the outputs: absorbs the slope kinks that the 20 Hz
+        // tick filters leave at every tick boundary, at ~100 ms of added latency.
+        smoothedCameraRoll = smoothCameraValue(smoothedCameraRoll, roll);
+        smoothedCameraPitch = smoothCameraValue(smoothedCameraPitch, pitch);
+        event.setRoll(event.getRoll() + (float) smoothedCameraRoll);
+        event.setPitch(event.getPitch() + (float) smoothedCameraPitch);
+    }
+
+    private static double smoothCameraValue(double current, double target) {
+        Minecraft minecraft = Minecraft.getInstance();
+        double deltaSeconds = minecraft.getDeltaTracker() == null ? 0.05D : minecraft.getDeltaTracker().getRealtimeDeltaTicks() * 0.05D;
+        return current + (target - current) * (1.0D - Math.exp(-10.0D * deltaSeconds));
     }
 
     public static void onRenderPlayerPre(RenderPlayerEvent.Pre<?> event) {
@@ -114,6 +131,13 @@ public final class ClientSlideFeedbackPlayerRenderer {
         Vec3 renderFacing = renderFacing(feedback, poseFrame);
         float sideStance = fixedStanceSide(feedback);
         float sideSlipYaw = sideSlipYaw(feedback, poseFrame, sideStance);
+        // Vertical runs: face the pipe itself. The hug holds the rider on the frame-up
+        // side of the line, so the pipe wall is exactly along -frame.up; the climb and
+        // fireman's-pole limb poses only read correctly when the body faces it.
+        double verticalAmount = poseFrame.verticalAmount();
+        if (verticalAmount > 1.0E-4D) {
+            renderFacing = lerpDirection(renderFacing, poseFrame.up().scale(-1.0D), verticalAmount);
+        }
         float smoothedSideSlipYaw = renderYawState(state.id, feedback.frame().sessionId()).sample(sideSlipYaw);
         renderFacing = rotateHorizontal(renderFacing, smoothedSideSlipYaw);
         alignBodyToFacing(state, renderFacing);
@@ -123,7 +147,7 @@ public final class ClientSlideFeedbackPlayerRenderer {
         pushedSlidePose = true;
         pushedSlidePosePlayerId = state.id;
 
-        Vec3 offset = visualOffset(feedback, poseFrame, minecraft);
+        Vec3 offset = visualOffset(feedback, poseFrame);
         poseStack.translate(offset.x, offset.y, offset.z);
 
         Vec3 baseFacing = renderFacing;
@@ -182,6 +206,9 @@ public final class ClientSlideFeedbackPlayerRenderer {
         pushedSlidePose = false;
         pushedSlidePosePlayerId = Integer.MIN_VALUE;
         slideLegOffsetsDirty = false;
+        smoothedCameraRoll = 0.0D;
+        smoothedCameraPitch = 0.0D;
+        smoothedFovBoost = 0.0D;
         MODEL_POSE_BLEND_STATES.clear();
         RENDER_YAW_BLEND_STATES.clear();
         RIDE_ROTATION_BLEND_STATES.clear();
@@ -216,20 +243,22 @@ public final class ClientSlideFeedbackPlayerRenderer {
         return pose;
     }
 
-    private static Vec3 visualOffset(ClientSlidePoseController.PoseSnapshot frame, ClientSlidePoseController.SlidePoseFrame poseFrame, Minecraft minecraft) {
+    private static Vec3 visualOffset(ClientSlidePoseController.PoseSnapshot frame, ClientSlidePoseController.SlidePoseFrame poseFrame) {
         double vertical = poseFrame.verticalAmount();
         double railLower = frame.ride().railSpread() * 0.075D * (frame.ride().family() == ClientSlidePoseController.RidePoseFamily.SPLIT_RAIL ? 1.0D : 0.35D);
-        double wallSettle = vertical * (0.16D + frame.perceptualSpeed() * 0.08D) * frame.ride().wallRideScale();
-        double lift = frame.ride().bodyLift() + 0.018D * (1.0D - frame.mountProgress()) + dismountLift(frame) - railLower - wallSettle;
+        double lift = frame.ride().bodyLift() + 0.018D * (1.0D - frame.mountProgress()) + dismountLift(frame) - railLower;
         Vec3 offset = poseFrame.up().scale(lift);
         double turn = turnSignal(frame.signedTurn(), frame.signedTurnPreview(), 0.62D);
         offset = offset.add(poseFrame.right().scale(-turn * (0.030D + frame.perceptualSpeed() * 0.050D) * frame.ride().balanceScale() * frame.poseAlpha()));
         offset = offset.add(poseFrame.forward().scale((frame.downBlend() - frame.upBlend()) * vertical * 0.060D * frame.poseAlpha()));
-        Vec3 camera = minecraft.gameRenderer.getMainCamera().position();
-        Vec3 cameraAway = frame.position().subtract(camera);
-        Vec3 projected = cameraAway.subtract(frame.tangent().scale(cameraAway.dot(frame.tangent())));
-        if (projected.lengthSqr() > 1.0E-6D) {
-            offset = offset.add(projected.normalize().scale(0.07D * frame.verticalBlend() * frame.poseAlpha()));
+        // Vertical runs: hug the frame-up side of the pipe. Parallel transport keeps that
+        // side continuous with the approach run (the side the rider was standing on), so
+        // the body stays put no matter where the camera looks. Offset by the style's real
+        // wall extent plus half the body width so the torso clears the surface while the
+        // gripping limbs still reach it.
+        double wallHug = vertical * (frame.ride().wallRadius() + 0.30D) * frame.poseAlpha();
+        if (wallHug > 1.0E-6D) {
+            offset = offset.add(poseFrame.up().scale(wallHug));
         }
         return offset.scale(Mth.clamp(frame.poseAlpha(), 0.0D, 1.0D));
     }
@@ -250,7 +279,12 @@ public final class ClientSlideFeedbackPlayerRenderer {
 
     private static double rideFrameAmount(ClientSlidePoseController.PoseSnapshot pose, ClientSlidePoseController.SlidePoseFrame frame) {
         double styleScale = Mth.clamp(pose.ride().verticalRideScale(), 0.0D, 1.2D);
-        double amount = frame.trackAmount() * (0.46D + styleScale * 0.54D) * pose.poseAlpha();
+        // The body stays close to the flat-run upright pose: slope adaptation is handled
+        // by the legs, not by pitching the whole rider at the tangent. Both steep slopes
+        // and vertical runs suppress the ride pitch, so only a mild lean remains.
+        double verticalSuppression = 1.0D - frame.verticalAmount() * 0.72D;
+        double slopeSuppression = 1.0D - frame.trackAmount() * 0.55D;
+        double amount = frame.trackAmount() * (0.46D + styleScale * 0.54D) * verticalSuppression * slopeSuppression * pose.poseAlpha();
         return Mth.clamp(amount, 0.0D, 1.0D);
     }
 
@@ -468,8 +502,14 @@ public final class ClientSlideFeedbackPlayerRenderer {
         return safeNormalize(fallback, new Vec3(0.0D, 0.0D, 1.0D));
     }
 
+    /**
+     * Soft-knee combination of the turn and turn-preview signals: bounded like a clamp
+     * but without the flat top, so the camera roll keeps easing with turn sharpness
+     * instead of sticking at the saturation point.
+     */
     private static double turnSignal(double signedTurn, double signedTurnPreview, double previewWeight) {
-        return Mth.clamp(signedTurn + signedTurnPreview * previewWeight, -1.0D, 1.0D);
+        double combined = signedTurn + signedTurnPreview * previewWeight;
+        return combined / (1.0D + 0.25D * Math.abs(combined));
     }
 
     private static float yawFromFacing(Vec3 horizontalFacing) {
@@ -510,9 +550,13 @@ public final class ClientSlideFeedbackPlayerRenderer {
             return 0.0F;
         }
         float vertical = (float) Mth.clamp(frame.verticalAmount(), 0.0D, 1.0D);
+        float track = (float) Mth.clamp(frame.trackAmount(), 0.0D, 1.0D);
         float speed = (float) Mth.clamp(pose.perceptualSpeed(), 0.0D, 1.0D);
         float degrees = 48.0F + inline * 30.0F + speed * 6.0F;
-        return sideStance * degrees * (1.0F - vertical * 0.24F) * (float) Mth.clamp(pose.poseAlpha(), 0.0D, 1.0D);
+        // The snowboard side stance is the signature look on flats and stays clearly
+        // visible on ordinary slopes; it only eases out near the steep end, and is gone
+        // on verticals where the rider faces the pipe instead.
+        return sideStance * degrees * (1.0F - vertical * 0.85F) * (1.0F - track * track * 0.30F) * (float) Mth.clamp(pose.poseAlpha(), 0.0D, 1.0D);
     }
 
     private static float inlineSupportAmount(ClientSlidePoseController.RidePoseDescriptor ride) {
@@ -637,8 +681,9 @@ public final class ClientSlideFeedbackPlayerRenderer {
                 System.arraycopy(base.values, 0, this.values, 0, this.values.length);
                 this.initialized = true;
             }
+            float blend = frameBlend(15.0D);
             for (int i = 0; i < this.values.length; i++) {
-                this.values[i] = lerp(this.values[i], target.values[i], 0.22F);
+                this.values[i] = lerp(this.values[i], target.values[i], blend);
             }
             return new ModelPose(this.values.clone());
         }
@@ -658,8 +703,18 @@ public final class ClientSlideFeedbackPlayerRenderer {
                 this.value = 0.0F;
                 this.initialized = true;
             }
-            this.value = lerp(this.value, target, 0.18F);
+            this.value = lerp(this.value, target, frameBlend(12.0D));
             return this.value;
         }
+    }
+
+    /**
+     * Frame-rate independent blend factor: matches the previous fixed per-frame steps
+     * (0.22 / 0.18 at 60 fps) while converging identically at any frame rate.
+     */
+    private static float frameBlend(double ratePerSecond) {
+        Minecraft minecraft = Minecraft.getInstance();
+        double deltaSeconds = minecraft.getDeltaTracker() == null ? 0.05D : minecraft.getDeltaTracker().getRealtimeDeltaTicks() * 0.05D;
+        return (float) (1.0D - Math.exp(-ratePerSecond * deltaSeconds));
     }
 }

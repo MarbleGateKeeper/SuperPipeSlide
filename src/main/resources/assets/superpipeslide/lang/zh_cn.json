@@ -601,6 +601,7 @@
   "tooltip.superpipeslide.pipe_appearance_tool.pick": "潜行右键管道段复制外观",
   "message.superpipeslide.pipe_appearance_picked": "已复制管道外观",
   "message.superpipeslide.pipe_appearance_brushed": "已刷入管道外观",
+  "message.superpipeslide.pipe_appearance_auto_applied": "已应用副手中的外观",
   "item.superpipeslide.pipe_editor": "管道形态编辑器",
   "tooltip.superpipeslide.pipe_editor.header": "在世界中直接编辑管道形态与锚点连接点",
   "tooltip.superpipeslide.pipe_editor.open": "右键锚点：移动其连接点；右键管道：编辑其形态",

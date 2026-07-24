@@ -1236,7 +1236,7 @@ public final class ClientPipeRenderer {
         PipeVariantDefinition variant = PipeAppearanceDefinitions.variant(normalizedProfile.variantId()).orElse(PipeAppearanceDefinitions.defaultVariant());
         PipeStyleGeometry geometry = PipeStyleGeometry.resolve(style, variant, normalizedProfile.styleParameters());
         PipeSurfaceModel surfaceModel = PipeSurfaceModel.build(style.shape(), variant, geometry);
-        double profileCenterShift = profileCenterShift(surfaceModel);
+        double profileCenterShift = PipeStyleGeometry.profileCenterShift(surfaceModel);
         boolean glow = normalizedProfile.glow() && !ClientSafetyOptions.reducePhotosensitivityRisk();
         Map<String, PipeCoatingRenderResolver.ResolvedPipeCoating> coatings = new LinkedHashMap<>();
         for (String slotId : surfaceModel.slotIds()) {
@@ -1271,7 +1271,7 @@ public final class ClientPipeRenderer {
             // Blend the cross-section towards being centered on the slide line as the run
             // turns vertical, so vertical pipes wrap the anchor column instead of hanging
             // to one side of it. Horizontal runs are unaffected.
-            double contactY = Mth.lerp(verticalness(tangent), geometry.slideContactY(), profileCenterShift);
+            double contactY = Mth.lerp(PipeStyleGeometry.verticalness(tangent), geometry.slideContactY(), profileCenterShift);
             Section section = appearanceSection(surfaceModel, center, tangent, contactY, accumulatedDistance, previousRight);
             if (previousSection != null) {
                 addSegmentGeometry(meshSections, previousSection, section, surfaceModel, coatings, attributes, platform, runtime.connection().length(), markerSprite, glow);
@@ -2313,27 +2313,6 @@ public final class ClientPipeRenderer {
             int color = shadeTint(coating.opaqueTint(), normal, glow);
             addSurfaceMappedQuad(quads, p00.add(offset), p01.add(offset), p11.add(offset), p10.add(offset), uStart, uEnd, overlapStart, overlapEnd, color, glow, coating, shouldCullSurface(coating, previousSurface));
         }
-    }
-
-    private static double verticalness(Vec3 tangent) {
-        if (tangent.lengthSqr() < 1.0E-6D) {
-            return 0.0D;
-        }
-        double t = Mth.clamp((Math.abs(tangent.y) - 0.65D) / 0.30D, 0.0D, 1.0D);
-        return t * t * (3.0D - 2.0D * t);
-    }
-
-    private static double profileCenterShift(PipeSurfaceModel model) {
-        double minY = Double.POSITIVE_INFINITY;
-        double maxY = Double.NEGATIVE_INFINITY;
-        for (PipeSurfaceModel.LocalSurface surface : model.surfaces()) {
-            if (!surface.render()) {
-                continue;
-            }
-            minY = Math.min(minY, Math.min(surface.ay(), surface.by()));
-            maxY = Math.max(maxY, Math.max(surface.ay(), surface.by()));
-        }
-        return minY <= maxY ? (minY + maxY) * 0.5D : 0.0D;
     }
 
     private static Section appearanceSection(PipeSurfaceModel model, Vec3 slideCenter, Vec3 tangent, double slideContactY, double distance, @Nullable Vec3 previousRight) {
