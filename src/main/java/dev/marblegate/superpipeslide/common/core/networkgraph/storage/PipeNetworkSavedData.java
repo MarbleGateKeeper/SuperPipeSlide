@@ -300,6 +300,66 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
         return Optional.of(updated);
     }
 
+    /**
+     * Moves the attach point of an anchor inside its block cell and rewrites every touching
+     * connection to use the moved point. Rejects the whole edit when any affected connection
+     * would exceed the length limit, so the graph is never left in a partially moved state.
+     */
+    public AnchorAttachOffsetResult updateAnchorAttachOffset(PipeAnchorId anchorId, Vec3 requestedOffset, double maxConnectionLength) {
+        Optional<PipeNode> existing = this.node(anchorId);
+        if (existing.isEmpty()) {
+            return AnchorAttachOffsetResult.failure("Anchor no longer exists");
+        }
+
+        Vec3 offset = AnchorAttachOffsets.sanitize(requestedOffset);
+        Vec3 attachPoint = Vec3.atCenterOf(anchorId.blockPos()).add(offset);
+        List<PipeConnection> touching = this.connectionsTouching(anchorId);
+        for (PipeConnection connection : touching) {
+            if (PipeConnectionLengthPolicy.exceedsLimit(connection.withEndpointAt(anchorId, attachPoint), maxConnectionLength)) {
+                return AnchorAttachOffsetResult.failure("A connected pipe would exceed the maximum length");
+            }
+        }
+
+        try (Batch ignored = this.beginMutationBatch()) {
+            PipeNode updatedNode = existing.get().withAttachOffset(offset);
+            this.nodes.put(anchorId, updatedNode);
+            this.index.upsertNode(updatedNode);
+            this.trackNodeUpsert(updatedNode);
+            for (PipeConnection connection : touching) {
+                this.replaceConnection(connection.withEndpointAt(anchorId, attachPoint));
+            }
+            this.recomputeAutoCurvesAround(Set.of(anchorId));
+            this.setDirty();
+        }
+        return AnchorAttachOffsetResult.success(offset);
+    }
+
+    /**
+     * Replaces the curve of an existing connection in place (type, tangents, control points
+     * or PATH nodes) after validating the result against the length policy.
+     */
+    public ConnectionGeometryResult updateConnectionGeometry(UUID connectionId, CurveSpec curveSpec, double maxConnectionLength) {
+        Optional<PipeConnection> existing = this.connection(connectionId);
+        if (existing.isEmpty()) {
+            return ConnectionGeometryResult.failure("Pipe connection no longer exists");
+        }
+        if (curveSpec.pathNodes().size() > 16) {
+            return ConnectionGeometryResult.failure("Too many path nodes");
+        }
+
+        PipeConnection updated = existing.get().withCurveSpec(curveSpec);
+        if (PipeConnectionLengthPolicy.exceedsLimit(updated, maxConnectionLength)) {
+            return ConnectionGeometryResult.failure("Pipe would exceed the maximum length");
+        }
+
+        try (Batch ignored = this.beginMutationBatch()) {
+            this.replaceConnection(updated);
+            this.recomputeAutoCurvesAround(Set.of(updated.fromAnchor(), updated.toAnchor()));
+            this.setDirty();
+        }
+        return ConnectionGeometryResult.success(updated);
+    }
+
     public Optional<BranchNode> branchNode(UUID id) {
         return this.index.branchNode(id);
     }
@@ -368,7 +428,7 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
             BranchNode branchNode = new BranchNode(
                     UUID.randomUUID(),
                     anchorId.levelKey(),
-                    Vec3.atCenterOf(anchorId.blockPos()),
+                    existingNode.attachPoint(),
                     Optional.of(anchorId),
                     touching.isEmpty() ? Optional.empty() : Optional.of(touching.get(0).id()),
                     managedConnections);
@@ -395,7 +455,8 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
         }
         try (Batch ignored = this.beginMutationBatch()) {
             this.trimConnectionsTouching(anchorId, 1);
-            FoldAnchorNode foldAnchor = FoldAnchorNode.unconfigured(anchorId, kind);
+            FoldAnchorNode foldAnchor = FoldAnchorNode.unconfigured(anchorId, kind)
+                    .withAttachOffset(existingNode.attachPoint().subtract(Vec3.atCenterOf(anchorId.blockPos())));
             this.upsertFoldAnchorPipeNode(foldAnchor);
             this.recomputeAutoCurvesAround(Set.of(anchorId));
             this.setDirty();
@@ -437,7 +498,7 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
 
             this.nodes.remove(branchAnchor);
             if (!this.nodes.containsKey(branchAnchor)) {
-                PipeNode ordinaryNode = PipeNode.ordinary(branchAnchor);
+                PipeNode ordinaryNode = PipeNode.ordinary(branchAnchor, AnchorAttachOffsets.sanitize(branchNode.position().subtract(Vec3.atCenterOf(branchAnchor.blockPos()))));
                 this.nodes.put(branchAnchor, ordinaryNode);
                 this.trackNodeUpsert(ordinaryNode);
             }
@@ -471,7 +532,8 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
         }
 
         try (Batch ignored = this.beginMutationBatch()) {
-            PipeConnection connection = this.prepareConnectionForStorage(PipeConnection.withCurve(fromAnchor, toAnchor, curveSpec));
+            PipeConnection connection = this.prepareConnectionForStorage(PipeConnection.withCurve(fromAnchor, toAnchor, curveSpec)
+                    .withEndpoints(this.attachPoint(fromAnchor), this.attachPoint(toAnchor)));
             this.connections.add(connection);
             this.index.upsertConnection(connection);
             this.trackConnectionUpsert(connection);
@@ -623,7 +685,8 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
         }
 
         try (Batch ignored = this.beginMutationBatch()) {
-            PipeConnection connection = this.prepareConnectionForStorage(PipeConnection.withCurve(fromAnchor, toAnchor, curveSpec));
+            PipeConnection connection = this.prepareConnectionForStorage(PipeConnection.withCurve(fromAnchor, toAnchor, curveSpec)
+                    .withEndpoints(this.attachPoint(fromAnchor), this.attachPoint(toAnchor)));
             this.connections.add(connection);
             this.index.upsertConnection(connection);
             this.trackConnectionUpsert(connection);
@@ -1008,7 +1071,7 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
 
     private BranchConnectionSlot branchConnectionSlotFor(PipeAnchorId branchAnchor, PipeConnection connection, String displayName) {
         Vec3 worldDirection = PipeConnectionUtils.targetFor(connection, branchAnchor)
-                .map(target -> surfacePosition(target).subtract(surfacePosition(branchAnchor)))
+                .map(target -> outwardVector(connection, branchAnchor))
                 .orElse(new Vec3(0.0D, 0.0D, 1.0D));
         Vec3 normalizedWorldDirection = worldDirection.lengthSqr() < 1.0E-6D ? new Vec3(0.0D, 0.0D, 1.0D) : worldDirection.normalize();
         Vec3 forward = this.orderedConnectionsTouching(branchAnchor).stream()
@@ -1298,8 +1361,14 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
         return Vec3.ZERO;
     }
 
-    private static Vec3 surfacePosition(PipeAnchorId anchorId) {
-        return Vec3.atCenterOf(anchorId.blockPos());
+    /**
+     * Chord vector pointing away from the given anchor along the connection, derived from
+     * the connection's baked endpoints so adjustable anchor attach points are respected.
+     */
+    private static Vec3 outwardVector(PipeConnection connection, PipeAnchorId anchorId) {
+        return connection.fromAnchor().equals(anchorId)
+                ? connection.toSurface().subtract(connection.fromSurface())
+                : connection.fromSurface().subtract(connection.toSurface());
     }
 
     private static boolean isAnchorBlock(Block block) {
@@ -1342,6 +1411,26 @@ public final class PipeNetworkSavedData extends SavedData implements PipeNetwork
 
         public static FoldAnchorSaveResult failure(String message) {
             return new FoldAnchorSaveResult(false, message, Optional.empty());
+        }
+    }
+
+    public record AnchorAttachOffsetResult(boolean accepted, String message, Vec3 appliedOffset) {
+        public static AnchorAttachOffsetResult success(Vec3 appliedOffset) {
+            return new AnchorAttachOffsetResult(true, "Anchor attach point updated", appliedOffset);
+        }
+
+        public static AnchorAttachOffsetResult failure(String message) {
+            return new AnchorAttachOffsetResult(false, message, Vec3.ZERO);
+        }
+    }
+
+    public record ConnectionGeometryResult(boolean accepted, String message, Optional<PipeConnection> connection) {
+        public static ConnectionGeometryResult success(PipeConnection connection) {
+            return new ConnectionGeometryResult(true, "Pipe geometry updated", Optional.of(connection));
+        }
+
+        public static ConnectionGeometryResult failure(String message) {
+            return new ConnectionGeometryResult(false, message, Optional.empty());
         }
     }
 

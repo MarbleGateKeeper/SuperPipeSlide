@@ -250,7 +250,8 @@ public class PipeConnectorItem extends Item {
         }
 
         CurveSpec curveSpec = curveSpec(stack, player, first, clicked);
-        PipeConnection candidateConnection = PipeConnection.withCurve(first, clicked, curveSpec);
+        PipeConnection candidateConnection = PipeConnection.withCurve(first, clicked, curveSpec)
+                .withEndpoints(data.attachPoint(first), data.attachPoint(clicked));
         PipeConnectionPlacementPlan placementPlan = PipeConnectionPlacementPlanner.plan(data, candidateConnection, Config.MAX_CONNECTION_LENGTH.getAsDouble());
         if (placementPlan.hasLengthViolations()) {
             cleanupCreatedOrdinaryNode(data, clicked, createdOrdinaryNode);

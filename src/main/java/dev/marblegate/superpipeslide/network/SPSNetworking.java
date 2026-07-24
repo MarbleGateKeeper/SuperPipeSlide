@@ -1,6 +1,8 @@
 package dev.marblegate.superpipeslide.network;
 
 import dev.marblegate.superpipeslide.network.editor.ClientboundEditorResultPayload;
+import dev.marblegate.superpipeslide.network.editor.ServerboundUpdateAnchorOffsetPayload;
+import dev.marblegate.superpipeslide.network.editor.ServerboundUpdatePipeGeometryPayload;
 import dev.marblegate.superpipeslide.network.fold.ClientboundOpenFoldAnchorEditorPayload;
 import dev.marblegate.superpipeslide.network.fold.ServerboundFoldAnchorSavePayload;
 import dev.marblegate.superpipeslide.network.pipe.appearance.ClientboundOpenPipeAppearanceEditorPayload;
@@ -86,6 +88,8 @@ public final class SPSNetworking {
                 .playToServer(ServerboundPlatformStopEditPayload.TYPE, ServerboundPlatformStopEditPayload.STREAM_CODEC, ServerboundPlatformStopEditPayload::handleServer)
                 .playToServer(ServerboundRouteEditPayload.TYPE, ServerboundRouteEditPayload.STREAM_CODEC, ServerboundRouteEditPayload::handleServer)
                 .playToServer(ServerboundFoldAnchorSavePayload.TYPE, ServerboundFoldAnchorSavePayload.STREAM_CODEC, ServerboundFoldAnchorSavePayload::handleServer)
-                .playToServer(ServerboundPipeAppearanceApplyPayload.TYPE, ServerboundPipeAppearanceApplyPayload.STREAM_CODEC, ServerboundPipeAppearanceApplyPayload::handleServer);
+                .playToServer(ServerboundPipeAppearanceApplyPayload.TYPE, ServerboundPipeAppearanceApplyPayload.STREAM_CODEC, ServerboundPipeAppearanceApplyPayload::handleServer)
+                .playToServer(ServerboundUpdateAnchorOffsetPayload.TYPE, ServerboundUpdateAnchorOffsetPayload.STREAM_CODEC, ServerboundUpdateAnchorOffsetPayload::handleServer)
+                .playToServer(ServerboundUpdatePipeGeometryPayload.TYPE, ServerboundUpdatePipeGeometryPayload.STREAM_CODEC, ServerboundUpdatePipeGeometryPayload::handleServer);
     }
 }

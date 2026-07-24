@@ -29,6 +29,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeAppearanceCache;
+import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeEditorSession;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.client.core.pipe.PipeCoatingRenderResolver;
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
@@ -434,6 +435,10 @@ public final class ClientPipeRenderer {
                 addPreviewLines(lines, preview.connection(), color);
             }
             addControlPathLines(lines, preview.controlPath(), color);
+        }
+
+        for (ClientPipeEditorSession.GhostLine ghostLine : ClientPipeEditorSession.collectGhostLines()) {
+            lines.add(new LineSegment(ghostLine.from(), ghostLine.to(), ghostLine.color(), ghostLine.width()));
         }
 
         RenderData renderData = new RenderData(frame, List.copyOf(shaderpackEntitySections), List.copyOf(lines), camera, renderMode, externalPipelineActive);
@@ -1232,6 +1237,7 @@ public final class ClientPipeRenderer {
         PipeVariantDefinition variant = PipeAppearanceDefinitions.variant(normalizedProfile.variantId()).orElse(PipeAppearanceDefinitions.defaultVariant());
         PipeStyleGeometry geometry = PipeStyleGeometry.resolve(style, variant, normalizedProfile.styleParameters());
         PipeSurfaceModel surfaceModel = PipeSurfaceModel.build(style.shape(), variant, geometry);
+        double profileCenterShift = profileCenterShift(surfaceModel);
         boolean glow = normalizedProfile.glow() && !ClientSafetyOptions.reducePhotosensitivityRisk();
         Map<String, PipeCoatingRenderResolver.ResolvedPipeCoating> coatings = new LinkedHashMap<>();
         for (String slotId : surfaceModel.slotIds()) {
@@ -1263,7 +1269,11 @@ public final class ClientPipeRenderer {
             if (previousCenter != null) {
                 accumulatedDistance += center.distanceTo(previousCenter);
             }
-            Section section = appearanceSection(surfaceModel, center, tangent, geometry.slideContactY(), accumulatedDistance, previousRight);
+            // Blend the cross-section towards being centered on the slide line as the run
+            // turns vertical, so vertical pipes wrap the anchor column instead of hanging
+            // to one side of it. Horizontal runs are unaffected.
+            double contactY = Mth.lerp(verticalness(tangent), geometry.slideContactY(), profileCenterShift);
+            Section section = appearanceSection(surfaceModel, center, tangent, contactY, accumulatedDistance, previousRight);
             if (previousSection != null) {
                 addSegmentGeometry(meshSections, previousSection, section, surfaceModel, coatings, attributes, platform, runtime.connection().length(), markerSprite, glow);
             } else {
@@ -2283,6 +2293,27 @@ public final class ClientPipeRenderer {
         }
     }
 
+    private static double verticalness(Vec3 tangent) {
+        if (tangent.lengthSqr() < 1.0E-6D) {
+            return 0.0D;
+        }
+        double t = Mth.clamp((Math.abs(tangent.y) - 0.65D) / 0.30D, 0.0D, 1.0D);
+        return t * t * (3.0D - 2.0D * t);
+    }
+
+    private static double profileCenterShift(PipeSurfaceModel model) {
+        double minY = Double.POSITIVE_INFINITY;
+        double maxY = Double.NEGATIVE_INFINITY;
+        for (PipeSurfaceModel.LocalSurface surface : model.surfaces()) {
+            if (!surface.render()) {
+                continue;
+            }
+            minY = Math.min(minY, Math.min(surface.ay(), surface.by()));
+            maxY = Math.max(maxY, Math.max(surface.ay(), surface.by()));
+        }
+        return minY <= maxY ? (minY + maxY) * 0.5D : 0.0D;
+    }
+
     private static Section appearanceSection(PipeSurfaceModel model, Vec3 slideCenter, Vec3 tangent, double slideContactY, double distance, @Nullable Vec3 previousRight) {
         Vec3 forward = tangent.lengthSqr() < 1.0E-6D ? new Vec3(0.0D, 0.0D, 1.0D) : tangent.normalize();
         Vec3 right = transportedRight(forward, previousRight);
@@ -2310,7 +2341,9 @@ public final class ClientPipeRenderer {
         }
         Vec3 side = forward.cross(new Vec3(0.0D, 1.0D, 0.0D));
         if (side.lengthSqr() < 1.0E-6D) {
-            side = new Vec3(1.0D, 0.0D, 0.0D);
+            // Vertical tangent: derive right from a fixed horizontal axis so that it flips
+            // together with forward, keeping up = right x forward direction-independent.
+            side = forward.cross(new Vec3(0.0D, 0.0D, 1.0D));
         }
         return side.normalize();
     }
@@ -2423,7 +2456,8 @@ public final class ClientPipeRenderer {
         }
 
         CurveSpec curveSpec = PipeConnectorItem.curveSpec(stack, player, start, end);
-        PipeConnection rawConnection = PipeConnection.withCurve(start, end, curveSpec);
+        PipeConnection rawConnection = PipeConnection.withCurve(start, end, curveSpec)
+                .withEndpoints(ClientPipeNetworkCache.currentView().attachPoint(start), ClientPipeNetworkCache.currentView().attachPoint(end));
         PipeConnectionPlacementPlan placementPlan = PipeConnectionPlacementPlanner.plan(ClientPipeNetworkCache.currentView(), rawConnection, Config.MAX_CONNECTION_LENGTH.getAsDouble());
         PipeConnection connection = placementPlan.candidate();
 

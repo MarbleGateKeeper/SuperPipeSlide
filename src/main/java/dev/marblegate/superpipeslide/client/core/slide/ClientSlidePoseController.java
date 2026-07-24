@@ -334,7 +334,9 @@ public final class ClientSlidePoseController {
             side = preferred.subtract(forward.scale(preferred.dot(forward)));
         }
         if (side.lengthSqr() < 1.0E-6D) {
-            side = new Vec3(1.0D, 0.0D, 0.0D);
+            // Keep the fallback direction-dependent so up = right x forward stays
+            // consistent when the travel direction along a vertical pipe flips.
+            side = forward.cross(new Vec3(0.0D, 0.0D, 1.0D));
         }
         return side.normalize();
     }

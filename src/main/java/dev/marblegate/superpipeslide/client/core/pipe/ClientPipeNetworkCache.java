@@ -94,6 +94,13 @@ public final class ClientPipeNetworkCache {
         }
 
         @Override
+        public Optional<PipeNode> node(PipeAnchorId anchorId) {
+            return ClientPipeNetworkCache.currentLevelKey()
+                    .filter(anchorId.levelKey()::equals)
+                    .flatMap(ignored -> ClientPipeNetworkCache.node(anchorId));
+        }
+
+        @Override
         public Optional<PipeAnchorId> localFoldCounterpart(PipeAnchorId anchorId) {
             return ClientPipeNetworkCache.localFoldCounterpart(anchorId);
         }
@@ -139,6 +146,11 @@ public final class ClientPipeNetworkCache {
         @Override
         public Optional<FoldAnchorNode> foldAnchorAt(PipeAnchorId anchorId) {
             return ClientPipeNetworkCache.foldAnchorAt(anchorId);
+        }
+
+        @Override
+        public Optional<PipeNode> node(PipeAnchorId anchorId) {
+            return ClientPipeNetworkCache.node(anchorId);
         }
 
         @Override

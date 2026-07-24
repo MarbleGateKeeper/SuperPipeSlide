@@ -157,7 +157,7 @@ public final class AutoCurveSolver {
             return Vec3.ZERO;
         }
 
-        Vec3 chord = surfacePosition(target.get()).subtract(surfacePosition(anchor));
+        Vec3 chord = outwardVector(current, anchor);
         if (chord.lengthSqr() < 1.0E-6D) {
             return Vec3.ZERO;
         }
@@ -173,8 +173,8 @@ public final class AutoCurveSolver {
             return Vec3.ZERO;
         }
 
-        Vec3 currentOutward = surfacePosition(currentTarget.get()).subtract(surfacePosition(anchor));
-        Vec3 otherOutward = surfacePosition(otherTarget.get()).subtract(surfacePosition(anchor));
+        Vec3 currentOutward = outwardVector(current, anchor);
+        Vec3 otherOutward = outwardVector(other, anchor);
         Vec3 tangentAwayFromAnchor = currentOutward.subtract(otherOutward);
         if (tangentAwayFromAnchor.lengthSqr() < 1.0E-6D) {
             return Vec3.ZERO;
@@ -190,8 +190,8 @@ public final class AutoCurveSolver {
             return false;
         }
 
-        Vec3 currentOutward = surfacePosition(currentTarget.get()).subtract(surfacePosition(anchor));
-        Vec3 otherOutward = surfacePosition(otherTarget.get()).subtract(surfacePosition(anchor));
+        Vec3 currentOutward = outwardVector(current, anchor);
+        Vec3 otherOutward = outwardVector(other, anchor);
         if (currentOutward.lengthSqr() < 1.0E-6D || otherOutward.lengthSqr() < 1.0E-6D) {
             return false;
         }
@@ -309,7 +309,7 @@ public final class AutoCurveSolver {
     private static Vec3 endpointReliefSide(PipeNetworkView view, PipeConnection current, PipeAnchorId anchor, Vec3 axis) {
         Optional<PipeAnchorId> currentTarget = PipeConnectionUtils.targetFor(current, anchor);
         if (currentTarget.isPresent()) {
-            Vec3 currentOutward = surfacePosition(currentTarget.get()).subtract(surfacePosition(anchor));
+            Vec3 currentOutward = outwardVector(current, anchor);
             for (PipeConnection other : view.connectionsTouching(anchor)) {
                 if (other.id().equals(current.id())) {
                     continue;
@@ -320,7 +320,7 @@ public final class AutoCurveSolver {
                     continue;
                 }
 
-                Vec3 otherOutward = surfacePosition(otherTarget.get()).subtract(surfacePosition(anchor));
+                Vec3 otherOutward = outwardVector(other, anchor);
                 Vec3 side = rejectFromAxis(currentOutward.subtract(otherOutward), axis);
                 if (side.lengthSqr() >= 1.0E-6D) {
                     return side.normalize();
@@ -382,7 +382,7 @@ public final class AutoCurveSolver {
             return Vec3.ZERO;
         }
 
-        Vec3 otherOutward = surfacePosition(otherTarget.get()).subtract(surfacePosition(anchor));
+        Vec3 otherOutward = outwardVector(other, anchor);
         if (otherOutward.lengthSqr() < 1.0E-6D) {
             return Vec3.ZERO;
         }
@@ -402,7 +402,7 @@ public final class AutoCurveSolver {
             return tangent.normalize();
         }
 
-        Vec3 outwardToOther = surfacePosition(otherTarget.get()).subtract(surfacePosition(anchor));
+        Vec3 outwardToOther = outwardVector(other, anchor);
         if (outwardToOther.lengthSqr() < 1.0E-6D) {
             return tangent.normalize();
         }
@@ -422,8 +422,14 @@ public final class AutoCurveSolver {
         return Vec3.ZERO;
     }
 
-    private static Vec3 surfacePosition(PipeAnchorId anchorId) {
-        return Vec3.atCenterOf(anchorId.blockPos());
+    /**
+     * Chord vector pointing away from the given anchor along the connection, derived from
+     * the connection's baked endpoints so adjustable anchor attach points are respected.
+     */
+    private static Vec3 outwardVector(PipeConnection connection, PipeAnchorId anchorId) {
+        return connection.fromAnchor().equals(anchorId)
+                ? connection.toSurface().subtract(connection.fromSurface())
+                : connection.fromSurface().subtract(connection.toSurface());
     }
 
     private record EndpointPlan(Vec3 tangent, Vec3 side, double handleLength, double reliefRadius, double forwardBias, boolean hairpin) {}

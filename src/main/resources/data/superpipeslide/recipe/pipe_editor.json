@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:iron_ingot",
+    "minecraft:copper_ingot",
+    "minecraft:redstone",
+    "minecraft:glass_pane",
+    "minecraft:amethyst_shard"
+  ],
+  "result": {
+    "id": "superpipeslide:pipe_editor"
+  }
+}

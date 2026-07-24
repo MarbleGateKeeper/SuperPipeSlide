@@ -10,7 +10,8 @@ public enum CurveType implements StringRepresentable {
     LINE("line"),
     AUTO_CURVE("auto_curve"),
     GAZE_CURVE("gaze_curve"),
-    CONTROLLED("controlled");
+    CONTROLLED("controlled"),
+    PATH("path");
 
     public static final Codec<CurveType> CODEC = StringRepresentable.fromEnum(CurveType::values);
     public static final StreamCodec<RegistryFriendlyByteBuf, CurveType> STREAM_CODEC = NeoForgeStreamCodecs.enumCodec(CurveType.class).cast();

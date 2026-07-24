@@ -7,6 +7,7 @@ import dev.marblegate.superpipeslide.client.core.gaze.ClientGazeChoiceController
 import dev.marblegate.superpipeslide.client.core.navigation.ClientNavigationController;
 import dev.marblegate.superpipeslide.client.core.navigation.ClientNavigationHudController;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeAppearanceCache;
+import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeEditorSession;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.client.core.projection.cache.ProjectionBuiltinIconTextureCache;
 import dev.marblegate.superpipeslide.client.core.projection.cache.ProjectionNetworkImageCache;
@@ -129,6 +130,7 @@ public class SuperPipeSlideClient {
                 ClientSlideFeedbackPlayerRenderer.clear();
                 ClientAnchorVisibilityRenderer.clear();
                 ClientPipeRenderer.clearRenderCache();
+                ClientPipeEditorSession.clear();
                 ClientProjectionProjectorIndex.clear();
                 StationNameProjectorRenderer.clearCaches();
                 PlatformProjectorRenderer.clearCaches();
@@ -154,11 +156,17 @@ public class SuperPipeSlideClient {
             ClientRouteHudController.tick();
             ClientNavigationHudController.tick();
             ClientSlideNoticeController.tick();
+            ClientPipeEditorSession.tick(minecraft, player);
             ProjectionNetworkImageCache.tick();
         }
 
         @SubscribeEvent
         public static void onInteractionKeyMappingTriggered(InputEvent.InteractionKeyMappingTriggered event) {
+            if (event.isUseItem() && ClientPipeEditorSession.onUseClick()) {
+                event.setSwingHand(false);
+                event.setCanceled(true);
+                return;
+            }
             if (!event.isAttack()) {
                 return;
             }
@@ -167,6 +175,13 @@ public class SuperPipeSlideClient {
             LocalPlayer player = minecraft.player;
             if (player != null && player.level() != null && ClientGazeChoiceController.handleAttackClick(player)) {
                 event.setSwingHand(false);
+                event.setCanceled(true);
+            }
+        }
+
+        @SubscribeEvent
+        public static void onMouseScrolling(InputEvent.MouseScrollingEvent event) {
+            if (ClientPipeEditorSession.onScroll(event.getScrollDeltaY())) {
                 event.setCanceled(true);
             }
         }

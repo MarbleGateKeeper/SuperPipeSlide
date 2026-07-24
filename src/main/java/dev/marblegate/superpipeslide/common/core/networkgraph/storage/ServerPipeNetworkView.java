@@ -67,6 +67,11 @@ public final class ServerPipeNetworkView implements PipeNetworkView {
     }
 
     @Override
+    public Optional<dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNode> node(PipeAnchorId anchorId) {
+        return this.data(anchorId.levelKey()).flatMap(data -> data.node(anchorId));
+    }
+
+    @Override
     public Optional<PipeAnchorId> localFoldCounterpart(PipeAnchorId anchorId) {
         Optional<FoldAnchorNode> source = this.foldAnchorAt(anchorId);
         if (source.isEmpty()) {

@@ -14,6 +14,7 @@ import dev.marblegate.superpipeslide.common.item.anchor.FoldAnchorUpgradeItem;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeAppearanceToolItem;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeAttributeToolItem;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeConnectorItem;
+import dev.marblegate.superpipeslide.common.item.pipe.PipeEditorItem;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeRemoverItem;
 import dev.marblegate.superpipeslide.common.item.route.PlatformClaimerItem;
 import dev.marblegate.superpipeslide.common.registry.SPSBlocks;
@@ -420,6 +421,7 @@ public final class ClientAnchorVisibilityRenderer {
                     || item instanceof FoldAnchorUpgradeItem
                     || item instanceof PipeAttributeToolItem
                     || item instanceof PipeAppearanceToolItem
+                    || item instanceof PipeEditorItem
                     || item instanceof PlatformClaimerItem) {
                 return true;
             }

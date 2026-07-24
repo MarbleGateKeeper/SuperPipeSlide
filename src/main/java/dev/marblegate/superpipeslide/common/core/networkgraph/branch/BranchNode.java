@@ -125,6 +125,10 @@ public record BranchNode(
         return new BranchNode(this.id, this.levelKey, this.position, this.optionalAnchorId, updatedDefault, updatedConnections);
     }
 
+    public BranchNode withPosition(Vec3 position) {
+        return new BranchNode(this.id, this.levelKey, position, this.optionalAnchorId, this.defaultConnectionId, this.connections);
+    }
+
     private static void validateFinite(Vec3 vector, String name) {
         if (!Double.isFinite(vector.x) || !Double.isFinite(vector.y) || !Double.isFinite(vector.z)) {
             throw new IllegalArgumentException("Branch node " + name + " must be finite");

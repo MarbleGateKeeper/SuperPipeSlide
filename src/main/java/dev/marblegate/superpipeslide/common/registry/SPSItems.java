@@ -9,6 +9,7 @@ import dev.marblegate.superpipeslide.common.item.pipe.PipeAppearanceToolItem;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeAttributeToolItem;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeConnectorItem;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeConnectorMode;
+import dev.marblegate.superpipeslide.common.item.pipe.PipeEditorItem;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeRemoverItem;
 import dev.marblegate.superpipeslide.common.item.projection.ProjectionLayoutDesignerItem;
 import dev.marblegate.superpipeslide.common.item.route.PipeTransitGuideItem;
@@ -124,6 +125,11 @@ public final class SPSItems {
     public static final DeferredItem<Item> PIPE_APPEARANCE_TOOL = ITEMS.registerItem(
             "pipe_appearance_tool",
             PipeAppearanceToolItem::new,
+            properties -> properties.stacksTo(1));
+
+    public static final DeferredItem<Item> PIPE_EDITOR = ITEMS.registerItem(
+            "pipe_editor",
+            PipeEditorItem::new,
             properties -> properties.stacksTo(1));
 
     public static final DeferredItem<Item> PROJECTION_LAYOUT_DESIGNER = ITEMS.registerItem(

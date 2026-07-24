@@ -9,6 +9,7 @@ import java.util.Optional;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.world.phys.Vec3;
 
 public record FoldAnchorNode(
         PipeAnchorId anchorId,
@@ -16,7 +17,8 @@ public record FoldAnchorNode(
         FoldAnchorMode mode,
         String displayName,
         Optional<FoldAnchorRef> boundTarget,
-        long configRevision) implements PipeNodeData {
+        long configRevision,
+        Vec3 attachOffset) implements PipeNodeData {
 
     public static final int MAX_NAME_LENGTH = 48;
 
@@ -26,7 +28,8 @@ public record FoldAnchorNode(
             FoldAnchorMode.CODEC.optionalFieldOf("mode", FoldAnchorMode.UNCONFIGURED).forGetter(FoldAnchorNode::mode),
             com.mojang.serialization.Codec.STRING.optionalFieldOf("display_name", "").forGetter(FoldAnchorNode::displayName),
             FoldAnchorRef.CODEC.optionalFieldOf("bound_target").forGetter(FoldAnchorNode::boundTarget),
-            com.mojang.serialization.Codec.LONG.optionalFieldOf("config_revision", 0L).forGetter(FoldAnchorNode::configRevision)).apply(instance, FoldAnchorNode::new));
+            com.mojang.serialization.Codec.LONG.optionalFieldOf("config_revision", 0L).forGetter(FoldAnchorNode::configRevision),
+            Vec3.CODEC.optionalFieldOf("attach_offset", Vec3.ZERO).forGetter(FoldAnchorNode::attachOffset)).apply(instance, FoldAnchorNode::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, FoldAnchorNode> STREAM_CODEC = StreamCodec.composite(
             PipeAnchorId.STREAM_CODEC,
@@ -41,6 +44,8 @@ public record FoldAnchorNode(
             FoldAnchorNode::boundTarget,
             ByteBufCodecs.VAR_LONG.cast(),
             FoldAnchorNode::configRevision,
+            Vec3.STREAM_CODEC,
+            FoldAnchorNode::attachOffset,
             FoldAnchorNode::new);
     public FoldAnchorNode {
         displayName = sanitizeName(displayName);
@@ -48,22 +53,29 @@ public record FoldAnchorNode(
         if (mode == FoldAnchorMode.A_END && displayName.isBlank()) {
             displayName = defaultName(anchorId);
         }
+        if (!Double.isFinite(attachOffset.x) || !Double.isFinite(attachOffset.y) || !Double.isFinite(attachOffset.z)) {
+            throw new IllegalArgumentException("Fold anchor attach offset must be finite");
+        }
     }
 
     public static FoldAnchorNode unconfigured(PipeAnchorId anchorId, FoldAnchorKind kind) {
-        return new FoldAnchorNode(anchorId, kind, FoldAnchorMode.UNCONFIGURED, "", Optional.empty(), 0L);
+        return new FoldAnchorNode(anchorId, kind, FoldAnchorMode.UNCONFIGURED, "", Optional.empty(), 0L, Vec3.ZERO);
     }
 
     public FoldAnchorNode asAEnd(String name) {
-        return new FoldAnchorNode(this.anchorId, this.kind, FoldAnchorMode.A_END, name, Optional.empty(), this.configRevision + 1L);
+        return new FoldAnchorNode(this.anchorId, this.kind, FoldAnchorMode.A_END, name, Optional.empty(), this.configRevision + 1L, this.attachOffset);
     }
 
     public FoldAnchorNode asBEnd(FoldAnchorRef target) {
-        return new FoldAnchorNode(this.anchorId, this.kind, FoldAnchorMode.B_END, "", Optional.of(target), this.configRevision + 1L);
+        return new FoldAnchorNode(this.anchorId, this.kind, FoldAnchorMode.B_END, "", Optional.of(target), this.configRevision + 1L, this.attachOffset);
     }
 
     public FoldAnchorNode unboundBEnd() {
-        return new FoldAnchorNode(this.anchorId, this.kind, FoldAnchorMode.B_END, "", Optional.empty(), this.configRevision + 1L);
+        return new FoldAnchorNode(this.anchorId, this.kind, FoldAnchorMode.B_END, "", Optional.empty(), this.configRevision + 1L, this.attachOffset);
+    }
+
+    public FoldAnchorNode withAttachOffset(Vec3 attachOffset) {
+        return new FoldAnchorNode(this.anchorId, this.kind, this.mode, this.displayName, this.boundTarget, this.configRevision, attachOffset);
     }
 
     @Override

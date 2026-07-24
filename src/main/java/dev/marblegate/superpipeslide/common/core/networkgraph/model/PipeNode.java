@@ -8,6 +8,7 @@ import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNod
 import java.util.Optional;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Authoritative endpoint node data for the pipe graph.
@@ -36,7 +37,11 @@ public record PipeNode(PipeAnchorId id, PipeNodeData data) {
     }
 
     public static PipeNode ordinary(PipeAnchorId id) {
-        return new PipeNode(id, OrdinaryAnchorData.INSTANCE);
+        return new PipeNode(id, OrdinaryAnchorData.centered());
+    }
+
+    public static PipeNode ordinary(PipeAnchorId id, Vec3 attachOffset) {
+        return new PipeNode(id, new OrdinaryAnchorData(attachOffset));
     }
 
     public static PipeNode branch(PipeAnchorId id, BranchNode branchNode) {
@@ -45,6 +50,38 @@ public record PipeNode(PipeAnchorId id, PipeNodeData data) {
 
     public static PipeNode foldAnchor(PipeAnchorId id, FoldAnchorNode foldAnchorNode) {
         return new PipeNode(id, foldAnchorNode);
+    }
+
+    /**
+     * The world-space point where pipes attach to this node. For ordinary and fold anchors
+     * this is the block center plus the node's attach offset; branch nodes carry their
+     * junction position directly.
+     */
+    public Vec3 attachPoint() {
+        Vec3 center = Vec3.atCenterOf(this.id.blockPos());
+        if (this.data instanceof OrdinaryAnchorData ordinary) {
+            return center.add(ordinary.attachOffset());
+        }
+        if (this.data instanceof FoldAnchorNode foldAnchor) {
+            return center.add(foldAnchor.attachOffset());
+        }
+        if (this.data instanceof BranchNode branchNode) {
+            return branchNode.position();
+        }
+        return center;
+    }
+
+    public PipeNode withAttachOffset(Vec3 offset) {
+        if (this.data instanceof OrdinaryAnchorData) {
+            return new PipeNode(this.id, new OrdinaryAnchorData(offset));
+        }
+        if (this.data instanceof FoldAnchorNode foldAnchor) {
+            return new PipeNode(this.id, foldAnchor.withAttachOffset(offset));
+        }
+        if (this.data instanceof BranchNode branchNode) {
+            return new PipeNode(this.id, branchNode.withPosition(Vec3.atCenterOf(this.id.blockPos()).add(offset)));
+        }
+        return this;
     }
 
     public PipeNodeType type() {

@@ -4,6 +4,7 @@ import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.common.core.networkgraph.branch.BranchNode;
 import dev.marblegate.superpipeslide.common.core.networkgraph.fold.FoldAnchorNode;
+import dev.marblegate.superpipeslide.common.core.networkgraph.model.PipeNode;
 import dev.marblegate.superpipeslide.common.core.networkgraph.storage.PipeNetworkView;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -84,6 +85,15 @@ final class OverlayPipeNetworkView implements PipeNetworkView {
     @Override
     public Optional<FoldAnchorNode> foldAnchorAt(PipeAnchorId anchorId) {
         return this.base.foldAnchorAt(anchorId);
+    }
+
+    @Override
+    public Optional<PipeNode> node(PipeAnchorId anchorId) {
+        BranchNode overlay = this.branchOverlayByAnchor.get(anchorId);
+        if (overlay != null) {
+            return Optional.of(PipeNode.branch(anchorId, overlay));
+        }
+        return this.base.node(anchorId);
     }
 
     @Override

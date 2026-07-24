@@ -34,6 +34,7 @@ public final class SPSCreativeTabs {
                 output.accept(SPSItems.ACCELERATION_PIPE_COATING.get());
                 output.accept(SPSItems.HIGHWAY_PIPE_COATING.get());
                 output.accept(SPSItems.PIPE_APPEARANCE_TOOL.get());
+                output.accept(SPSItems.PIPE_EDITOR.get());
                 output.accept(SPSItems.BROKEN_ANCHOR_CLEANER.get());
                 output.accept(SPSItems.STATION_BLOCK.get());
                 output.accept(SPSItems.PLATFORM_CLAIMER.get());

@@ -2,6 +2,7 @@ package dev.marblegate.superpipeslide.common.core.geometry;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
@@ -13,7 +14,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
-public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> levelKey, PipeAnchorId fromAnchor, PipeAnchorId toAnchor, CurveSpec curveSpec, Optional<PipeConnectionAttributes> attributes, Optional<UUID> platformStopId) {
+public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> levelKey, PipeAnchorId fromAnchor, PipeAnchorId toAnchor, CurveSpec curveSpec, Optional<PipeEndpoints> endpoints, Optional<PipeConnectionAttributes> attributes, Optional<UUID> platformStopId) {
 
     private static final int LENGTH_SAMPLES = 32;
     public static final int TRANSIENT_CONNECTION_KEY = 0;
@@ -25,6 +26,7 @@ public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> leve
             PipeAnchorId.CODEC.fieldOf("from").forGetter(PipeConnection::fromAnchor),
             PipeAnchorId.CODEC.fieldOf("to").forGetter(PipeConnection::toAnchor),
             CurveSpec.CODEC.optionalFieldOf("curve_spec", CurveSpec.line()).forGetter(PipeConnection::curveSpec),
+            PipeEndpoints.CODEC.optionalFieldOf("endpoints").forGetter(PipeConnection::endpoints),
             PipeConnectionAttributes.CODEC.optionalFieldOf("attributes").forGetter(PipeConnection::attributes),
             UUIDUtil.STRING_CODEC.optionalFieldOf("platform_stop_id").forGetter(PipeConnection::platformStopId)).apply(instance, PipeConnection::new));
     public static final StreamCodec<RegistryFriendlyByteBuf, PipeConnection> STREAM_CODEC = StreamCodec.composite(
@@ -38,13 +40,15 @@ public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> leve
             PipeConnection::toAnchor,
             CurveSpec.STREAM_CODEC,
             PipeConnection::curveSpec,
+            ByteBufCodecs.optional(PipeEndpoints.STREAM_CODEC).cast(),
+            PipeConnection::endpoints,
             ByteBufCodecs.optional(PipeConnectionAttributes.STREAM_CODEC),
             PipeConnection::attributes,
             ByteBufCodecs.optional(UUIDUtil.STREAM_CODEC).cast(),
             PipeConnection::platformStopId,
             PipeConnection::newFromAnchors);
-    private static PipeConnection newFromAnchors(UUID id, int connectionKey, PipeAnchorId fromAnchor, PipeAnchorId toAnchor, CurveSpec curveSpec, Optional<PipeConnectionAttributes> attributes, Optional<UUID> platformStopId) {
-        return new PipeConnection(id, connectionKey, fromAnchor.levelKey(), fromAnchor, toAnchor, curveSpec, attributes, platformStopId);
+    private static PipeConnection newFromAnchors(UUID id, int connectionKey, PipeAnchorId fromAnchor, PipeAnchorId toAnchor, CurveSpec curveSpec, Optional<PipeEndpoints> endpoints, Optional<PipeConnectionAttributes> attributes, Optional<UUID> platformStopId) {
+        return new PipeConnection(id, connectionKey, fromAnchor.levelKey(), fromAnchor, toAnchor, curveSpec, endpoints, attributes, platformStopId);
     }
 
     public PipeConnection {
@@ -64,23 +68,37 @@ public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> leve
     }
 
     public static PipeConnection withCurve(PipeAnchorId fromAnchor, PipeAnchorId toAnchor, CurveSpec curveSpec) {
-        return new PipeConnection(UUID.randomUUID(), TRANSIENT_CONNECTION_KEY, fromAnchor.levelKey(), fromAnchor, toAnchor, curveSpec, Optional.empty(), Optional.empty());
+        return new PipeConnection(UUID.randomUUID(), TRANSIENT_CONNECTION_KEY, fromAnchor.levelKey(), fromAnchor, toAnchor, curveSpec, Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     public PipeConnection withConnectionKey(int connectionKey) {
-        return new PipeConnection(this.id, connectionKey, this.levelKey, this.fromAnchor, this.toAnchor, this.curveSpec, this.attributes, this.platformStopId);
+        return new PipeConnection(this.id, connectionKey, this.levelKey, this.fromAnchor, this.toAnchor, this.curveSpec, this.endpoints, this.attributes, this.platformStopId);
     }
 
     public PipeConnection withCurveSpec(CurveSpec curveSpec) {
-        return new PipeConnection(this.id, this.connectionKey, this.levelKey, this.fromAnchor, this.toAnchor, curveSpec, this.attributes, this.platformStopId);
+        return new PipeConnection(this.id, this.connectionKey, this.levelKey, this.fromAnchor, this.toAnchor, curveSpec, this.endpoints, this.attributes, this.platformStopId);
+    }
+
+    public PipeConnection withEndpoints(Vec3 from, Vec3 to) {
+        return new PipeConnection(this.id, this.connectionKey, this.levelKey, this.fromAnchor, this.toAnchor, this.curveSpec, Optional.of(new PipeEndpoints(from, to)), this.attributes, this.platformStopId);
+    }
+
+    public PipeConnection withEndpointAt(PipeAnchorId anchorId, Vec3 point) {
+        if (this.fromAnchor.equals(anchorId)) {
+            return this.withEndpoints(point, this.toSurface());
+        }
+        if (this.toAnchor.equals(anchorId)) {
+            return this.withEndpoints(this.fromSurface(), point);
+        }
+        return this;
     }
 
     public PipeConnection withAttributes(Optional<PipeConnectionAttributes> attributes) {
-        return new PipeConnection(this.id, this.connectionKey, this.levelKey, this.fromAnchor, this.toAnchor, this.curveSpec, attributes, this.platformStopId);
+        return new PipeConnection(this.id, this.connectionKey, this.levelKey, this.fromAnchor, this.toAnchor, this.curveSpec, this.endpoints, attributes, this.platformStopId);
     }
 
     public PipeConnection withPlatformStopId(Optional<UUID> platformStopId) {
-        return new PipeConnection(this.id, this.connectionKey, this.levelKey, this.fromAnchor, this.toAnchor, this.curveSpec, this.attributes, platformStopId);
+        return new PipeConnection(this.id, this.connectionKey, this.levelKey, this.fromAnchor, this.toAnchor, this.curveSpec, this.endpoints, this.attributes, platformStopId);
     }
 
     public PipeConnectionAttributes resolvedAttributes() {
@@ -99,11 +117,11 @@ public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> leve
     }
 
     public Vec3 fromSurface() {
-        return Vec3.atCenterOf(this.fromAnchor.blockPos());
+        return this.endpoints.map(PipeEndpoints::from).orElseGet(() -> Vec3.atCenterOf(this.fromAnchor.blockPos()));
     }
 
     public Vec3 toSurface() {
-        return Vec3.atCenterOf(this.toAnchor.blockPos());
+        return this.endpoints.map(PipeEndpoints::to).orElseGet(() -> Vec3.atCenterOf(this.toAnchor.blockPos()));
     }
 
     public double length() {
@@ -188,6 +206,9 @@ public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> leve
         if (this.curveSpec.type() == CurveType.LINE) {
             return from.lerp(to, t);
         }
+        if (this.curveSpec.type() == CurveType.PATH) {
+            return this.samplePath(from, to, Mth.clamp(t, 0.0D, 1.0D));
+        }
         if (!this.curveSpec.controlPoints().isEmpty()) {
             return bezier(from, this.curveSpec.controlPoints(), to, t);
         }
@@ -203,6 +224,27 @@ public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> leve
         Vec3 firstControl = from.add(startTangent.scale(handleLength));
         Vec3 secondControl = to.subtract(endTangent.scale(handleLength));
         return cubic(from, firstControl, secondControl, to, t);
+    }
+
+    /**
+     * Samples a PATH curve: a piecewise cubic bezier chain through
+     * [from, ...pathNodes, to]. Segment handles are resolved by PathCurves (manual node
+     * handles first, Catmull-Rom automatic handles otherwise), so chains with no manual
+     * handles stay C1-smooth and follow edits applied to neighbouring points. The global
+     * parameter t is distributed uniformly across segments; arc-length mapping happens in
+     * tAtDistance.
+     */
+    private Vec3 samplePath(Vec3 from, Vec3 to, double t) {
+        List<PipePathNode> nodes = this.curveSpec.pathNodes();
+        int segments = nodes.size() + 1;
+        double scaled = t * segments;
+        int segment = Math.min((int) scaled, segments - 1);
+        double localT = scaled - segment;
+        Vec3 p0 = PathCurves.pointAt(from, to, nodes, segment);
+        Vec3 p1 = PathCurves.outHandle(from, to, nodes, this.curveSpec.startTangent(), segment);
+        Vec3 p2 = PathCurves.inHandle(from, to, nodes, this.curveSpec.endTangent(), segment + 1);
+        Vec3 p3 = PathCurves.pointAt(from, to, nodes, segment + 1);
+        return cubic(p0, p1, p2, p3, localT);
     }
 
     private Vec3 endpointTangent() {
