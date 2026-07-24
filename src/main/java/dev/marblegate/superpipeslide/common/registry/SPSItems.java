@@ -67,11 +67,6 @@ public final class SPSItems {
             (properties) -> new PipeConnectorItem(properties, PipeConnectorMode.GAZE_CURVE),
             properties -> properties.stacksTo(1));
 
-    public static final DeferredItem<Item> PIPE_CONNECTOR_CONTROLLED = ITEMS.registerItem(
-            "pipe_connector_controlled",
-            (properties) -> new PipeConnectorItem(properties, PipeConnectorMode.CONTROLLED),
-            properties -> properties.stacksTo(1));
-
     public static final DeferredItem<Item> PIPE_REMOVER = ITEMS.registerItem(
             "pipe_remover",
             PipeRemoverItem::new,

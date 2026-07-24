@@ -1,7 +1,9 @@
 package dev.marblegate.superpipeslide.client.core.pipe;
 
+import dev.marblegate.superpipeslide.client.renderer.pipe.ClientPipeRenderer;
 import dev.marblegate.superpipeslide.common.core.geometry.AnchorAttachOffsets;
 import dev.marblegate.superpipeslide.common.core.geometry.CurveSpec;
+import dev.marblegate.superpipeslide.common.core.geometry.PathConversion;
 import dev.marblegate.superpipeslide.common.core.geometry.PathCurves;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
@@ -16,6 +18,7 @@ import dev.marblegate.superpipeslide.network.editor.ServerboundUpdatePipeGeometr
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -49,6 +52,7 @@ public final class ClientPipeEditorSession {
     private static final double SEGMENT_PICK_RADIUS = 0.20D;
     private static final double SCROLL_DEPTH_STEP = 0.25D;
     private static final int MAX_PATH_NODES = 16;
+    private static final int HINT_INTERVAL_TICKS = 40;
 
     private static final int GHOST_VALID_COLOR = 0xE040D8FF;
     private static final int GHOST_INVALID_COLOR = 0xE0FF5050;
@@ -82,6 +86,7 @@ public final class ClientPipeEditorSession {
     private List<PipePathNode> nodes;
     private Drag drag;
     private Aim highlightedAim = Aim.None.INSTANCE;
+    private int hintCountdown = HINT_INTERVAL_TICKS;
 
     private ClientPipeEditorSession(PipeAnchorId anchor, Vec3 workingOffset) {
         this.anchorMode = true;
@@ -99,7 +104,7 @@ public final class ClientPipeEditorSession {
         this.toAnchor = target.toAnchor();
         this.fromPoint = target.fromSurface();
         this.toPoint = target.toSurface();
-        CurveSpec pathSpec = target.curveSpec().asPath();
+        CurveSpec pathSpec = PathConversion.toPath(target.fromSurface(), target.toSurface(), target.curveSpec());
         this.startTangent = pathSpec.startTangent();
         this.endTangent = pathSpec.endTangent();
         this.nodes = new ArrayList<>(pathSpec.pathNodes());
@@ -144,6 +149,7 @@ public final class ClientPipeEditorSession {
     }
 
     public static void clear() {
+        ClientPipeRenderer.setSessionHiddenConnections(Set.of());
         active = null;
     }
 
@@ -183,11 +189,13 @@ public final class ClientPipeEditorSession {
         }
         if (!(player.getMainHandItem().getItem() instanceof PipeEditorItem)) {
             overlay(player, "message.superpipeslide.pipe_editor.cancelled", ChatFormatting.YELLOW);
+            ClientPipeRenderer.setSessionHiddenConnections(Set.of());
             active = null;
             return;
         }
         if (active.anchorMode ? ClientPipeNetworkCache.node(active.anchor).isEmpty() : ClientPipeNetworkCache.globalConnection(active.connectionId).isEmpty()) {
             overlay(player, "message.superpipeslide.pipe_editor.target_lost", ChatFormatting.RED);
+            ClientPipeRenderer.setSessionHiddenConnections(Set.of());
             active = null;
             return;
         }
@@ -200,6 +208,10 @@ public final class ClientPipeEditorSession {
             }
         }
         active.highlightedAim = active.drag == null && !active.anchorMode ? active.computePathAim(player) : Aim.None.INSTANCE;
+        if (--active.hintCountdown <= 0) {
+            active.hintCountdown = HINT_INTERVAL_TICKS;
+            overlay(player, active.anchorMode ? "message.superpipeslide.pipe_editor.hint_anchor" : "message.superpipeslide.pipe_editor.hint_path", ChatFormatting.DARK_GRAY);
+        }
     }
 
     public static List<GhostLine> collectGhostLines() {
@@ -218,6 +230,8 @@ public final class ClientPipeEditorSession {
             if (node.isPresent()) {
                 Vec3 offset = node.get().attachPoint().subtract(Vec3.atCenterOf(anchorId.blockPos()));
                 active = new ClientPipeEditorSession(anchorId, offset);
+                Set<UUID> touching = ClientPipeNetworkCache.connectionsTouching(anchorId).stream().map(PipeConnection::id).collect(java.util.stream.Collectors.toSet());
+                ClientPipeRenderer.setSessionHiddenConnections(touching);
                 overlay(player, "message.superpipeslide.pipe_editor.opened_anchor", ChatFormatting.GREEN);
                 return true;
             }
@@ -226,6 +240,7 @@ public final class ClientPipeEditorSession {
                 ClientPipeNetworkCache.connections(player.level().dimension()), eye, look, PICK_REACH, PIPE_PICK_RADIUS);
         if (hit.isPresent()) {
             active = new ClientPipeEditorSession(hit.get().connection());
+            ClientPipeRenderer.setSessionHiddenConnections(Set.of(hit.get().connection().id()));
             overlay(player, "message.superpipeslide.pipe_editor.opened_path", ChatFormatting.GREEN);
             return true;
         }
@@ -293,11 +308,13 @@ public final class ClientPipeEditorSession {
             ClientPacketDistributor.sendToServer(new ServerboundUpdatePipeGeometryPayload(this.connectionId, CurveSpec.path(this.nodes, this.startTangent, this.endTangent)));
         }
         overlay(player, "message.superpipeslide.pipe_editor.submitted", ChatFormatting.GREEN);
+        ClientPipeRenderer.setSessionHiddenConnections(Set.of());
         active = null;
     }
 
     private void cancel(LocalPlayer player) {
         overlay(player, "message.superpipeslide.pipe_editor.cancelled", ChatFormatting.YELLOW);
+        ClientPipeRenderer.setSessionHiddenConnections(Set.of());
         active = null;
     }
 
@@ -353,13 +370,13 @@ public final class ClientPipeEditorSession {
         double h2 = Mth.clamp((a11 * r2 - a12 * r1) / determinant, 0.0D, maxHandle);
         int segment = this.drag.index;
         if (segment == 0) {
-            this.startTangent = Optional.of(this.drag.dir0);
+            this.startTangent = Optional.of(this.drag.dir0.scale(h1));
         } else {
             PipePathNode left = this.nodes.get(segment - 1);
             this.nodes.set(segment - 1, left.withHandles(left.inHandle(), Optional.of(this.drag.p0.add(this.drag.dir0.scale(h1)))));
         }
         if (segment == this.nodes.size()) {
-            this.endTangent = Optional.of(this.drag.dir1);
+            this.endTangent = Optional.of(this.drag.dir1.scale(h2));
         } else {
             PipePathNode right = this.nodes.get(segment);
             this.nodes.set(segment, right.withHandles(Optional.of(this.drag.p3.subtract(this.drag.dir1.scale(h2))), right.outHandle()));
@@ -382,16 +399,15 @@ public final class ClientPipeEditorSession {
         Vec3 r0 = q0.lerp(q1, t);
         Vec3 r1 = q1.lerp(q2, t);
         Vec3 split = r0.lerp(r1, t);
-        // Pin the boundary handles so the split preserves the current shape. Endpoint
-        // tangents only carry a direction, so near an endpoint the shape is approximated.
+        // Pin the boundary handles so the split preserves the current shape exactly.
         if (aim.segment() == 0 && q0.subtract(p0).lengthSqr() >= 1.0E-6D) {
-            this.startTangent = Optional.of(q0.subtract(p0).normalize());
+            this.startTangent = Optional.of(q0.subtract(p0));
         } else if (aim.segment() > 0) {
             PipePathNode left = this.nodes.get(aim.segment() - 1);
             this.nodes.set(aim.segment() - 1, left.withHandles(left.inHandle(), Optional.of(q0)));
         }
         if (aim.segment() == this.nodes.size() && p3.subtract(q2).lengthSqr() >= 1.0E-6D) {
-            this.endTangent = Optional.of(p3.subtract(q2).normalize());
+            this.endTangent = Optional.of(p3.subtract(q2));
         } else if (aim.segment() < this.nodes.size()) {
             PipePathNode right = this.nodes.get(aim.segment());
             this.nodes.set(aim.segment(), right.withHandles(Optional.of(q2), right.outHandle()));
@@ -524,12 +540,12 @@ public final class ClientPipeEditorSession {
         }
         this.startTangent.ifPresent(tangent -> {
             if (tangent.lengthSqr() >= 1.0E-6D) {
-                lines.add(new GhostLine(this.fromPoint, this.fromPoint.add(tangent.normalize().scale(PathCurves.endHandleLength(this.fromPoint, this.toPoint))), HANDLE_COLOR, 1.0F));
+                lines.add(new GhostLine(this.fromPoint, this.fromPoint.add(tangent), HANDLE_COLOR, 1.0F));
             }
         });
         this.endTangent.ifPresent(tangent -> {
             if (tangent.lengthSqr() >= 1.0E-6D) {
-                lines.add(new GhostLine(this.toPoint, this.toPoint.subtract(tangent.normalize().scale(PathCurves.endHandleLength(this.fromPoint, this.toPoint))), HANDLE_COLOR, 1.0F));
+                lines.add(new GhostLine(this.toPoint, this.toPoint.subtract(tangent), HANDLE_COLOR, 1.0F));
             }
         });
         if (this.drag != null) {

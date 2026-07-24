@@ -32,7 +32,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 public class PipeConnectorItem extends Item {
-    private static final int MAX_CONTROL_POINTS = 8;
     private final PipeConnectorMode connectorMode;
 
     public PipeConnectorItem(Properties properties) {
@@ -78,11 +77,6 @@ public class PipeConnectorItem extends Item {
             builder.accept(Component.translatable("tooltip.superpipeslide.pipe_connector.selected_anchor", pos.getX(), pos.getY(), pos.getZ()).withStyle(ChatFormatting.GRAY));
         }
 
-        if (mode == PipeConnectorMode.CONTROLLED) {
-            builder.accept(Component.translatable("tooltip.superpipeslide.pipe_connector.control_points", controlPoints(itemStack).size(), MAX_CONTROL_POINTS).withStyle(ChatFormatting.GRAY));
-            builder.accept(Component.translatable("tooltip.superpipeslide.pipe_connector.control_hint").withStyle(ChatFormatting.DARK_GRAY));
-            builder.accept(Component.translatable("tooltip.superpipeslide.pipe_connector.control_finish_hint").withStyle(ChatFormatting.DARK_GRAY));
-        }
         builder.accept(Component.translatable("tooltip.superpipeslide.pipe_connector.clear_hint").withStyle(ChatFormatting.DARK_GRAY));
         builder.accept(Component.translatable("tooltip.superpipeslide.pipe_connector.quick_build_hint").withStyle(ChatFormatting.DARK_GRAY));
     }
@@ -138,7 +132,6 @@ public class PipeConnectorItem extends Item {
 
             stack.set(SPSDataComponents.SELECTED_ANCHOR.get(), clicked);
             stack.set(SPSDataComponents.SELECTED_START_TANGENT.get(), player.getLookAngle().normalize());
-            stack.remove(SPSDataComponents.PENDING_CONTROL_POINTS.get());
             String selectedMessage = clickedBranchAnchor ? "message.superpipeslide.branch_anchor_selected" : "message.superpipeslide.anchor_selected";
             player.sendOverlayMessage(Component.translatable(selectedMessage, pos.getX(), pos.getY(), pos.getZ()).withStyle(ChatFormatting.AQUA));
             return InteractionResult.SUCCESS_SERVER;
@@ -164,10 +157,6 @@ public class PipeConnectorItem extends Item {
             clearSelectedAnchor(stack);
             player.sendOverlayMessage(Component.translatable("message.superpipeslide.first_anchor_missing").withStyle(ChatFormatting.RED));
             return InteractionResult.FAIL;
-        }
-
-        if (mode(stack) == PipeConnectorMode.CONTROLLED) {
-            return addControlPoint(context, player, stack);
         }
 
         if (!player.getAbilities().instabuild) {
@@ -269,7 +258,6 @@ public class PipeConnectorItem extends Item {
         if (keepBuilding) {
             stack.set(SPSDataComponents.SELECTED_ANCHOR.get(), clicked);
             stack.set(SPSDataComponents.SELECTED_START_TANGENT.get(), connection.tangentAt(connection.length()));
-            stack.remove(SPSDataComponents.PENDING_CONTROL_POINTS.get());
         } else {
             clearSelectedAnchor(stack);
         }
@@ -298,7 +286,6 @@ public class PipeConnectorItem extends Item {
     private static void clearSelectedAnchor(ItemStack stack) {
         stack.remove(SPSDataComponents.SELECTED_ANCHOR.get());
         stack.remove(SPSDataComponents.SELECTED_START_TANGENT.get());
-        stack.remove(SPSDataComponents.PENDING_CONTROL_POINTS.get());
     }
 
     public static void clearSelectedAnchorFromPlayers(ServerLevel level, PipeAnchorId anchorId) {
@@ -330,7 +317,6 @@ public class PipeConnectorItem extends Item {
             case LINE -> CurveSpec.line();
             case AUTO_CURVE -> autoCurveSpec(stack, chord, first, second);
             case GAZE_CURVE -> gazeCurveSpec(stack, player, chord);
-            case CONTROLLED -> controlledCurveSpec(stack, player, chord, first, second);
         };
     }
 
@@ -385,39 +371,6 @@ public class PipeConnectorItem extends Item {
         Vec3 startAxis = stack.getOrDefault(SPSDataComponents.SELECTED_START_TANGENT.get(), player.getLookAngle()).normalize();
         Vec3 endAxis = player.getLookAngle().normalize();
         return CurveSpec.gazeCurve(orientAxis(startAxis, chord), orientAxis(endAxis, chord));
-    }
-
-    private static CurveSpec controlledCurveSpec(ItemStack stack, Player player, Vec3 chord, PipeAnchorId first, PipeAnchorId second) {
-        List<Vec3> controlPoints = controlPoints(stack);
-        if (!controlPoints.isEmpty()) {
-            return CurveSpec.controlled(controlPoints);
-        }
-
-        Vec3 start = Vec3.atCenterOf(first.blockPos());
-        Vec3 end = Vec3.atCenterOf(second.blockPos());
-        Vec3 startAxis = orientAxis(stack.getOrDefault(SPSDataComponents.SELECTED_START_TANGENT.get(), player.getLookAngle()).normalize(), chord);
-        Vec3 endAxis = orientAxis(player.getLookAngle().normalize(), chord);
-        double handleLength = Math.max(0.75D, chord.length() * 0.32D);
-        return CurveSpec.controlled(List.of(start.add(startAxis.scale(handleLength)), end.subtract(endAxis.scale(handleLength))));
-    }
-
-    private static InteractionResult addControlPoint(UseOnContext context, Player player, ItemStack stack) {
-        List<Vec3> current = controlPoints(stack);
-        if (current.size() >= MAX_CONTROL_POINTS) {
-            player.sendOverlayMessage(Component.translatable("message.superpipeslide.control_point_limit", MAX_CONTROL_POINTS).withStyle(ChatFormatting.RED));
-            return InteractionResult.FAIL;
-        }
-
-        Vec3 point = context.getClickLocation();
-        List<Vec3> updated = new java.util.ArrayList<>(current);
-        updated.add(point);
-        stack.set(SPSDataComponents.PENDING_CONTROL_POINTS.get(), List.copyOf(updated));
-        player.sendOverlayMessage(Component.translatable("message.superpipeslide.control_point_added", updated.size(), MAX_CONTROL_POINTS).withStyle(ChatFormatting.AQUA));
-        return InteractionResult.SUCCESS_SERVER;
-    }
-
-    private static List<Vec3> controlPoints(ItemStack stack) {
-        return stack.getOrDefault(SPSDataComponents.PENDING_CONTROL_POINTS.get(), List.of());
     }
 
     private static Component modeName(PipeConnectorMode mode) {

@@ -26,7 +26,6 @@ public final class SPSCreativeTabs {
                 output.accept(SPSItems.PIPE_CONNECTOR_LINE.get());
                 output.accept(SPSItems.PIPE_CONNECTOR_AUTO_CURVE.get());
                 output.accept(SPSItems.PIPE_CONNECTOR_GAZE_CURVE.get());
-                output.accept(SPSItems.PIPE_CONNECTOR_CONTROLLED.get());
                 output.accept(SPSItems.PIPE_REMOVER.get());
                 output.accept(SPSItems.ACCELERATION_ATTRIBUTE_TOOL.get());
                 output.accept(SPSItems.HIGHWAY_ATTRIBUTE_TOOL.get());

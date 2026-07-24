@@ -6,7 +6,6 @@ import dev.marblegate.superpipeslide.common.core.appearance.model.PipeAppearance
 import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.projection.layout.ProjectionLayoutTarget;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeConnectorMode;
-import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponentType;
@@ -31,10 +30,6 @@ public final class SPSDataComponents {
     public static final DeferredHolder<DataComponentType<?>, DataComponentType<PipeConnectorMode>> PIPE_CONNECTOR_MODE = DATA_COMPONENTS.registerComponentType(
             "pipe_connector_mode",
             builder -> builder.persistent(PipeConnectorMode.CODEC));
-
-    public static final DeferredHolder<DataComponentType<?>, DataComponentType<List<Vec3>>> PENDING_CONTROL_POINTS = DATA_COMPONENTS.registerComponentType(
-            "pending_control_points",
-            builder -> builder.persistent(Vec3.CODEC.listOf()));
 
     public static final DeferredHolder<DataComponentType<?>, DataComponentType<UUID>> PLATFORM_CLAIMER_STATION = DATA_COMPONENTS.registerComponentType(
             "platform_claimer_station",

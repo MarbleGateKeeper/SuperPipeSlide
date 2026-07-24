@@ -21,7 +21,11 @@ public class PipeEditorItem extends Item {
 
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay display, Consumer<Component> builder, TooltipFlag flag) {
-        builder.accept(Component.translatable("tooltip.superpipeslide.pipe_editor.use").withStyle(ChatFormatting.DARK_GRAY));
-        builder.accept(Component.translatable("tooltip.superpipeslide.pipe_editor.edit").withStyle(ChatFormatting.DARK_GRAY));
+        builder.accept(Component.translatable("tooltip.superpipeslide.pipe_editor.header").withStyle(ChatFormatting.GRAY));
+        builder.accept(Component.translatable("tooltip.superpipeslide.pipe_editor.open").withStyle(ChatFormatting.DARK_GRAY));
+        builder.accept(Component.translatable("tooltip.superpipeslide.pipe_editor.anchor").withStyle(ChatFormatting.DARK_GRAY));
+        builder.accept(Component.translatable("tooltip.superpipeslide.pipe_editor.drag").withStyle(ChatFormatting.DARK_GRAY));
+        builder.accept(Component.translatable("tooltip.superpipeslide.pipe_editor.node").withStyle(ChatFormatting.DARK_GRAY));
+        builder.accept(Component.translatable("tooltip.superpipeslide.pipe_editor.confirm").withStyle(ChatFormatting.DARK_GRAY));
     }
 }

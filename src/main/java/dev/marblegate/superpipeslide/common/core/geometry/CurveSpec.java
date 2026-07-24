@@ -61,22 +61,6 @@ public record CurveSpec(CurveType type, Optional<Vec3> startTangent, Optional<Ve
         return new CurveSpec(CurveType.PATH, startTangent, endTangent, List.of(), List.copyOf(pathNodes));
     }
 
-    /**
-     * Converts this spec to an equivalent PATH spec for node-based editing. A spec without
-     * control points keeps its end tangents so single-segment curves (including GAZE curves)
-     * survive the conversion unchanged; control points become automatic nodes, which
-     * approximates the original high-degree bezier with a smooth node chain.
-     */
-    public CurveSpec asPath() {
-        if (this.type == CurveType.PATH) {
-            return this;
-        }
-        if (!this.controlPoints.isEmpty()) {
-            return new CurveSpec(CurveType.PATH, Optional.empty(), Optional.empty(), List.of(), this.controlPoints.stream().map(PipePathNode::automatic).toList());
-        }
-        return new CurveSpec(CurveType.PATH, this.startTangent, this.endTangent, List.of(), List.of());
-    }
-
     private static Vec3 normalizeOrZero(Vec3 vector) {
         return vector.lengthSqr() < 1.0E-6D ? Vec3.ZERO : vector.normalize();
     }

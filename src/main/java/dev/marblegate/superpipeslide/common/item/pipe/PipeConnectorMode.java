@@ -7,8 +7,7 @@ import net.minecraft.util.StringRepresentable;
 public enum PipeConnectorMode implements StringRepresentable {
     LINE("line", CurveType.LINE),
     AUTO_CURVE("auto_curve", CurveType.AUTO_CURVE),
-    GAZE_CURVE("gaze_curve", CurveType.GAZE_CURVE),
-    CONTROLLED("controlled", CurveType.CONTROLLED);
+    GAZE_CURVE("gaze_curve", CurveType.GAZE_CURVE);
 
     public static final Codec<PipeConnectorMode> CODEC = StringRepresentable.fromEnum(PipeConnectorMode::values);
 

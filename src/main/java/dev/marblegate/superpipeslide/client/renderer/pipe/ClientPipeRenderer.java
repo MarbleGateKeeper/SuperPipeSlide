@@ -52,7 +52,6 @@ import dev.marblegate.superpipeslide.common.core.networkgraph.solver.PipeConnect
 import dev.marblegate.superpipeslide.common.item.pipe.PipeAppearanceToolItem;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeAttributeToolItem;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeConnectorItem;
-import dev.marblegate.superpipeslide.common.item.pipe.PipeConnectorMode;
 import dev.marblegate.superpipeslide.common.item.pipe.PipeRemoverItem;
 import dev.marblegate.superpipeslide.common.item.route.PlatformClaimerItem;
 import dev.marblegate.superpipeslide.common.registry.SPSBlocks;
@@ -344,6 +343,7 @@ public final class ClientPipeRenderer {
         }
     };
     private static final Map<RenderSectionKey, PipeSectionState> SECTION_CACHE = new LinkedHashMap<>();
+    private static final Set<UUID> SESSION_HIDDEN_CONNECTION_IDS = new LinkedHashSet<>();
     private static final Map<UUID, PipeSectionConnectionEntry> SECTION_CONNECTION_INDEX = new LinkedHashMap<>();
     private static long cachedNetworkRevision = Long.MIN_VALUE;
     private static long cachedAppearanceRevision = Long.MIN_VALUE;
@@ -434,7 +434,6 @@ public final class ClientPipeRenderer {
             if (preview.connection() != null) {
                 addPreviewLines(lines, preview.connection(), color);
             }
-            addControlPathLines(lines, preview.controlPath(), color);
         }
 
         for (ClientPipeEditorSession.GhostLine ghostLine : ClientPipeEditorSession.collectGhostLines()) {
@@ -1457,6 +1456,24 @@ public final class ClientPipeRenderer {
         }
     }
 
+    /**
+     * Temporarily hides the given connections from the solid mesh pass (used by the
+     * in-world shape editor so the pipe being edited does not occlude the preview lines).
+     * Hidden connections stay indexed but are skipped when section batches are assembled.
+     */
+    public static void setSessionHiddenConnections(Set<UUID> connectionIds) {
+        Set<UUID> updated = Set.copyOf(connectionIds);
+        if (updated.equals(SESSION_HIDDEN_CONNECTION_IDS)) {
+            return;
+        }
+        Set<UUID> affected = new LinkedHashSet<>(SESSION_HIDDEN_CONNECTION_IDS);
+        affected.addAll(updated);
+        SESSION_HIDDEN_CONNECTION_IDS.clear();
+        SESSION_HIDDEN_CONNECTION_IDS.addAll(updated);
+        affected.forEach(ClientPipeRenderer::invalidateSectionConnection);
+        sectionCacheRefreshNeeded = true;
+    }
+
     private static void pruneDistantSectionConnections(ResourceKey<Level> levelKey, Vec3 camera, double retainRadius) {
         List<UUID> staleConnectionIds = new ArrayList<>();
         for (PipeSectionConnectionEntry entry : SECTION_CONNECTION_INDEX.values()) {
@@ -2370,21 +2387,6 @@ public final class ClientPipeRenderer {
         addRing(lines, ring(connection.toSurface(), connection.tangentAt(length), PIPE_RADIUS * 1.5D), color, 2.0F);
     }
 
-    private static void addControlPathLines(List<LineSegment> lines, List<Vec3> controlPath, int color) {
-        if (controlPath.isEmpty()) {
-            return;
-        }
-
-        Vec3 previous = null;
-        for (Vec3 point : controlPath) {
-            addRing(lines, ring(point, new Vec3(0.0D, 1.0D, 0.0D), PIPE_RADIUS * 0.9D), color, 1.5F);
-            if (previous != null) {
-                lines.add(new LineSegment(previous, point, color, 1.0F));
-            }
-            previous = point;
-        }
-    }
-
     private static void addRing(List<LineSegment> lines, Vec3[] ring, int color, float width) {
         for (int i = 0; i < ring.length; i++) {
             lines.add(new LineSegment(ring[i], ring[(i + 1) % ring.length], color, width));
@@ -2446,14 +2448,6 @@ public final class ClientPipeRenderer {
         if (start.equals(end)) {
             return null;
         }
-        PipeConnectorMode mode = PipeConnectorItem.mode(stack);
-        if (mode == PipeConnectorMode.CONTROLLED && !target.existingAnchor()) {
-            List<Vec3> controlPath = new ArrayList<>();
-            controlPath.add(Vec3.atCenterOf(start.blockPos()));
-            controlPath.addAll(stack.getOrDefault(SPSDataComponents.PENDING_CONTROL_POINTS.get(), List.of()));
-            controlPath.add(target.controlPoint());
-            return new Preview(null, Validity.WARNING, controlPath);
-        }
 
         CurveSpec curveSpec = PipeConnectorItem.curveSpec(stack, player, start, end);
         PipeConnection rawConnection = PipeConnection.withCurve(start, end, curveSpec)
@@ -2461,14 +2455,7 @@ public final class ClientPipeRenderer {
         PipeConnectionPlacementPlan placementPlan = PipeConnectionPlacementPlanner.plan(ClientPipeNetworkCache.currentView(), rawConnection, Config.MAX_CONNECTION_LENGTH.getAsDouble());
         PipeConnection connection = placementPlan.candidate();
 
-        List<Vec3> controlPath = List.of();
-        if (mode == PipeConnectorMode.CONTROLLED) {
-            controlPath = new ArrayList<>();
-            controlPath.add(connection.fromSurface());
-            controlPath.addAll(stack.getOrDefault(SPSDataComponents.PENDING_CONTROL_POINTS.get(), List.of()));
-            controlPath.add(connection.toSurface());
-        }
-        return new Preview(connection, validate(level, start, end, target, placementPlan), controlPath);
+        return new Preview(connection, validate(level, start, end, target, placementPlan));
     }
 
     private static ItemStack heldConnector(LocalPlayer player) {
@@ -2524,11 +2511,11 @@ public final class ClientPipeRenderer {
         BlockPos hitPos = blockHit.getBlockPos();
         BlockState hitState = level.getBlockState(hitPos);
         if (isConnectorAnchor(hitState)) {
-            return hitPos.equals(start.blockPos()) ? null : new Target(hitPos, true, Vec3.atCenterOf(hitPos));
+            return hitPos.equals(start.blockPos()) ? null : new Target(hitPos, true);
         }
 
         BlockPos ghostAnchor = hitPos.relative(blockHit.getDirection());
-        return level.isEmptyBlock(ghostAnchor) ? new Target(ghostAnchor, false, blockHit.getLocation()) : null;
+        return level.isEmptyBlock(ghostAnchor) ? new Target(ghostAnchor, false) : null;
     }
 
     private static Validity validate(ClientLevel level, PipeAnchorId start, PipeAnchorId end, Target target, PipeConnectionPlacementPlan placementPlan) {
@@ -2796,9 +2783,9 @@ public final class ClientPipeRenderer {
         INVALID
     }
 
-    private record Target(BlockPos pos, boolean existingAnchor, Vec3 controlPoint) {}
+    private record Target(BlockPos pos, boolean existingAnchor) {}
 
-    private record Preview(@Nullable PipeConnection connection, Validity validity, List<Vec3> controlPath) {}
+    private record Preview(@Nullable PipeConnection connection, Validity validity) {}
 
     private record RenderData(PipeRenderFrame frame, List<ShaderpackEntitySection> shaderpackEntitySections, List<LineSegment> lines, Vec3 camera, PipeRenderMode renderMode, boolean externalPipelineActive) {
         boolean isEmpty() {
@@ -4138,6 +4125,9 @@ public final class ClientPipeRenderer {
             }
             PipeRenderBatches replacement = new PipeRenderBatches();
             for (UUID connectionId : this.connectionIds) {
+                if (SESSION_HIDDEN_CONNECTION_IDS.contains(connectionId)) {
+                    continue;
+                }
                 PipeSectionConnectionEntry entry = SECTION_CONNECTION_INDEX.get(connectionId);
                 if (entry == null) {
                     continue;
