@@ -46,6 +46,7 @@ public final class ClientCinematicCameraController {
     private static final double SEARCH_FAIL_GRACE_SECONDS = 5.0D;
     private static final double PUSH_IN_PER_SECOND = 0.12D;
     private static final double BLEND_RATE_PER_SECOND = 3.0D;
+    private static final double BLEND_OUT_RATE_PER_SECOND = 1.5D;
     // Framing
     private static final double OFF_AXIS_CUT_DEGREES = 55.0D;
     private static final double CROSSED_STAGE_DISTANCE = 8.0D;
@@ -81,6 +82,7 @@ public final class ClientCinematicCameraController {
     private static Vec3 lastRiderPos;
     private static ResourceKey<Level> lastLevelKey;
     private static Vec3 lastSafePosition;
+    private static double driftAmount;
     private static Shot shot;
 
     private ClientCinematicCameraController() {}
@@ -123,6 +125,7 @@ public final class ClientCinematicCameraController {
         lastRiderPos = null;
         lastLevelKey = null;
         lastSafePosition = null;
+        driftAmount = 0.0D;
     }
 
     public static boolean isActive() {
@@ -173,7 +176,7 @@ public final class ClientCinematicCameraController {
         double intensity = ClientConfig.CINEMATIC_CAMERA_INTENSITY.get();
         boolean enabled = ClientSafetyOptions.cinematicCameraEnabled() && !ClientGazeChoiceController.hasActiveChoice() && intensity > 1.0E-6D;
         double targetBlend = enabled && frame.isPresent() ? frame.get().alpha() : 0.0D;
-        blend = approachExp(blend, targetBlend, BLEND_RATE_PER_SECOND, deltaSeconds);
+        blend = approachExp(blend, targetBlend, targetBlend > blend ? BLEND_RATE_PER_SECOND : BLEND_OUT_RATE_PER_SECOND, deltaSeconds);
         if (blend <= 0.02D) {
             blend = targetBlend <= 0.0D ? 0.0D : blend;
             shot = null;
@@ -181,8 +184,14 @@ public final class ClientCinematicCameraController {
             return;
         }
         if (frame.isEmpty()) {
-            shot = null;
-            lastSafePosition = null;
+            // The slide session just ended: keep the frozen shot for the whole return
+            // journey instead of clearing it here. Clearing at this point would snap the
+            // camera through the remaining ~10% of the blend in a single frame and make
+            // the player lose their bearings.
+            if (shot != null) {
+                access.superpipeslide$setDetached(true);
+                writeCamera(minecraft, player, camera, access, partialTick, intensity);
+            }
             return;
         }
 
@@ -629,21 +638,23 @@ public final class ClientCinematicCameraController {
             lastSafePosition = position;
         }
         // Slow sinusoidal wander (per-shot random phase): the "handheld" breathing that
-        // keeps a parked shot alive. Applied only while clearance holds.
+        // keeps a parked shot alive. The amount eases toward the clearance state so the
+        // drift never snaps on or off.
         double time = (System.currentTimeMillis() % 200000L) / 1000.0D;
         Vec3 drift = new Vec3(
                 Math.sin(time * 0.55D + shot.driftPhase()) * 0.35D,
                 Math.sin(time * 0.42D + shot.driftPhase() * 1.7D) * 0.16D,
                 Math.sin(time * 0.61D + shot.driftPhase() * 2.3D) * 0.35D);
-        Vec3 drifted = position.add(drift);
-        if (hasClearance(minecraft.level, drifted)) {
-            position = drifted;
-        }
+        driftAmount = approachExp(driftAmount, hasClearance(minecraft.level, position.add(drift)) ? 1.0D : 0.0D, 6.0D, deltaSeconds(minecraft));
+        position = position.add(drift.scale(driftAmount));
         Vec3 look = shot.aim().subtract(position);
         double targetYaw = Math.toDegrees(Math.atan2(-look.x, look.z));
         double horizontal = Math.sqrt(look.x * look.x + look.z * look.z);
         double targetPitch = Math.toDegrees(Math.atan2(-look.y, horizontal));
-        double rotationBlend = blend * intensity;
+        // Steady state hands rotation fully to the shot (mouse input is decoupled, which
+        // is what made curves tremble); only the first/last stretch of the blend mixes
+        // with the player's own view for a smooth handoff in both directions.
+        double rotationBlend = Mth.clamp((blend - 0.15D) / 0.35D, 0.0D, 1.0D);
         float yaw = player.getViewYRot(partialTick);
         float pitch = player.getViewXRot(partialTick);
         double blendedYaw = yaw + Mth.wrapDegrees(targetYaw - yaw) * rotationBlend;
