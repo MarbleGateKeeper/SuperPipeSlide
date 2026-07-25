@@ -13,6 +13,14 @@ public final class ClientConfig {
             .comment("Whether sliding may adjust camera pitch and roll for slope, turning, and upcoming sharp-turn anticipation. Disable this to keep sliding mechanics and visual effects while removing camera tilt feedback.")
             .define("enableSlideCameraFeedback", true);
 
+    public static final ModConfigSpec.BooleanValue ENABLE_CINEMATIC_CAMERA = BUILDER
+            .comment("Whether sliding may switch to the cinematic perspective: the camera parks at scenic vantage points and cuts between wallpaper-like shots as you slide through the frame. Disable to always keep the normal first-person view.")
+            .define("enableCinematicCamera", false);
+
+    public static final ModConfigSpec.DoubleValue CINEMATIC_CAMERA_INTENSITY = BUILDER
+            .comment("Strength of the cinematic perspective blend. 0.0 disables it without turning the feature off, 1.0 is the full shot.")
+            .defineInRange("cinematicCameraIntensity", 0.75D, 0.0D, 1.0D);
+
     public static final ModConfigSpec.BooleanValue REDUCE_MOTION_SICKNESS_RISK = BUILDER
             .comment("Reduces 3D motion sickness risk during pipe sliding by disabling camera roll, FOV pushes, fold traversal screen distortion, and other strong first-person motion feedback. Sliding mechanics are unchanged.")
             .define("reduceMotionSicknessRisk", false);

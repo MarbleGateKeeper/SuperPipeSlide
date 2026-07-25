@@ -63,7 +63,7 @@ public final class ClientSlideNoticeController {
 
     public static void render(GuiGraphicsExtractor graphics, net.minecraft.client.DeltaTracker deltaTracker) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null || minecraft.level == null || NOTICES.isEmpty()) {
+        if (minecraft.player == null || minecraft.level == null || minecraft.options.hideGui || NOTICES.isEmpty()) {
             return;
         }
 

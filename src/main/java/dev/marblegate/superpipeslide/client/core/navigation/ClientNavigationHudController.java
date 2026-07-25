@@ -98,7 +98,7 @@ public final class ClientNavigationHudController {
 
     public static void render(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null || minecraft.level == null || snapshot == null || visibleAlpha <= 0.02D) {
+        if (minecraft.player == null || minecraft.level == null || minecraft.options.hideGui || snapshot == null || visibleAlpha <= 0.02D) {
             return;
         }
         Font font = minecraft.font;

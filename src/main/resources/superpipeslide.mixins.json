@@ -4,6 +4,8 @@
   "compatibilityLevel": "JAVA_25",
   "mixins": [],
   "client": [
+    "client.CameraAccessor",
+    "client.CameraMixin",
     "client.LevelRendererMixin",
     "client.PlayerModelMixin",
     "client.RenderSetupAccessor",

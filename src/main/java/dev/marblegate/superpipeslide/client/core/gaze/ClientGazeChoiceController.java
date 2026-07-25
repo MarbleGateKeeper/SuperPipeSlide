@@ -72,6 +72,10 @@ public final class ClientGazeChoiceController {
         return activeSession != null && activeSession.source() == GazeChoiceSource.STATION;
     }
 
+    public static boolean hasActiveChoice() {
+        return activeSession != null;
+    }
+
     public static void tick(Minecraft minecraft, LocalPlayer player) {
         if (activeSession == null) {
             return;

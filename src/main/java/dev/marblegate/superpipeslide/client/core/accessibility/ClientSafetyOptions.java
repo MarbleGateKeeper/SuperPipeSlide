@@ -33,6 +33,15 @@ public final class ClientSafetyOptions {
         return ClientConfig.ENABLE_SLIDE_CAMERA_FEEDBACK.get() && !reduceMotionSicknessRisk();
     }
 
+    public static boolean cinematicCameraEnabled() {
+        return ClientConfig.ENABLE_CINEMATIC_CAMERA.get() && !reduceMotionSicknessRisk();
+    }
+
+    public static void setCinematicCameraEnabled(boolean value) {
+        ClientConfig.ENABLE_CINEMATIC_CAMERA.set(value);
+        saveClientConfig();
+    }
+
     public static boolean reduceMotionSicknessRisk() {
         return ClientConfig.REDUCE_MOTION_SICKNESS_RISK.get();
     }

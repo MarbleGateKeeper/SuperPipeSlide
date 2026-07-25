@@ -3,6 +3,7 @@ package dev.marblegate.superpipeslide.client.renderer.slide;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
+import dev.marblegate.superpipeslide.client.core.slide.ClientCinematicCameraController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideFeedbackController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlidePoseController;
 import java.util.LinkedHashMap;
@@ -71,7 +72,7 @@ public final class ClientSlideFeedbackPlayerRenderer {
             smoothedFovBoost = 0.0D;
             return;
         }
-        smoothedFovBoost = smoothCameraValue(smoothedFovBoost, frame.get().fovBoost());
+        smoothedFovBoost = smoothCameraValue(smoothedFovBoost, frame.get().fovBoost() * (1.0D - ClientCinematicCameraController.blendFactor()));
         event.setFOV(event.getFOV() + (float) smoothedFovBoost);
     }
 
@@ -92,8 +93,11 @@ public final class ClientSlideFeedbackPlayerRenderer {
         double turnSignal = turnSignal(feedback.signedTurn(), feedback.signedTurnPreview(), 0.58D);
         double steeringRoll = -turnSignal * (2.40D + feedback.perceptualSpeed() * 5.80D + feedback.highwayBlend() * 1.60D + feedback.accelerationPulse() * 1.25D);
         double directionalRoll = -horizontal * (0.40D + feedback.perceptualSpeed() * 0.85D) * (1.0D - feedback.verticalBlend() * 0.60D);
-        double roll = (steeringRoll + directionalRoll) * feedback.alpha();
-        double pitch = (feedback.downBlend() - feedback.upBlend()) * (1.45D + feedback.perceptualSpeed() * 2.35D + feedback.highwayBlend() * 0.45D) * feedback.alpha();
+        // Slide camera feedback eases out exactly as the cinematic perspective eases in,
+        // so the two camera modes never shake hands on the same frame.
+        double feedbackScale = feedback.alpha() * (1.0D - ClientCinematicCameraController.blendFactor());
+        double roll = (steeringRoll + directionalRoll) * feedbackScale;
+        double pitch = (feedback.downBlend() - feedback.upBlend()) * (1.45D + feedback.perceptualSpeed() * 2.35D + feedback.highwayBlend() * 0.45D) * feedbackScale;
         // Time-based low-pass on the outputs: absorbs the slope kinks that the 20 Hz
         // tick filters leave at every tick boundary, at ~100 ms of added latency.
         smoothedCameraRoll = smoothCameraValue(smoothedCameraRoll, roll);

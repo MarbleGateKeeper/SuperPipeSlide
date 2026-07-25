@@ -1328,6 +1328,19 @@ public final class ClientSlideController {
                 && active.sessionId().equals(state.sessionId());
     }
 
+    /**
+     * Public read for the cinematic camera: whether the rider is currently auto-stopped
+     * (held) at a station platform center.
+     */
+    public static boolean isHoldingAtStationCenter() {
+        if (active == null) {
+            return false;
+        }
+        return ClientPipeNetworkCache.globalConnection(active.connectionId())
+                .map(connection -> isHoldingAtStationCenter(active, connection))
+                .orElse(false);
+    }
+
     private static void holdAtStationCenter(LocalPlayer player, ClientSlideState state, PipeConnection current) {
         double stationCenter = stationCenterDistance(current);
         ClientSlideState held = state.advance(current.id(), state.direction(), stationCenter, 0.0D);

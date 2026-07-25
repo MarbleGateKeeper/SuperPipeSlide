@@ -15,6 +15,7 @@ import dev.marblegate.superpipeslide.client.core.projection.cache.ProjectionText
 import dev.marblegate.superpipeslide.client.core.projection.render.ProjectionWorldTextRenderer;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteHudController;
+import dev.marblegate.superpipeslide.client.core.slide.ClientCinematicCameraController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideActionHintController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideFeedbackController;
@@ -37,9 +38,11 @@ import dev.marblegate.superpipeslide.client.renderer.projection.StationNameProje
 import dev.marblegate.superpipeslide.client.renderer.slide.ClientSlideFeedbackGeometryRenderer;
 import dev.marblegate.superpipeslide.client.renderer.slide.ClientSlideFeedbackPlayerRenderer;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
+import dev.marblegate.superpipeslide.config.ClientConfig;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
@@ -59,6 +62,7 @@ import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RegisterRenderPipelinesEvent;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
+import net.neoforged.neoforge.client.event.RenderHandEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.RenderPlayerEvent;
 import net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent;
@@ -77,6 +81,12 @@ public class SuperPipeSlideClient {
             InputConstants.Type.KEYSYM,
             InputConstants.KEY_P,
             KEY_CATEGORY);
+    private static final KeyMapping TOGGLE_CINEMATIC_CAMERA = new KeyMapping(
+            "key.superpipeslide.toggle_cinematic_camera",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            InputConstants.KEY_C,
+            KEY_CATEGORY);
 
     public SuperPipeSlideClient(IEventBus modEventBus, ModContainer container) {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
@@ -90,15 +100,18 @@ public class SuperPipeSlideClient {
         Identifier navigationHudLayer = Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "navigation_hud");
         Identifier slideNoticeLayer = Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "slide_notice");
         Identifier slideActionHintLayer = Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "slide_action_hint");
+        Identifier cinematicDipLayer = Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "cinematic_dip");
         event.registerAbove(VanillaGuiLayers.HOTBAR, routeHudLayer, ClientRouteHudController::render);
         event.registerAbove(routeHudLayer, navigationHudLayer, ClientNavigationHudController::render);
         event.registerAbove(navigationHudLayer, slideNoticeLayer, ClientSlideNoticeController::render);
         event.registerAbove(slideNoticeLayer, slideActionHintLayer, ClientSlideActionHintController::render);
+        event.registerAbove(slideActionHintLayer, cinematicDipLayer, ClientCinematicCameraController::renderDip);
     }
 
     private static void registerKeyMappings(RegisterKeyMappingsEvent event) {
         event.registerCategory(KEY_CATEGORY);
         event.register(OPEN_FULL_ROUTE_MAP);
+        event.register(TOGGLE_CINEMATIC_CAMERA);
     }
 
     private static void registerRenderPipelines(RegisterRenderPipelinesEvent event) {
@@ -134,6 +147,7 @@ public class SuperPipeSlideClient {
                 ClientAnchorVisibilityRenderer.clear();
                 ClientPipeRenderer.clearRenderCache();
                 ClientPipeEditorSession.clear();
+                ClientCinematicCameraController.clear();
                 ClientProjectionProjectorIndex.clear();
                 StationNameProjectorRenderer.clearCaches();
                 PlatformProjectorRenderer.clearCaches();
@@ -148,6 +162,11 @@ public class SuperPipeSlideClient {
                 if (minecraft.screen == null) {
                     minecraft.setScreen(new FullRouteMapScreen());
                 }
+            }
+            while (TOGGLE_CINEMATIC_CAMERA.consumeClick()) {
+                boolean enabled = !ClientConfig.ENABLE_CINEMATIC_CAMERA.get();
+                ClientSafetyOptions.setCinematicCameraEnabled(enabled);
+                player.sendOverlayMessage(Component.translatable(enabled ? "message.superpipeslide.cinematic_camera.enabled" : "message.superpipeslide.cinematic_camera.disabled"));
             }
             ClientNavigationController.tick(minecraft, player);
             ClientSafetyOptions.tick();
@@ -185,6 +204,13 @@ public class SuperPipeSlideClient {
         @SubscribeEvent
         public static void onMouseScrolling(InputEvent.MouseScrollingEvent event) {
             if (ClientPipeEditorSession.onScroll(event.getScrollDeltaY())) {
+                event.setCanceled(true);
+            }
+        }
+
+        @SubscribeEvent
+        public static void onRenderHand(RenderHandEvent event) {
+            if (ClientCinematicCameraController.isActive()) {
                 event.setCanceled(true);
             }
         }

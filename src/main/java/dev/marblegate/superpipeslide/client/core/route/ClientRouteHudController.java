@@ -191,7 +191,7 @@ public final class ClientRouteHudController {
 
     public static void render(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null || minecraft.level == null || currentSnapshot == null || visibleAlpha <= 0.018D) {
+        if (minecraft.player == null || minecraft.level == null || minecraft.options.hideGui || currentSnapshot == null || visibleAlpha <= 0.018D) {
             return;
         }
         Font font = minecraft.font;
