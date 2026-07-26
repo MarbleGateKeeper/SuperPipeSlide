@@ -20,6 +20,8 @@ final class SlideWindSoundInstance extends AbstractTickableSoundInstance {
     private static final int GAP_STOP_TICKS = 8;
     private static final float VOLUME_SMOOTHING = 0.3F;
     private static final float PITCH_SPEED_FACTOR = 0.25F;
+    // Overall loudness trim; the quadratic curve below keeps low speeds near-silent.
+    private static final float WIND_GAIN = 0.9F;
     // Air speed (blocks/tick) that maps to full volume: normal-pipe cruise is 0.9 b/t,
     // so this keeps ordinary pipes clearly audible while highways still reach full.
     // (The elytra's squared |v|²/4 mapping left normal-pipe speeds near-silent.)
@@ -69,22 +71,12 @@ final class SlideWindSoundInstance extends AbstractTickableSoundInstance {
         // Absolute air speed (blocks/tick), linear so slow pipes whisper and highways
         // roar; station holds fall silent and dismounts decay naturally.
         float speedLevel = Mth.clamp((float) this.player.getDeltaMovement().length() / FULL_VOLUME_SPEED_BPT, 0.0F, 1.0F);
-        float target = speedLevel;
+        // Quadratic loudness: real wind noise is barely audible at walking-ish speeds
+        // and ramps up with speed, so the low end stays essentially silent.
+        float target = speedLevel * speedLevel * WIND_GAIN;
         target *= Math.min(1.0F, this.ticksAlive / (float) FADE_IN_TICKS);
         target *= 1.0F - (float) ClientCinematicCameraController.blendFactor();
         this.volume += (target - this.volume) * VOLUME_SMOOTHING;
         this.pitch = 1.0F + PITCH_SPEED_FACTOR * speedLevel;
-        if (this.ticksAlive % 20 == 1) {
-            dev.marblegate.superpipeslide.common.SuperPipeSlide.LOGGER.info(
-                    "SlideWindDebug alive={} gap={} speed={} delta={} frame={} cineBlend={} vol={} pitch={}",
-                    this.ticksAlive,
-                    this.gapTicks,
-                    String.format("%.2f", speedLevel),
-                    String.format("%.2f", this.player.getDeltaMovement().length()),
-                    framePresent,
-                    String.format("%.2f", ClientCinematicCameraController.blendFactor()),
-                    String.format("%.2f", this.volume),
-                    String.format("%.2f", this.pitch));
-        }
     }
 }

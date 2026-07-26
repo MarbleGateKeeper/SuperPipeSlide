@@ -245,7 +245,6 @@ public final class ClientSlideController {
         if (windSound == null || windSound.isStopped()) {
             windSound = new SlideWindSoundInstance(player);
             minecraft.getSoundManager().play(windSound);
-            dev.marblegate.superpipeslide.common.SuperPipeSlide.LOGGER.info("SlideWindDebug instance created and queued");
         }
     }
 

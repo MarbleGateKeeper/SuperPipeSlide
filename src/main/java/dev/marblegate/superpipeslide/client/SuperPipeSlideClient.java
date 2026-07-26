@@ -102,12 +102,10 @@ public class SuperPipeSlideClient {
         Identifier navigationHudLayer = Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "navigation_hud");
         Identifier slideNoticeLayer = Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "slide_notice");
         Identifier slideActionHintLayer = Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "slide_action_hint");
-        Identifier cinematicDipLayer = Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "cinematic_dip");
         event.registerAbove(VanillaGuiLayers.HOTBAR, routeHudLayer, ClientRouteHudController::render);
         event.registerAbove(routeHudLayer, navigationHudLayer, ClientNavigationHudController::render);
         event.registerAbove(navigationHudLayer, slideNoticeLayer, ClientSlideNoticeController::render);
         event.registerAbove(slideNoticeLayer, slideActionHintLayer, ClientSlideActionHintController::render);
-        event.registerAbove(slideActionHintLayer, cinematicDipLayer, ClientCinematicCameraController::renderDip);
     }
 
     private static void registerKeyMappings(RegisterKeyMappingsEvent event) {

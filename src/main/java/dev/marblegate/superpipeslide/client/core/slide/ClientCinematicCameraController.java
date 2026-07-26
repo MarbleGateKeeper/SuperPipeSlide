@@ -69,7 +69,18 @@ public final class ClientCinematicCameraController {
     private static final double STATION_HOLD_MAX_SPEED = 0.02D;
     private static final double BEND_ANCHOR_MAX_REMAINING = 25.0D;
     private static final double VERTICAL_TRACK_LEAD = 2.5D;
-    private static final int DIP_TO_BLACK_FRAMES = 3;
+    // How long the drift clearance must stay clean before the camera wander eases back in
+    // after being blocked by terrain (stops the drift from saw-toothing near slopes).
+    private static final double DRIFT_RECOVER_SECONDS = 0.5D;
+    // Corridor grammar (cluttered terrain): along-path vantages that keep line of sight
+    // to the rider's upcoming path, giving static shots a multi-second lifespan where
+    // any off-path vantage would lose the rider within a second or two.
+    private static final double[] CORRIDOR_ANGLES = { 0.0D, 12.0D, -12.0D, 25.0D, -25.0D, 168.0D, -168.0D };
+    private static final double[] CORRIDOR_DISTANCES = { 10.0D, 16.0D, 24.0D };
+    private static final double[] CORRIDOR_HEIGHTS = { 1.5D, 3.0D, 5.0D };
+    private static final int PATH_SAMPLE_COUNT = 6;
+    private static final double CLUTTER_ENTER_RATIO = 0.45D;
+    private static final double CLUTTER_EXIT_RATIO = 0.30D;
 
     private static double blend;
     private static double evalSeconds;
@@ -82,7 +93,6 @@ public final class ClientCinematicCameraController {
     private static double searchFailSeconds;
     private static double contextDwellSeconds;
     private static int losFailStreak;
-    private static int dipFrames;
     private static ShotContext context = ShotContext.CRUISE;
     private static ClientSceneProbe.SceneShape sceneShape = ClientSceneProbe.SceneShape.FIELD;
     private static ClientSceneProbe.SceneFeatures sceneFeatures;
@@ -90,6 +100,10 @@ public final class ClientCinematicCameraController {
     private static ResourceKey<Level> lastLevelKey;
     private static Vec3 lastSafePosition;
     private static double driftAmount;
+    private static double driftBlockedSeconds;
+    private static double traceSeconds;
+    private static double clutterEma;
+    private static boolean corridorMode;
     private static Shot shot;
 
     private ClientCinematicCameraController() {}
@@ -130,11 +144,14 @@ public final class ClientCinematicCameraController {
         searchFailSeconds = 0.0D;
         contextDwellSeconds = 0.0D;
         losFailStreak = 0;
-        dipFrames = 0;
         lastRiderPos = null;
         lastLevelKey = null;
         lastSafePosition = null;
         driftAmount = 0.0D;
+        driftBlockedSeconds = 0.0D;
+        traceSeconds = 0.0D;
+        clutterEma = 0.0D;
+        corridorMode = false;
     }
 
     public static boolean isActive() {
@@ -148,29 +165,6 @@ public final class ClientCinematicCameraController {
      */
     public static boolean hidesFirstPersonHud() {
         return blendFactor() > 0.5D;
-    }
-
-    public static int dipFrames() {
-        return dipFrames;
-    }
-
-    public static void consumeDipFrame() {
-        if (dipFrames > 0) {
-            dipFrames--;
-        }
-    }
-
-    /**
-     * Renders the short dip-to-black transition cover for hard cuts, hiding TAA ghosting
-     * of the camera teleport behind a 2-3 frame black envelope. Skipped with hideGui.
-     */
-    public static void renderDip(net.minecraft.client.gui.GuiGraphicsExtractor graphics, net.minecraft.client.DeltaTracker deltaTracker) {
-        if (dipFrames <= 0 || Minecraft.getInstance().options.hideGui) {
-            return;
-        }
-        int alpha = (int) (dipFrames / (float) DIP_TO_BLACK_FRAMES * 0.9F * 255.0F) << 24;
-        graphics.fill(0, 0, graphics.guiWidth(), graphics.guiHeight(), alpha);
-        consumeDipFrame();
     }
 
     /**
@@ -283,8 +277,23 @@ public final class ClientCinematicCameraController {
             lastSafePosition = null;
             return;
         }
+        traceSeconds += deltaSeconds;
+        if (traceSeconds >= 1.0D) {
+            traceSeconds = 0.0D;
+            SuperPipeSlide.LOGGER.info(
+                    "CinematicTrace blend={} ctx={}/{} pos={} aim={} drift={} vBlend={} pBlend={} speed={} corr={}",
+                    fmt(blend), context, shot.context(), fmtVec(shot.position()), fmtVec(shot.aim()), fmt(driftAmount), fmt(snapshot.verticalBlend()), fmt(snapshot.platformBlend()), fmt(snapshot.speed()), corridorMode);
+        }
         access.superpipeslide$setDetached(true);
         writeCamera(minecraft, player, camera, access, partialTick, intensity);
+    }
+
+    private static String fmt(double value) {
+        return String.format(java.util.Locale.ROOT, "%.2f", value);
+    }
+
+    private static String fmtVec(Vec3 v) {
+        return String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", v.x, v.y, v.z);
     }
 
     private static void tickPushIn(Level level, double deltaSeconds) {
@@ -313,7 +322,7 @@ public final class ClientCinematicCameraController {
     }
 
     private static void evaluate(Level level, LocalPlayer player, ClientSlideFeedbackController.Frame snapshot, double deltaSeconds) {
-        context = arbitrateContext(snapshot, deltaSeconds);
+        context = arbitrateContext(snapshot);
         sceneFeatures = ClientSceneProbe.sample(level, player, snapshot);
         ClientSceneProbe.SceneAssessment scene = ClientSceneProbe.assess(sceneFeatures);
         sceneShape = scene.shape();
@@ -378,7 +387,7 @@ public final class ClientCinematicCameraController {
         }
     }
 
-    private static ShotContext arbitrateContext(ClientSlideFeedbackController.Frame snapshot, double deltaSeconds) {
+    private static ShotContext arbitrateContext(ClientSlideFeedbackController.Frame snapshot) {
         if (snapshot.platformBlend() > STATION_ENTER_BLEND) {
             contextDwellSeconds = 0.0D;
             return ShotContext.STATION;
@@ -386,14 +395,19 @@ public final class ClientCinematicCameraController {
         ShotContext desired = snapshot.verticalBlend() > (context == ShotContext.VERTICAL ? VERTICAL_EXIT_BLEND : VERTICAL_ENTER_BLEND)
                 ? ShotContext.VERTICAL
                 : ShotContext.CRUISE;
+        // Dwell accounting must use the eval cadence, not the render-frame delta that
+        // evaluate() happens to receive: accumulating frame deltas once per eval made
+        // the 2-second dwell effectively last minutes at high frame rates, so the
+        // context never left STATION after a platform stop (and with it every
+        // non-station cut reason stayed exempt for the whole ride).
         if (desired == context) {
-            contextDwellSeconds += deltaSeconds;
+            contextDwellSeconds += EVAL_INTERVAL_SECONDS;
             return context;
         }
         // Hold the current context through short flirtations across the threshold so
         // sloped curves do not thrash between cruise and vertical grammars.
         if (contextDwellSeconds < CONTEXT_MIN_DWELL_SECONDS) {
-            contextDwellSeconds += deltaSeconds;
+            contextDwellSeconds += EVAL_INTERVAL_SECONDS;
             return context;
         }
         contextDwellSeconds = 0.0D;
@@ -497,7 +511,6 @@ public final class ClientCinematicCameraController {
         cooldownSeconds = 0.0D;
         searchFailSeconds = 0.0D;
         losFailStreak = 0;
-        dipFrames = DIP_TO_BLACK_FRAMES;
     }
 
     private enum ShotClass {
@@ -581,9 +594,15 @@ public final class ClientCinematicCameraController {
         Vec3 aim = aimFor(stage, travel, shotClass.preferredDistance());
         List<ShotCandidate> candidates = new ArrayList<>();
         debugSearchCounters.begin();
-        double[] angles = candidateAngles(shotClass);
-        double[] distances = candidateDistances(shotClass);
-        double[] heights = candidateHeights(shotClass);
+        // Corridor grammar: in cluttered terrain the only reliably clear sight-lines run
+        // along the rider's own upcoming path, so candidates switch to along-path
+        // vantages and must hold LOS to every path sample in the budget.
+        boolean corridor = corridorMode;
+        List<Vec3> pathSamples = corridor ? futurePathSamples(snapshot, PATH_SAMPLE_COUNT) : List.of();
+        int corridorSamples = corridor ? corridorSampleBudget(level, rider, travel, pathSamples, player) : 0;
+        double[] angles = corridor ? CORRIDOR_ANGLES : candidateAngles(shotClass);
+        double[] distances = corridor ? CORRIDOR_DISTANCES : candidateDistances(shotClass);
+        double[] heights = corridor ? CORRIDOR_HEIGHTS : candidateHeights(shotClass);
         for (double angleDegrees : angles) {
             Vec3 direction = directionFor(context, travel, angleDegrees);
             for (double distance : distances) {
@@ -611,6 +630,9 @@ public final class ClientCinematicCameraController {
                         debugSearchCounters.los++;
                         continue;
                     }
+                    if (corridorSamples > 0 && !hasCorridorClearance(level, position, pathSamples, corridorSamples, player)) {
+                        continue;
+                    }
                     if (!hasViewDepth(level, position, aim, shotClass, player)) {
                         debugSearchCounters.viewDepth++;
                         continue;
@@ -626,7 +648,14 @@ public final class ClientCinematicCameraController {
                 }
             }
         }
-        injectEdgeCandidates(level, player, rider, travel, stage, aim, shotClass, candidates);
+        if (!corridor) {
+            injectEdgeCandidates(level, player, rider, travel, stage, aim, shotClass, candidates);
+        }
+        // Durability: vantages that will lose the rider half a second from now churn a
+        // cut every couple of seconds in occluded terrain (the downhill cut machine-gun),
+        // so they are heavily penalized and only win when nothing durable exists. The
+        // corridor grammar already enforces this by construction, so skip it there.
+        Vec3 futureRider = corridor ? null : rider.add(travel.scale(Math.max(0.0D, snapshot.speed()) * LOS_FUTURE_PROBE_TICKS)).add(0.0D, 0.9D, 0.0D);
         for (int i = 0; i < candidates.size(); i++) {
             ShotCandidate candidate = candidates.get(i);
             // Scenery-first scoring: how good the shot LOOKS, not how open the spot is.
@@ -638,7 +667,8 @@ public final class ClientCinematicCameraController {
             double proportionScore = 1.0D - Math.abs(RIDER_SCREEN_HEIGHT / candidate.distance() - RIDER_SCREEN_HEIGHT / shotClass.preferredDistance()) * shotClass.preferredDistance() / RIDER_SCREEN_HEIGHT;
             double sideScore = previous == null || candidate.side() == previous.side() ? 0.2D : -0.2D;
             double classBonus = previous != null && candidate.shotClass() != previous.shotClass() ? 0.3D : 0.0D;
-            candidates.set(i, candidate.withScore(layerScore * 1.2D + lineScore * 0.8D + thirdsScore * 0.6D + skyScore * 0.5D + distanceScore + proportionScore + sideScore + classBonus));
+            double durabilityScore = futureRider == null ? 0.0D : hasLineOfSight(level, candidate.position(), futureRider, player) ? 0.6D : -1.2D;
+            candidates.set(i, candidate.withScore(layerScore * 1.2D + lineScore * 0.8D + thirdsScore * 0.6D + skyScore * 0.5D + distanceScore + proportionScore + sideScore + classBonus + durabilityScore));
         }
         candidates.sort((a, b) -> Double.compare(b.score(), a.score()));
         ShotCandidate best = null;
@@ -663,8 +693,104 @@ public final class ClientCinematicCameraController {
                 best = candidates.get(SHOT_RANDOM.nextInt(pickRange));
             }
         }
+        // Clutter arbitration: the share of candidates dying on the LOS filter feeds an
+        // EMA that switches the next search between the open-terrain ring and the
+        // corridor grammar (hysteresis keeps borderline woods from thrashing).
+        int losTotal = debugSearchCounters.los + debugSearchCounters.passed;
+        if (losTotal > 4) {
+            clutterEma += ((double) debugSearchCounters.los / losTotal - clutterEma) * 0.3D;
+        }
+        corridorMode = clutterEma >= CLUTTER_ENTER_RATIO || (corridorMode && clutterEma >= CLUTTER_EXIT_RATIO);
         debugSearchCounters.finish(context, shotClass, sceneFeatures != null ? sceneFeatures.openness() : 0.0D, best == null ? -1.0D : best.score());
         return best != null && best.score() > MIN_SCORE ? best : null;
+    }
+
+    /**
+     * Positions the rider will occupy over the next few seconds, walked along the
+     * previewed connections (tangent extrapolation past the known path). Corridor
+     * vantages must hold line of sight to all of them, which is what keeps a static
+     * shot motivated for the whole approach-and-pass in cluttered terrain.
+     */
+    private static List<Vec3> futurePathSamples(ClientSlideFeedbackController.Frame snapshot, int count) {
+        List<Vec3> samples = new ArrayList<>(count);
+        double speedBps = Math.max(2.0D, Math.abs(snapshot.speed()) * 20.0D);
+        List<ClientSlideController.SlidePreviewConnection> previews = ClientSlideController.slidePreviewConnections(4);
+        if (previews.isEmpty()) {
+            Vec3 travel = safeNormalize(snapshot.tangent());
+            for (int i = 1; i <= count; i++) {
+                samples.add(snapshot.position().add(travel.scale(speedBps * 0.5D * i)));
+            }
+            return samples;
+        }
+        int index = 0;
+        ClientSlideController.SlidePreviewConnection current = previews.get(0);
+        int direction = current.direction();
+        double distance = current.startDistance();
+        for (int i = 1; i <= count; i++) {
+            double step = speedBps * 0.5D;
+            while (step > 1.0E-6D) {
+                double length = current.connection().length();
+                double available = direction >= 0 ? length - distance : distance;
+                if (step < available) {
+                    distance += direction >= 0 ? step : -step;
+                    step = 0.0D;
+                } else {
+                    step -= available;
+                    if (index + 1 < previews.size()) {
+                        current = previews.get(++index);
+                        direction = current.direction();
+                        distance = current.startDistance();
+                    } else {
+                        // Ran out of known path: extrapolate the remaining samples
+                        // along the exit tangent of the last previewed connection.
+                        Vec3 exitTangent = current.connection().tangentAt(direction >= 0 ? length : 0.0D).scale(direction).normalize();
+                        Vec3 exitPoint = current.connection().positionAt(direction >= 0 ? length : 0.0D);
+                        for (int j = i; j <= count; j++) {
+                            samples.add(exitPoint.add(exitTangent.scale(step + speedBps * 0.5D * (j - i))));
+                        }
+                        return samples;
+                    }
+                }
+            }
+            samples.add(current.connection().positionAt(Mth.clamp(distance, 0.0D, current.connection().length())));
+        }
+        return samples;
+    }
+
+    /**
+     * How many leading path samples a corridor candidate must see, degraded gracefully:
+     * if no rough along-path probe can satisfy the full corridor, the budget shrinks
+     * until something passes (zero falls back to ordinary LOS checks only).
+     */
+    private static int corridorSampleBudget(Level level, Vec3 rider, Vec3 travel, List<Vec3> pathSamples, LocalPlayer player) {
+        for (int budget = pathSamples.size(); budget > 0; budget -= 2) {
+            if (axisProbePasses(level, rider, travel, pathSamples, budget, player)) {
+                return budget;
+            }
+        }
+        return 0;
+    }
+
+    private static boolean axisProbePasses(Level level, Vec3 rider, Vec3 travel, List<Vec3> pathSamples, int budget, LocalPlayer player) {
+        for (double angle : new double[] { 0.0D, 15.0D, -15.0D }) {
+            Vec3 direction = directionFor(context, travel, angle);
+            for (double distance : CORRIDOR_DISTANCES) {
+                Vec3 position = rider.add(direction.scale(distance)).add(0.0D, 2.0D, 0.0D);
+                if (hasClearance(level, position) && hasCorridorClearance(level, position, pathSamples, budget, player)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasCorridorClearance(Level level, Vec3 position, List<Vec3> pathSamples, int budget, LocalPlayer player) {
+        for (int i = 0; i < Math.min(budget, pathSamples.size()); i++) {
+            if (!hasLineOfSight(level, position, pathSamples.get(i).add(0.0D, 0.9D, 0.0D), player)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static double[] candidateAngles(ShotClass shotClass) {
@@ -853,7 +979,19 @@ public final class ClientCinematicCameraController {
                 Math.sin(time * 0.55D + shot.driftPhase()) * driftScale,
                 Math.sin(time * 0.42D + shot.driftPhase() * 1.7D) * driftScale * 0.45D,
                 Math.sin(time * 0.61D + shot.driftPhase() * 2.3D) * driftScale);
-        driftAmount = approachExp(driftAmount, hasClearance(minecraft.level, position.add(drift)) ? 1.0D : 0.0D, 6.0D, deltaSeconds(minecraft));
+        // Hysteresis on the drift clearance: near terrain the drift tip flaps in and out
+        // of blocks, and chasing that boolean made the parked camera saw in and out of
+        // its wander (visible tremble on downhill sections). Blocked stops the drift at
+        // once; it only eases back after the tip has stayed clear for a moment.
+        double dt = deltaSeconds(minecraft);
+        boolean driftClear = hasClearance(minecraft.level, position.add(drift));
+        if (!driftClear) {
+            driftBlockedSeconds = DRIFT_RECOVER_SECONDS;
+        } else if (driftBlockedSeconds > 0.0D) {
+            driftBlockedSeconds -= dt;
+        }
+        double driftTarget = driftClear && driftBlockedSeconds <= 0.0D ? 1.0D : 0.0D;
+        driftAmount = approachExp(driftAmount, driftTarget, driftTarget < driftAmount ? 6.0D : 1.5D, dt);
         position = position.add(drift.scale(driftAmount));
         Vec3 look = shot.aim().subtract(position);
         double targetYaw = Math.toDegrees(Math.atan2(-look.x, look.z));
