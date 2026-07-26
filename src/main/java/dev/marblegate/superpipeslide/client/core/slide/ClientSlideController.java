@@ -96,6 +96,9 @@ public final class ClientSlideController {
     private static final int PIPE_JUMP_MIN_DURATION_TICKS = 4;
     private static final int PIPE_JUMP_MAX_DURATION_TICKS = 8;
     private static final int DETACH_CONFIRM_ARM_TICKS = 60;
+    // Grace window after a slide session during which step sounds stay suppressed, covering
+    // the brief vanilla-physics ticks of collision-driven detach/recapture flapping.
+    private static final int RECENT_SLIDE_WINDOW_TICKS = 8;
 
     @Nullable
     private static ClientSlideState active;
@@ -141,6 +144,9 @@ public final class ClientSlideController {
     private static SlideJumpAction currentJumpAction;
     @Nullable
     private static SlideJumpTargetResolver.Target pendingJumpTarget;
+    @Nullable
+    private static SlideWindSoundInstance windSound;
+    private static long lastSlideActiveGameTime = Long.MIN_VALUE;
 
     private ClientSlideController() {}
 
@@ -152,6 +158,11 @@ public final class ClientSlideController {
         if (minecraft.isPaused()) {
             freezeDuringPausedGame(player);
             return;
+        }
+
+        if (active != null) {
+            lastSlideActiveGameTime = player.level().getGameTime();
+            ensureWindSound(minecraft, player);
         }
 
         boolean jumpKeyDown = wantsJumpExit(player);
@@ -192,6 +203,26 @@ public final class ClientSlideController {
 
     public static boolean isSliding() {
         return active != null;
+    }
+
+    /**
+     * True while sliding or within a short grace window after the session was last active.
+     * Used to suppress vanilla step sounds during collision-driven detach/recapture flaps,
+     * where vanilla physics briefly regains control and would otherwise play footsteps.
+     */
+    public static boolean wasSlidingRecently(Level level) {
+        if (isSliding()) {
+            return true;
+        }
+        long age = level.getGameTime() - lastSlideActiveGameTime;
+        return age >= 0 && age <= RECENT_SLIDE_WINDOW_TICKS;
+    }
+
+    private static void ensureWindSound(Minecraft minecraft, LocalPlayer player) {
+        if (windSound == null || windSound.isStopped()) {
+            windSound = new SlideWindSoundInstance(player);
+            minecraft.getSoundManager().play(windSound);
+        }
     }
 
     public static void clearRouteHudNavigationStopRetention() {
@@ -389,6 +420,8 @@ public final class ClientSlideController {
         activePipeJumpTransfer = null;
         cooldown = null;
         jumpKeyWasDown = false;
+        windSound = null;
+        lastSlideActiveGameTime = Long.MIN_VALUE;
         ClientSlidePoseController.cancelLocalPose();
         clearRuntimeState();
         ClientGazeChoiceController.clear();

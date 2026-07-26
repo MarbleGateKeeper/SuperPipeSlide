@@ -2,10 +2,13 @@
   "required": true,
   "package": "dev.marblegate.superpipeslide.mixin",
   "compatibilityLevel": "JAVA_25",
-  "mixins": [],
+  "mixins": [
+    "EntityMixin"
+  ],
   "client": [
     "client.CameraAccessor",
     "client.CameraMixin",
+    "client.EntityMixin",
     "client.LevelRendererMixin",
     "client.PlayerModelMixin",
     "client.RenderSetupAccessor",
