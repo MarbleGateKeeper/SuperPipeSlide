@@ -144,9 +144,14 @@ public final class ClientSlideController {
     private static SlideJumpAction currentJumpAction;
     @Nullable
     private static SlideJumpTargetResolver.Target pendingJumpTarget;
+    // How long after a collision-style detach the camera should keep holding its shot for
+    // a likely recapture: the standard capture cooldown (12 ticks) plus a capture margin.
+    private static final int MAX_RECAPTURE_HOLD_TICKS = 14;
+
     @Nullable
     private static SlideWindSoundInstance windSound;
     private static long lastSlideActiveGameTime = Long.MIN_VALUE;
+    private static long recaptureHoldUntilGameTime = Long.MIN_VALUE;
 
     private ClientSlideController() {}
 
@@ -218,10 +223,29 @@ public final class ClientSlideController {
         return age >= 0 && age <= RECENT_SLIDE_WINDOW_TICKS;
     }
 
+    /**
+     * True while a non-exit capture cooldown is open: the rider was detached in a way
+     * that commonly recaptures onto the pipe within a second (collision, reconcile,
+     * direction loss), so camera dependents should hold their state rather than react.
+     * Intentional exits (sneak/jump, {@code requireExit=true}) never open this window.
+     */
+    public static boolean hasOpenRecaptureWindow(Level level) {
+        return active == null && level.getGameTime() < recaptureHoldUntilGameTime;
+    }
+
+    /**
+     * True while the rider is on a pipe or mid-transfer between pipes (pipe jumps and
+     * fold teleports keep the session conceptually alive while {@code active} is null).
+     */
+    public static boolean isSlidingOrTransferring() {
+        return active != null || activePipeJumpTransfer != null || waitingTeleportSessionId != null;
+    }
+
     private static void ensureWindSound(Minecraft minecraft, LocalPlayer player) {
         if (windSound == null || windSound.isStopped()) {
             windSound = new SlideWindSoundInstance(player);
             minecraft.getSoundManager().play(windSound);
+            dev.marblegate.superpipeslide.common.SuperPipeSlide.LOGGER.info("SlideWindDebug instance created and queued");
         }
     }
 
@@ -422,6 +446,7 @@ public final class ClientSlideController {
         jumpKeyWasDown = false;
         windSound = null;
         lastSlideActiveGameTime = Long.MIN_VALUE;
+        recaptureHoldUntilGameTime = Long.MIN_VALUE;
         ClientSlidePoseController.cancelLocalPose();
         clearRuntimeState();
         ClientGazeChoiceController.clear();
@@ -1664,6 +1689,11 @@ public final class ClientSlideController {
         ClientFoldTraversalEffectController.clear();
         player.noPhysics = state.previousNoPhysics();
         cooldown = new CaptureCooldown(state.connectionId(), cooldownTicks, requireExit);
+        if (!requireExit) {
+            // Collision-style detach: recapture is likely once the cooldown expires, so
+            // give camera dependents a bounded hold window. Intentional exits skip this.
+            recaptureHoldUntilGameTime = player.level().getGameTime() + Math.min(cooldownTicks + 2, MAX_RECAPTURE_HOLD_TICKS);
+        }
     }
 
     private static void detachByJump(LocalPlayer player, ClientSlideState state, PipeConnection connection) {

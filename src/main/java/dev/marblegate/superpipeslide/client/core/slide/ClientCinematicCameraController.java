@@ -39,15 +39,16 @@ public final class ClientCinematicCameraController {
     private static final double EVAL_INTERVAL_SECONDS = 0.5D;
     private static final double LOS_INTERVAL_SECONDS = 0.25D;
     private static final double ENTER_HYSTERESIS_SECONDS = 1.0D;
-    private static final double CLASS_HYSTERESIS_SECONDS = 1.0D;
+    private static final double CLASS_HYSTERESIS_SECONDS = 2.0D;
+    private static final int LOS_FAIL_CUT_STREAK = 3;
     private static final double CUT_COOLDOWN_SECONDS = 3.0D;
     private static final double MIN_SHOT_DWELL_SECONDS = 2.0D;
     private static final double SEARCH_FAIL_GRACE_SECONDS = 5.0D;
-    // How long a slide-frame gap (collision detach/recapture flapping) is absorbed by
-    // freezing the blend before it is treated as a real dismount.
-    private static final double SLIDE_GAP_GRACE_SECONDS = 1.0D;
     private static final double BLEND_RATE_PER_SECOND = 3.0D;
-    private static final double BLEND_OUT_RATE_PER_SECOND = 1.5D;
+    private static final double BLEND_OUT_RATE_PER_SECOND = 4.0D;
+    // How far ahead (in ticks) the LOS probe looks to tell a passing pillar (LOS recovers
+    // on its own) apart from persistent cover (LOS stays broken, cut immediately).
+    private static final double LOS_FUTURE_PROBE_TICKS = 10.0D;
     // Framing
     private static final double OFF_AXIS_CUT_DEGREES = 55.0D;
     private static final double CROSSED_STAGE_DISTANCE = 8.0D;
@@ -79,8 +80,8 @@ public final class ClientCinematicCameraController {
     private static double noneStreakSeconds;
     private static double cooldownSeconds;
     private static double searchFailSeconds;
-    private static double slideGapSeconds;
     private static double contextDwellSeconds;
+    private static int losFailStreak;
     private static int dipFrames;
     private static ShotContext context = ShotContext.CRUISE;
     private static ClientSceneProbe.SceneShape sceneShape = ClientSceneProbe.SceneShape.FIELD;
@@ -128,8 +129,8 @@ public final class ClientCinematicCameraController {
         cooldownSeconds = 0.0D;
         searchFailSeconds = 0.0D;
         contextDwellSeconds = 0.0D;
+        losFailStreak = 0;
         dipFrames = 0;
-        slideGapSeconds = 0.0D;
         lastRiderPos = null;
         lastLevelKey = null;
         lastSafePosition = null;
@@ -138,6 +139,15 @@ public final class ClientCinematicCameraController {
 
     public static boolean isActive() {
         return blend > 0.02D;
+    }
+
+    /**
+     * True once the cinematic shot has mostly taken over. HUD elements that only make
+     * sense for the first-person view (crosshair, block outline, slide action hints)
+     * hide past this point.
+     */
+    public static boolean hidesFirstPersonHud() {
+        return blendFactor() > 0.5D;
     }
 
     public static int dipFrames() {
@@ -183,23 +193,26 @@ public final class ClientCinematicCameraController {
         Optional<ClientSlideFeedbackController.Frame> frame = ClientSlideFeedbackController.currentRenderFrame();
         double intensity = ClientConfig.CINEMATIC_CAMERA_INTENSITY.get();
         boolean enabled = ClientSafetyOptions.cinematicCameraEnabled() && !ClientGazeChoiceController.hasActiveChoice() && intensity > 1.0E-6D;
-        // Collision churn grace: while the slide session flaps between detach and
-        // recapture (block collisions), the blend is held steady for a short window so
-        // the camera never oscillates with the session's alpha. Only a sustained gap
-        // (real dismount) starts the blend-out.
-        slideGapSeconds = frame.isEmpty() ? slideGapSeconds + deltaSeconds : 0.0D;
         double targetBlend;
         if (!enabled) {
             targetBlend = 0.0D;
-        } else if (frame.isPresent()) {
-            targetBlend = frame.get().alpha();
-        } else if (shot != null && slideGapSeconds < SLIDE_GAP_GRACE_SECONDS) {
+        } else if (ClientSlideController.isSlidingOrTransferring()) {
+            // Fully engaged while the slide session is alive. Mirroring the feedback
+            // frame's alpha used to park the blend in the mid range on collision-heavy
+            // sections, where the eye-position share of the camera leaked every jolt.
+            targetBlend = 1.0D;
+        } else if (shot != null && ClientSlideController.hasOpenRecaptureWindow(player.level())) {
+            // Collision-style detach with a live recapture window: hold the blend
+            // untouched so a quick recapture never dips the camera (the downhill-curve
+            // detach/recapture cycle used to pump the blend about once a second).
             targetBlend = blend;
         } else {
+            // Intentional exits (sneak/jump) open no recapture window: the return
+            // starts immediately, with no dead time before the camera heads back.
             targetBlend = 0.0D;
         }
         blend = approachExp(blend, targetBlend, targetBlend > blend ? BLEND_RATE_PER_SECOND : BLEND_OUT_RATE_PER_SECOND, deltaSeconds);
-        if (blend <= 0.02D) {
+        if (blend <= 0.06D) {
             blend = targetBlend <= 0.0D ? 0.0D : blend;
             shot = null;
             lastSafePosition = null;
@@ -245,7 +258,19 @@ public final class ClientCinematicCameraController {
             if (losSeconds >= LOS_INTERVAL_SECONDS) {
                 losSeconds = 0.0D;
                 if (shot != null && !hasLineOfSight(minecraft.level, shot.position(), rider.add(0.0D, 0.9D, 0.0D), player)) {
-                    cutTo(minecraft.level, player, snapshot, CutReason.LOS_BROKEN);
+                    // Tell a passing pillar (the rider pops back into view on their own,
+                    // so wait out the streak) apart from riding behind persistent cover:
+                    // probe where the rider is heading, and if LOS stays broken there,
+                    // cut immediately instead of leaving the screen blocked.
+                    Vec3 ahead = rider.add(safeNormalize(snapshot.tangent()).scale(Math.max(0.0D, snapshot.speed()) * LOS_FUTURE_PROBE_TICKS)).add(0.0D, 0.9D, 0.0D);
+                    boolean futureBroken = !hasLineOfSight(minecraft.level, shot.position(), ahead, player);
+                    losFailStreak++;
+                    if (futureBroken || losFailStreak >= LOS_FAIL_CUT_STREAK) {
+                        losFailStreak = 0;
+                        cutTo(minecraft.level, player, snapshot, CutReason.LOS_BROKEN);
+                    }
+                } else {
+                    losFailStreak = 0;
                 }
             }
             if (evalSeconds >= EVAL_INTERVAL_SECONDS) {
@@ -301,7 +326,10 @@ public final class ClientCinematicCameraController {
         }
 
         if (shot != null) {
-            boolean classChanged = probed != ShotClass.NONE && probed != shot.shotClass() && classStreakSeconds >= CLASS_HYSTERESIS_SECONDS;
+            // Station scenes sit right on the openness thresholds, so the probed class
+            // flaps between VISTA/MEDIUM/INTERIOR; reframing on every flip reads as
+            // tremble. Keep the shot's class until the rider is back in motion grammar.
+            boolean classChanged = context != ShotContext.STATION && probed != ShotClass.NONE && probed != shot.shotClass() && classStreakSeconds >= CLASS_HYSTERESIS_SECONDS;
             if (classChanged) {
                 cutTo(level, player, snapshot, CutReason.CLASS_CHANGE);
                 return;
@@ -313,9 +341,17 @@ public final class ClientCinematicCameraController {
             // Refresh vertical long-run stage silently, but only re-anchor when the
             // stage has actually drifted away from the rider; constant re-anchoring on
             // sloped curves used to make the camera chase the rider's heading.
-            if (context == ShotContext.VERTICAL && shot.context() == ShotContext.VERTICAL
-                    && shot.stage().distanceTo(snapshot.position()) > VERTICAL_REANCHOR_DISTANCE) {
-                shot = shot.withStage(verticalStage(snapshot), safeNormalize(snapshot.tangent()), shotAimFor(shot.position(), verticalStage(snapshot)));
+            if (context == ShotContext.VERTICAL && shot.context() == ShotContext.VERTICAL && shot.stage() != null) {
+                // Glide the aim toward its ideal instead of snapping: at vertical speeds
+                // the 6-block stage re-anchor fires several times a second, and every
+                // aim snap read as a jolt despite no shot cut happening.
+                Vec3 idealAim = shotAimFor(shot.position(), shot.stage());
+                if (shot.aim().distanceToSqr(idealAim) > 1.0E-4D) {
+                    shot = shot.withStage(shot.stage(), shot.travel(), shot.aim().lerp(idealAim, 0.4D));
+                }
+                if (shot.stage().distanceTo(snapshot.position()) > VERTICAL_REANCHOR_DISTANCE) {
+                    shot = shot.withStage(verticalStage(snapshot), safeNormalize(snapshot.tangent()), shot.aim());
+                }
             }
             return;
         }
@@ -431,10 +467,18 @@ public final class ClientCinematicCameraController {
             searchFailSeconds = 0.0D;
             return;
         }
-        // No acceptable replacement from the candidate ring: the rider is always owed a
-        // camera, so fall back to a guaranteed close over-shoulder shot instead of
-        // dropping to first person or freezing on a dead shot.
-        applyShot(fallbackShot(snapshot.position(), safeNormalize(snapshot.tangent()), context, pendingClass == null ? ShotClass.INTERIOR : pendingClass, player), snapshot);
+        if (reason == CutReason.LOS_BROKEN || reason == CutReason.TOO_FAR) {
+            // The rider must stay visible: a persistently occluded or out-of-range shot
+            // has to move, so take the guaranteed close over-shoulder fallback. But a
+            // shot that is already close gains nothing from a fresh fallback — it would
+            // just strobe the dip-to-black in fully occluded spots — so freeze it.
+            if (shot.position().distanceTo(snapshot.position()) > ShotClass.INTERIOR.maxCut()) {
+                applyShot(fallbackShot(snapshot.position(), safeNormalize(snapshot.tangent()), context, pendingClass == null ? ShotClass.INTERIOR : pendingClass, player), snapshot);
+            }
+        }
+        // Otherwise freeze the current shot: a failed re-search is not a reason to
+        // abandon a framing that still works (the documented contract), and snapping to
+        // the close fallback on every flaky search caused violent vista/close oscillation.
     }
 
     private static void applyShot(ShotCandidate candidate, ClientSlideFeedbackController.Frame snapshot) {
@@ -452,6 +496,7 @@ public final class ClientCinematicCameraController {
                 SHOT_RANDOM.nextDouble() * 100.0D);
         cooldownSeconds = 0.0D;
         searchFailSeconds = 0.0D;
+        losFailStreak = 0;
         dipFrames = DIP_TO_BLACK_FRAMES;
     }
 
@@ -601,7 +646,22 @@ public final class ClientCinematicCameraController {
             // Pick from the top few instead of always the single best, so the same
             // stretch of pipe does not produce the identical angle on every pass.
             int pickRange = Math.min(TOP_PICK_RANGE, candidates.size());
-            best = candidates.get(SHOT_RANDOM.nextInt(pickRange));
+            if (previous != null) {
+                // Continuity: a forced re-search should land on essentially the same
+                // framing, so prefer the top pick nearest the current camera instead of
+                // jumping to a fresh random angle on every cut.
+                double nearest = Double.MAX_VALUE;
+                for (int i = 0; i < pickRange; i++) {
+                    ShotCandidate candidate = candidates.get(i);
+                    double distance = candidate.position().distanceToSqr(previous.position());
+                    if (distance < nearest) {
+                        nearest = distance;
+                        best = candidate;
+                    }
+                }
+            } else {
+                best = candidates.get(SHOT_RANDOM.nextInt(pickRange));
+            }
         }
         debugSearchCounters.finish(context, shotClass, sceneFeatures != null ? sceneFeatures.openness() : 0.0D, best == null ? -1.0D : best.score());
         return best != null && best.score() > MIN_SCORE ? best : null;

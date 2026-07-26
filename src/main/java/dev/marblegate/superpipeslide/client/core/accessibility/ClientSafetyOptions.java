@@ -34,7 +34,10 @@ public final class ClientSafetyOptions {
     }
 
     public static boolean cinematicCameraEnabled() {
-        return ClientConfig.ENABLE_CINEMATIC_CAMERA.get() && !reduceMotionSicknessRisk();
+        // Deliberately NOT gated by reduceMotionSicknessRisk: the detached cinematic
+        // camera is the calmest way to ride (no first-person shake, roll, or FOV pumps),
+        // so it stays available to players who need the safety options most.
+        return ClientConfig.ENABLE_CINEMATIC_CAMERA.get();
     }
 
     public static void setCinematicCameraEnabled(boolean value) {

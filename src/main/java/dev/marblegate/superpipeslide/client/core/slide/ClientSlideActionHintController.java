@@ -22,7 +22,8 @@ public final class ClientSlideActionHintController {
 
     public static void render(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null || minecraft.level == null || minecraft.screen != null || minecraft.options.hideGui) {
+        if (minecraft.player == null || minecraft.level == null || minecraft.screen != null || minecraft.options.hideGui
+                || ClientCinematicCameraController.hidesFirstPersonHud()) {
             return;
         }
         ClientSlideController.slideJumpHint().ifPresent(hint -> {

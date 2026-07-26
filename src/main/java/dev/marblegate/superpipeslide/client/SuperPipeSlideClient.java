@@ -56,12 +56,14 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.AddClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.ExtractBlockOutlineRenderStateEvent;
 import net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RegisterRenderPipelinesEvent;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
+import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
 import net.neoforged.neoforge.client.event.RenderHandEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.RenderPlayerEvent;
@@ -180,6 +182,20 @@ public class SuperPipeSlideClient {
             ClientSlideNoticeController.tick();
             ClientPipeEditorSession.tick(minecraft, player);
             ProjectionNetworkImageCache.tick();
+        }
+
+        @SubscribeEvent
+        public static void onRenderCrosshairLayer(RenderGuiLayerEvent.Pre event) {
+            if (event.getName().equals(VanillaGuiLayers.CROSSHAIR) && ClientCinematicCameraController.hidesFirstPersonHud()) {
+                event.setCanceled(true);
+            }
+        }
+
+        @SubscribeEvent
+        public static void onExtractBlockOutline(ExtractBlockOutlineRenderStateEvent event) {
+            if (ClientCinematicCameraController.hidesFirstPersonHud()) {
+                event.setCanceled(true);
+            }
         }
 
         @SubscribeEvent
