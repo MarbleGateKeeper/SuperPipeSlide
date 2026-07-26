@@ -9,6 +9,7 @@
     "client.CameraAccessor",
     "client.CameraMixin",
     "client.EntityMixin",
+    "client.GameRendererMixin",
     "client.LevelRendererMixin",
     "client.PlayerModelMixin",
     "client.RenderSetupAccessor",

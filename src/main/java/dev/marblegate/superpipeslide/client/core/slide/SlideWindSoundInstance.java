@@ -17,7 +17,7 @@ import net.minecraft.util.Mth;
  */
 final class SlideWindSoundInstance extends AbstractTickableSoundInstance {
     private static final int FADE_IN_TICKS = 10;
-    private static final int GAP_STOP_TICKS = 8;
+    private static final int GAP_STOP_TICKS = 16;
     private static final float VOLUME_SMOOTHING = 0.3F;
     private static final float PITCH_SPEED_FACTOR = 0.25F;
     // Overall loudness trim; the quadratic curve below keeps low speeds near-silent.

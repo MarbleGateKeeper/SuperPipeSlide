@@ -144,14 +144,20 @@ public final class ClientSlideController {
     private static SlideJumpAction currentJumpAction;
     @Nullable
     private static SlideJumpTargetResolver.Target pendingJumpTarget;
-    // How long after a collision-style detach the camera should keep holding its shot for
-    // a likely recapture: the standard capture cooldown (12 ticks) plus a capture margin.
-    private static final int MAX_RECAPTURE_HOLD_TICKS = 14;
+    // Recapture hold: after a collision-style detach the rider typically stays right
+    // next to the pipe (gravity drags them along it on descents) and recaptures within
+    // a second or two. The camera holds its shot for as long as the rider remains this
+    // close (hard-capped), instead of a fixed window that real cycles kept overrunning
+    // — the overrun is what pumped the blend on downhill collision chains.
+    private static final int MAX_RECAPTURE_HOLD_TICKS = 50;
+    private static final double RECAPTURE_HOLD_MAX_DISTANCE = 3.5D;
 
     @Nullable
     private static SlideWindSoundInstance windSound;
     private static long lastSlideActiveGameTime = Long.MIN_VALUE;
     private static long recaptureHoldUntilGameTime = Long.MIN_VALUE;
+    @Nullable
+    private static UUID recaptureConnectionId;
 
     private ClientSlideController() {}
 
@@ -225,12 +231,21 @@ public final class ClientSlideController {
 
     /**
      * True while a non-exit capture cooldown is open: the rider was detached in a way
-     * that commonly recaptures onto the pipe within a second (collision, reconcile,
-     * direction loss), so camera dependents should hold their state rather than react.
-     * Intentional exits (sneak/jump, {@code requireExit=true}) never open this window.
+     * that commonly recaptures onto the pipe shortly (collision, reconcile, direction
+     * loss). The window stays open for as long as the rider remains near the pipe
+     * (hard-capped at {@link #MAX_RECAPTURE_HOLD_TICKS}), so camera dependents hold
+     * their state across collision detach/recapture chains instead of reacting to each
+     * link. Intentional exits (sneak/jump, {@code requireExit=true}) never open it.
      */
-    public static boolean hasOpenRecaptureWindow(Level level) {
-        return active == null && level.getGameTime() < recaptureHoldUntilGameTime;
+    public static boolean hasOpenRecaptureWindow(LocalPlayer player) {
+        if (active != null || recaptureConnectionId == null || player.level().getGameTime() >= recaptureHoldUntilGameTime) {
+            return false;
+        }
+        Optional<PipeConnection> connection = ClientPipeNetworkCache.globalConnection(recaptureConnectionId);
+        if (connection.isEmpty() || !connection.get().levelKey().equals(player.level().dimension())) {
+            return false;
+        }
+        return SlideGeometry.project(connection.get(), player.position()).distance() <= RECAPTURE_HOLD_MAX_DISTANCE;
     }
 
     /**
@@ -446,6 +461,7 @@ public final class ClientSlideController {
         windSound = null;
         lastSlideActiveGameTime = Long.MIN_VALUE;
         recaptureHoldUntilGameTime = Long.MIN_VALUE;
+        recaptureConnectionId = null;
         ClientSlidePoseController.cancelLocalPose();
         clearRuntimeState();
         ClientGazeChoiceController.clear();
@@ -631,6 +647,8 @@ public final class ClientSlideController {
         UUID sessionId = UUID.randomUUID();
         double speed = initialSlideSpeed(player, forward.scale(direction), capturedConnection);
         active = ClientSlideState.start(sessionId, capturedConnection.id(), direction, capturedProjection.distanceOnConnection(), speed, player.noPhysics);
+        recaptureHoldUntilGameTime = Long.MIN_VALUE;
+        recaptureConnectionId = null;
         sendSlideMode(sessionId, true);
         if (platformStop.isPresent() && navigationCandidate.isPresent()) {
             ClientNavigationController.onRouteBoarded(platformStop.get(), navigationCandidate.get(), sessionId);
@@ -1689,9 +1707,13 @@ public final class ClientSlideController {
         player.noPhysics = state.previousNoPhysics();
         cooldown = new CaptureCooldown(state.connectionId(), cooldownTicks, requireExit);
         if (!requireExit) {
-            // Collision-style detach: recapture is likely once the cooldown expires, so
-            // give camera dependents a bounded hold window. Intentional exits skip this.
-            recaptureHoldUntilGameTime = player.level().getGameTime() + Math.min(cooldownTicks + 2, MAX_RECAPTURE_HOLD_TICKS);
+            // Collision-style detach: recapture is likely while the rider stays near
+            // the pipe, so give camera dependents a proximity-based hold window.
+            recaptureHoldUntilGameTime = player.level().getGameTime() + MAX_RECAPTURE_HOLD_TICKS;
+            recaptureConnectionId = state.connectionId();
+        } else {
+            recaptureHoldUntilGameTime = Long.MIN_VALUE;
+            recaptureConnectionId = null;
         }
     }
 

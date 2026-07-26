@@ -3,7 +3,6 @@ package dev.marblegate.superpipeslide.client.core.slide;
 import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.gaze.ClientGazeChoiceController;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
-import dev.marblegate.superpipeslide.common.SuperPipeSlide;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
 import dev.marblegate.superpipeslide.config.ClientConfig;
 import dev.marblegate.superpipeslide.mixin.client.CameraAccessor;
@@ -101,7 +100,6 @@ public final class ClientCinematicCameraController {
     private static Vec3 lastSafePosition;
     private static double driftAmount;
     private static double driftBlockedSeconds;
-    private static double traceSeconds;
     private static double clutterEma;
     private static boolean corridorMode;
     private static Shot shot;
@@ -149,7 +147,6 @@ public final class ClientCinematicCameraController {
         lastSafePosition = null;
         driftAmount = 0.0D;
         driftBlockedSeconds = 0.0D;
-        traceSeconds = 0.0D;
         clutterEma = 0.0D;
         corridorMode = false;
     }
@@ -195,7 +192,7 @@ public final class ClientCinematicCameraController {
             // frame's alpha used to park the blend in the mid range on collision-heavy
             // sections, where the eye-position share of the camera leaked every jolt.
             targetBlend = 1.0D;
-        } else if (shot != null && ClientSlideController.hasOpenRecaptureWindow(player.level())) {
+        } else if (shot != null && ClientSlideController.hasOpenRecaptureWindow(player)) {
             // Collision-style detach with a live recapture window: hold the blend
             // untouched so a quick recapture never dips the camera (the downhill-curve
             // detach/recapture cycle used to pump the blend about once a second).
@@ -277,23 +274,8 @@ public final class ClientCinematicCameraController {
             lastSafePosition = null;
             return;
         }
-        traceSeconds += deltaSeconds;
-        if (traceSeconds >= 1.0D) {
-            traceSeconds = 0.0D;
-            SuperPipeSlide.LOGGER.info(
-                    "CinematicTrace blend={} ctx={}/{} pos={} aim={} drift={} vBlend={} pBlend={} speed={} corr={}",
-                    fmt(blend), context, shot.context(), fmtVec(shot.position()), fmtVec(shot.aim()), fmt(driftAmount), fmt(snapshot.verticalBlend()), fmt(snapshot.platformBlend()), fmt(snapshot.speed()), corridorMode);
-        }
         access.superpipeslide$setDetached(true);
         writeCamera(minecraft, player, camera, access, partialTick, intensity);
-    }
-
-    private static String fmt(double value) {
-        return String.format(java.util.Locale.ROOT, "%.2f", value);
-    }
-
-    private static String fmtVec(Vec3 v) {
-        return String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", v.x, v.y, v.z);
     }
 
     private static void tickPushIn(Level level, double deltaSeconds) {
@@ -476,7 +458,6 @@ public final class ClientCinematicCameraController {
         cooldownSeconds = CUT_COOLDOWN_SECONDS;
         ShotCandidate next = searchShot(level, player, snapshot, pendingClass == null ? ShotClass.NONE : pendingClass, context, shot);
         if (next != null && (next.shotClass() != shot.shotClass() || reason != CutReason.SHOT_AGE) && next.position().distanceTo(shot.position()) > 0.5D) {
-            SuperPipeSlide.LOGGER.debug("Cinematic camera cut: {}", reason);
             applyShot(next, snapshot);
             searchFailSeconds = 0.0D;
             return;
@@ -593,7 +574,6 @@ public final class ClientCinematicCameraController {
         Vec3 stage = stageFor(context, shotClass, snapshot);
         Vec3 aim = aimFor(stage, travel, shotClass.preferredDistance());
         List<ShotCandidate> candidates = new ArrayList<>();
-        debugSearchCounters.begin();
         // Corridor grammar: in cluttered terrain the only reliably clear sight-lines run
         // along the rider's own upcoming path, so candidates switch to along-path
         // vantages and must hold LOS to every path sample in the budget.
@@ -603,6 +583,8 @@ public final class ClientCinematicCameraController {
         double[] angles = corridor ? CORRIDOR_ANGLES : candidateAngles(shotClass);
         double[] distances = corridor ? CORRIDOR_DISTANCES : candidateDistances(shotClass);
         double[] heights = corridor ? CORRIDOR_HEIGHTS : candidateHeights(shotClass);
+        int losRejects = 0;
+        int passed = 0;
         for (double angleDegrees : angles) {
             Vec3 direction = directionFor(context, travel, angleDegrees);
             for (double distance : distances) {
@@ -614,42 +596,39 @@ public final class ClientCinematicCameraController {
                     Vec3 position = rider.add(direction.scale(distance)).add(0.0D, height, 0.0D);
                     double riderDistance = position.distanceTo(rider);
                     if (riderDistance > shotClass.subjectMaxDistance()) {
-                        debugSearchCounters.subjectFar++;
                         continue;
                     }
                     double proportion = RIDER_SCREEN_HEIGHT / Math.max(1.0D, riderDistance);
                     if (proportion < shotClass.proportionMin() || proportion > MAX_RIDER_PROPORTION) {
-                        debugSearchCounters.proportion++;
                         continue;
                     }
                     if (!hasClearance(level, position)) {
-                        debugSearchCounters.clearance++;
                         continue;
                     }
                     if (!hasLineOfSight(level, position, aim, player) || !hasLineOfSight(level, position, rider.add(0.0D, 0.9D, 0.0D), player)) {
-                        debugSearchCounters.los++;
+                        losRejects++;
                         continue;
                     }
                     if (corridorSamples > 0 && !hasCorridorClearance(level, position, pathSamples, corridorSamples, player)) {
                         continue;
                     }
                     if (!hasViewDepth(level, position, aim, shotClass, player)) {
-                        debugSearchCounters.viewDepth++;
                         continue;
                     }
                     double frameAngle = frameAngleDegrees(position, aim, rider);
                     if (frameAngle > RIDER_MAX_FRAME_ANGLE) {
-                        debugSearchCounters.offFrame++;
                         continue;
                     }
                     boolean side = angleDegrees < 0.0D;
                     candidates.add(new ShotCandidate(position, aim, stage, travel, context, shotClass, side, riderDistance, frameAngle));
-                    debugSearchCounters.passed++;
+                    passed++;
                 }
             }
         }
         if (!corridor) {
+            int beforeEdge = candidates.size();
             injectEdgeCandidates(level, player, rider, travel, stage, aim, shotClass, candidates);
+            passed += candidates.size() - beforeEdge;
         }
         // Durability: vantages that will lose the rider half a second from now churn a
         // cut every couple of seconds in occluded terrain (the downhill cut machine-gun),
@@ -696,12 +675,11 @@ public final class ClientCinematicCameraController {
         // Clutter arbitration: the share of candidates dying on the LOS filter feeds an
         // EMA that switches the next search between the open-terrain ring and the
         // corridor grammar (hysteresis keeps borderline woods from thrashing).
-        int losTotal = debugSearchCounters.los + debugSearchCounters.passed;
+        int losTotal = losRejects + passed;
         if (losTotal > 4) {
-            clutterEma += ((double) debugSearchCounters.los / losTotal - clutterEma) * 0.3D;
+            clutterEma += ((double) losRejects / losTotal - clutterEma) * 0.3D;
         }
         corridorMode = clutterEma >= CLUTTER_ENTER_RATIO || (corridorMode && clutterEma >= CLUTTER_EXIT_RATIO);
-        debugSearchCounters.finish(context, shotClass, sceneFeatures != null ? sceneFeatures.openness() : 0.0D, best == null ? -1.0D : best.score());
         return best != null && best.score() > MIN_SCORE ? best : null;
     }
 
@@ -849,7 +827,6 @@ public final class ClientCinematicCameraController {
                 continue;
             }
             candidates.add(new ShotCandidate(position, aim, stage, travel, context, shotClass, false, riderDistance, frameAngle));
-            debugSearchCounters.passed++;
         }
     }
 
@@ -1261,53 +1238,4 @@ public final class ClientCinematicCameraController {
     private static double approachExp(double current, double target, double ratePerSecond, double deltaSeconds) {
         return current + (target - current) * (1.0D - Math.exp(-ratePerSecond * deltaSeconds));
     }
-
-    /** Temporary diagnostics: per-filter rejection tallies, logged at most once a second. */
-    private static final class DebugSearchCounters {
-        int subjectFar;
-        int proportion;
-        int clearance;
-        int los;
-        int viewDepth;
-        int offFrame;
-        int passed;
-        private long lastLogMillis;
-
-        void begin() {
-            subjectFar = 0;
-            proportion = 0;
-            clearance = 0;
-            los = 0;
-            viewDepth = 0;
-            offFrame = 0;
-            passed = 0;
-        }
-
-        void resetIfNewSecond() {}
-
-        void finish(ShotContext context, ShotClass shotClass, double openness, double bestScore) {
-            long now = System.currentTimeMillis();
-            if (now - this.lastLogMillis < 1000L) {
-                return;
-            }
-            this.lastLogMillis = now;
-            SuperPipeSlide.LOGGER.info(
-                    "CinematicDebug context={} class={} openness={} filters[far={} prop={} clear={} los={} depth={} frame={}] passed={} bestScore={} blend={} enterStreak={}",
-                    context,
-                    shotClass,
-                    String.format("%.1f", openness),
-                    this.subjectFar,
-                    this.proportion,
-                    this.clearance,
-                    this.los,
-                    this.viewDepth,
-                    this.offFrame,
-                    this.passed,
-                    String.format("%.2f", bestScore),
-                    String.format("%.2f", blend),
-                    enterStreakSeconds);
-        }
-    }
-
-    private static final DebugSearchCounters debugSearchCounters = new DebugSearchCounters();
 }
