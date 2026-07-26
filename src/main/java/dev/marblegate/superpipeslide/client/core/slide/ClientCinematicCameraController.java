@@ -44,7 +44,8 @@ public final class ClientCinematicCameraController {
     private static final double MIN_SHOT_DWELL_SECONDS = 2.0D;
     private static final double SEARCH_FAIL_GRACE_SECONDS = 5.0D;
     private static final double BLEND_RATE_PER_SECOND = 3.0D;
-    private static final double BLEND_OUT_RATE_PER_SECOND = 4.0D;
+    // Duration of the eased return to first person after a real dismount.
+    private static final double RETURN_SECONDS = 0.7D;
     // How far ahead (in ticks) the LOS probe looks to tell a passing pillar (LOS recovers
     // on its own) apart from persistent cover (LOS stays broken, cut immediately).
     private static final double LOS_FUTURE_PROBE_TICKS = 10.0D;
@@ -82,6 +83,8 @@ public final class ClientCinematicCameraController {
     private static final double CLUTTER_EXIT_RATIO = 0.30D;
 
     private static double blend;
+    private static double returnStartBlend;
+    private static double returnProgress;
     private static double evalSeconds;
     private static double losSeconds;
     private static double enterStreakSeconds = Double.MAX_VALUE;
@@ -130,6 +133,8 @@ public final class ClientCinematicCameraController {
 
     public static void clear() {
         blend = 0.0D;
+        returnStartBlend = 0.0D;
+        returnProgress = 0.0D;
         shot = null;
         context = ShotContext.CRUISE;
         evalSeconds = 0.0D;
@@ -192,7 +197,7 @@ public final class ClientCinematicCameraController {
             // frame's alpha used to park the blend in the mid range on collision-heavy
             // sections, where the eye-position share of the camera leaked every jolt.
             targetBlend = 1.0D;
-        } else if (shot != null && ClientSlideController.hasOpenRecaptureWindow(player)) {
+        } else if (shot != null && ClientSlideController.hasOpenRecaptureWindow(player.level())) {
             // Collision-style detach with a live recapture window: hold the blend
             // untouched so a quick recapture never dips the camera (the downhill-curve
             // detach/recapture cycle used to pump the blend about once a second).
@@ -202,8 +207,23 @@ public final class ClientCinematicCameraController {
             // starts immediately, with no dead time before the camera heads back.
             targetBlend = 0.0D;
         }
-        blend = approachExp(blend, targetBlend, targetBlend > blend ? BLEND_RATE_PER_SECOND : BLEND_OUT_RATE_PER_SECOND, deltaSeconds);
-        if (blend <= 0.06D) {
+        if (targetBlend <= 0.0D && blend > 0.0D) {
+            // Time-boxed smoothstep return: starts gently, moves deliberately, and
+            // arrives exactly at first person — no exponential head-start rush and no
+            // cutoff snap at the end.
+            if (returnStartBlend <= 0.0D) {
+                returnStartBlend = blend;
+                returnProgress = 0.0D;
+            }
+            returnProgress = Math.min(1.0D, returnProgress + deltaSeconds / RETURN_SECONDS);
+            double eased = returnProgress * returnProgress * (3.0D - 2.0D * returnProgress);
+            blend = returnProgress >= 1.0D ? 0.0D : returnStartBlend * (1.0D - eased);
+        } else {
+            returnStartBlend = 0.0D;
+            returnProgress = 0.0D;
+            blend = approachExp(blend, targetBlend, BLEND_RATE_PER_SECOND, deltaSeconds);
+        }
+        if (blend <= 0.02D) {
             blend = targetBlend <= 0.0D ? 0.0D : blend;
             shot = null;
             lastSafePosition = null;
