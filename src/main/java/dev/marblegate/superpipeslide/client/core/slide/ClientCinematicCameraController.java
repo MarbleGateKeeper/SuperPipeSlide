@@ -42,9 +42,7 @@ public final class ClientCinematicCameraController {
     private static final double CLASS_HYSTERESIS_SECONDS = 1.0D;
     private static final double CUT_COOLDOWN_SECONDS = 3.0D;
     private static final double MIN_SHOT_DWELL_SECONDS = 2.0D;
-    private static final double SHOT_MAX_AGE_SECONDS = 25.0D;
     private static final double SEARCH_FAIL_GRACE_SECONDS = 5.0D;
-    private static final double PUSH_IN_PER_SECOND = 0.12D;
     private static final double BLEND_RATE_PER_SECOND = 3.0D;
     private static final double BLEND_OUT_RATE_PER_SECOND = 1.5D;
     // Framing
@@ -52,15 +50,16 @@ public final class ClientCinematicCameraController {
     private static final double CROSSED_STAGE_DISTANCE = 8.0D;
     private static final double AIM_RAISE_FRACTION = 0.12D;
     private static final double RIDER_SCREEN_HEIGHT = 1.286D; // player height factor at FOV 70
-    private static final double MIN_RIDER_PROPORTION = 0.08D;
     private static final double MAX_RIDER_PROPORTION = 0.35D;
     private static final double RIDER_MAX_FRAME_ANGLE = 35.0D;
     private static final int TOP_PICK_RANGE = 4;
     private static final java.util.Random SHOT_RANDOM = new java.util.Random();
     private static final double MIN_SCORE = 1.0D;
     // Context thresholds
-    private static final double VERTICAL_ENTER_BLEND = 0.6D;
+    private static final double VERTICAL_ENTER_BLEND = 0.85D;
     private static final double VERTICAL_EXIT_BLEND = 0.35D;
+    private static final double CONTEXT_MIN_DWELL_SECONDS = 2.0D;
+    private static final double VERTICAL_REANCHOR_DISTANCE = 6.0D;
     private static final double STATION_ENTER_BLEND = 0.3D;
     private static final double STATION_HOLD_BLEND = 0.9D;
     private static final double STATION_HOLD_MAX_SPEED = 0.02D;
@@ -77,8 +76,11 @@ public final class ClientCinematicCameraController {
     private static double noneStreakSeconds;
     private static double cooldownSeconds;
     private static double searchFailSeconds;
+    private static double contextDwellSeconds;
     private static int dipFrames;
     private static ShotContext context = ShotContext.CRUISE;
+    private static ClientSceneProbe.SceneShape sceneShape = ClientSceneProbe.SceneShape.FIELD;
+    private static ClientSceneProbe.SceneFeatures sceneFeatures;
     private static Vec3 lastRiderPos;
     private static ResourceKey<Level> lastLevelKey;
     private static Vec3 lastSafePosition;
@@ -121,6 +123,7 @@ public final class ClientCinematicCameraController {
         noneStreakSeconds = 0.0D;
         cooldownSeconds = 0.0D;
         searchFailSeconds = 0.0D;
+        contextDwellSeconds = 0.0D;
         dipFrames = 0;
         lastRiderPos = null;
         lastLevelKey = null;
@@ -242,11 +245,22 @@ public final class ClientCinematicCameraController {
         if (context == ShotContext.STATION && isStationHold()) {
             return;
         }
-        Vec3 pushDirection = shot.aim().subtract(shot.position());
-        if (pushDirection.lengthSqr() < 1.0E-6D) {
+        Vec3 aimDirection = shot.aim().subtract(shot.position());
+        if (aimDirection.lengthSqr() < 1.0E-6D) {
             return;
         }
-        Vec3 pushed = shot.position().add(pushDirection.normalize().scale(PUSH_IN_PER_SECOND * deltaSeconds));
+        aimDirection = aimDirection.normalize();
+        double speed = 0.2D * deltaSeconds;
+        int moveMode = (int) (shot.driftPhase() * 3.0D) % 3;
+        Vec3 move = switch (moveMode) {
+            case 1 -> aimDirection.scale(-speed);
+            case 2 -> new Vec3(-aimDirection.z, 0.0D, aimDirection.x).normalize().scale(shot.side() ? speed : -speed);
+            default -> aimDirection.scale(speed);
+        };
+        if (move.lengthSqr() < 1.0E-9D) {
+            return;
+        }
+        Vec3 pushed = shot.position().add(move);
         if (hasClearance(level, pushed)) {
             shot = shot.withPosition(pushed);
         }
@@ -254,7 +268,10 @@ public final class ClientCinematicCameraController {
 
     private static void evaluate(Level level, LocalPlayer player, ClientSlideFeedbackController.Frame snapshot, double deltaSeconds) {
         context = arbitrateContext(snapshot, deltaSeconds);
-        ShotClass probed = ShotClass.fromOpenness(measureOpenness(level, snapshot.position(), player), shot == null ? null : shot.shotClass());
+        sceneFeatures = ClientSceneProbe.sample(level, player, snapshot);
+        ClientSceneProbe.SceneAssessment scene = ClientSceneProbe.assess(sceneFeatures);
+        sceneShape = scene.shape();
+        ShotClass probed = shotClassFor(scene, sceneFeatures, shot == null ? null : shot.shotClass());
         if (pendingClass != probed) {
             pendingClass = probed;
             classStreakSeconds = 0.0D;
@@ -272,8 +289,11 @@ public final class ClientCinematicCameraController {
                 cutTo(level, player, snapshot, CutReason.SEARCH_TIMEOUT);
                 return;
             }
-            // Refresh vertical long-run stage silently (re-anchor instead of cutting)
-            if (context == ShotContext.VERTICAL && shot.context() == ShotContext.VERTICAL) {
+            // Refresh vertical long-run stage silently, but only re-anchor when the
+            // stage has actually drifted away from the rider; constant re-anchoring on
+            // sloped curves used to make the camera chase the rider's heading.
+            if (context == ShotContext.VERTICAL && shot.context() == ShotContext.VERTICAL
+                    && shot.stage().distanceTo(snapshot.position()) > VERTICAL_REANCHOR_DISTANCE) {
                 shot = shot.withStage(verticalStage(snapshot), safeNormalize(snapshot.tangent()), shotAimFor(shot.position(), verticalStage(snapshot)));
             }
             return;
@@ -303,12 +323,34 @@ public final class ClientCinematicCameraController {
 
     private static ShotContext arbitrateContext(ClientSlideFeedbackController.Frame snapshot, double deltaSeconds) {
         if (snapshot.platformBlend() > STATION_ENTER_BLEND) {
+            contextDwellSeconds = 0.0D;
             return ShotContext.STATION;
         }
-        if (context == ShotContext.VERTICAL) {
-            return snapshot.verticalBlend() > VERTICAL_EXIT_BLEND ? ShotContext.VERTICAL : ShotContext.CRUISE;
+        ShotContext desired = snapshot.verticalBlend() > (context == ShotContext.VERTICAL ? VERTICAL_EXIT_BLEND : VERTICAL_ENTER_BLEND)
+                ? ShotContext.VERTICAL
+                : ShotContext.CRUISE;
+        if (desired == context) {
+            contextDwellSeconds += deltaSeconds;
+            return context;
         }
-        return snapshot.verticalBlend() > VERTICAL_ENTER_BLEND ? ShotContext.VERTICAL : ShotContext.CRUISE;
+        // Hold the current context through short flirtations across the threshold so
+        // sloped curves do not thrash between cruise and vertical grammars.
+        if (contextDwellSeconds < CONTEXT_MIN_DWELL_SECONDS) {
+            contextDwellSeconds += deltaSeconds;
+            return context;
+        }
+        contextDwellSeconds = 0.0D;
+        return desired;
+    }
+
+    private static ShotClass shotClassFor(ClientSceneProbe.SceneAssessment scene, ClientSceneProbe.SceneFeatures features, ShotClass current) {
+        boolean grand = scene.skyOpenness() >= 0.7D && (features.axisLength() >= 20.0D || features.forwardDepth() >= 0.6D);
+        return switch (scene.shape()) {
+            case FIELD -> grand ? ShotClass.VISTA : features.openness() >= 8.0D ? ShotClass.MEDIUM : ShotClass.INTERIOR;
+            case CORRIDOR -> features.axisLength() >= 20.0D ? ShotClass.VISTA : features.axisLength() >= 12.0D ? ShotClass.MEDIUM : ShotClass.INTERIOR;
+            case BACKDROP, EDGE, WELL -> grand ? ShotClass.VISTA : ShotClass.MEDIUM;
+            case INTERIOR -> ShotClass.INTERIOR;
+        };
     }
 
     private static boolean isStationHold() {
@@ -336,7 +378,9 @@ public final class ClientCinematicCameraController {
         // baked into the shot at creation time; otherwise a shot taken near a platform
         // keeps its master-shot immunity long after the rider has left the area.
         if (context != ShotContext.STATION) {
-            if (shot.ageSeconds() > SHOT_MAX_AGE_SECONDS) {
+            double stageDistance = shot.stage() != null ? shot.stage().distanceTo(snapshot.position()) : 20.0D;
+            double maxAge = Math.max(10.0D, 2.0D * stageDistance / Math.max(1.0D, snapshot.speed() * 20.0D));
+            if (shot.ageSeconds() > maxAge) {
                 return CutReason.SHOT_AGE;
             }
             if (distance < shot.minCut()) {
@@ -391,10 +435,10 @@ public final class ClientCinematicCameraController {
     }
 
     private enum ShotClass {
-        VISTA(20.0D, new double[] { 150.0D, -150.0D, 120.0D, -120.0D }, new double[] { 12.0D, 16.0D, 20.0D }, new double[] { 3.0D, 6.0D }, 14.0D, 5.0D, 50.0D, 26.0D),
-        MEDIUM(12.0D, new double[] { 150.0D, -150.0D, 120.0D, -120.0D }, new double[] { 8.0D, 11.0D, 14.0D }, new double[] { 2.0D, 4.0D }, 10.0D, 4.0D, 32.0D, 18.0D),
-        INTERIOR(5.0D, new double[] { 170.0D, -170.0D, 10.0D, -10.0D, 45.0D, -45.0D }, new double[] { 4.0D, 7.0D, 10.0D }, new double[] { 1.5D, 2.5D }, 7.0D, 2.0D, 16.0D, 12.0D),
-        NONE(0.0D, new double[0], new double[0], new double[0], 0.0D, 0.0D, 0.0D, 0.0D);
+        VISTA(20.0D, new double[] { 150.0D, -150.0D, 120.0D, -120.0D }, new double[] { 12.0D, 16.0D, 24.0D, 32.0D }, new double[] { 3.0D, 6.0D, 10.0D }, 18.0D, 5.0D, 55.0D, 36.0D, 0.035D),
+        MEDIUM(12.0D, new double[] { 150.0D, -150.0D, 120.0D, -120.0D }, new double[] { 8.0D, 11.0D, 14.0D }, new double[] { 2.0D, 4.0D }, 10.0D, 4.0D, 32.0D, 18.0D, 0.06D),
+        INTERIOR(5.0D, new double[] { 170.0D, -170.0D, 10.0D, -10.0D, 45.0D, -45.0D }, new double[] { 4.0D, 7.0D, 10.0D }, new double[] { 1.5D, 2.5D }, 7.0D, 2.0D, 16.0D, 12.0D, 0.08D),
+        NONE(0.0D, new double[0], new double[0], new double[0], 0.0D, 0.0D, 0.0D, 0.0D, 1.0D);
 
         private final double stageLead;
         private final double[] angleDegrees;
@@ -404,8 +448,9 @@ public final class ClientCinematicCameraController {
         private final double minCut;
         private final double maxCut;
         private final double subjectMaxDistance;
+        private final double proportionMin;
 
-        ShotClass(double stageLead, double[] angleDegrees, double[] distances, double[] heights, double preferredDistance, double minCut, double maxCut, double subjectMaxDistance) {
+        ShotClass(double stageLead, double[] angleDegrees, double[] distances, double[] heights, double preferredDistance, double minCut, double maxCut, double subjectMaxDistance, double proportionMin) {
             this.stageLead = stageLead;
             this.angleDegrees = angleDegrees;
             this.distances = distances;
@@ -414,30 +459,7 @@ public final class ClientCinematicCameraController {
             this.minCut = minCut;
             this.maxCut = maxCut;
             this.subjectMaxDistance = subjectMaxDistance;
-        }
-
-        static ShotClass fromOpenness(double openness, ShotClass current) {
-            double promote = current == null ? 0.0D : 1.5D;
-            double demote = current == null ? 0.0D : -1.5D;
-            if (current == VISTA && openness >= 16.0D + demote) {
-                return VISTA;
-            }
-            if (current == MEDIUM && openness >= 8.0D + demote) {
-                return openness >= 16.0D + promote ? VISTA : MEDIUM;
-            }
-            if (current == INTERIOR && openness >= 3.0D + demote) {
-                return openness >= 16.0D + promote ? VISTA : openness >= 8.0D + promote ? MEDIUM : INTERIOR;
-            }
-            if (openness >= 16.0D + promote) {
-                return VISTA;
-            }
-            if (openness >= 8.0D + promote) {
-                return MEDIUM;
-            }
-            if (openness >= 3.0D + demote) {
-                return INTERIOR;
-            }
-            return NONE;
+            this.proportionMin = proportionMin;
         }
 
         double stageLead() {
@@ -471,6 +493,10 @@ public final class ClientCinematicCameraController {
         double subjectMaxDistance() {
             return this.subjectMaxDistance;
         }
+
+        double proportionMin() {
+            return this.proportionMin;
+        }
     }
 
     private record ShotCandidate(Vec3 position, Vec3 aim, Vec3 stage, Vec3 travel, ShotContext context, ShotClass shotClass, boolean side, double distance, double score) {
@@ -489,10 +515,13 @@ public final class ClientCinematicCameraController {
         Vec3 aim = aimFor(stage, travel, shotClass.preferredDistance());
         List<ShotCandidate> candidates = new ArrayList<>();
         debugSearchCounters.begin();
-        for (double angleDegrees : shotClass.angleDegrees()) {
+        double[] angles = candidateAngles(shotClass);
+        double[] distances = candidateDistances(shotClass);
+        double[] heights = candidateHeights(shotClass);
+        for (double angleDegrees : angles) {
             Vec3 direction = directionFor(context, travel, angleDegrees);
-            for (double distance : shotClass.distances()) {
-                for (double height : shotClass.heights()) {
+            for (double distance : distances) {
+                for (double height : heights) {
                     // Candidates are placed around the RIDER and frame the stage ahead:
                     // the rider enters the shot at good size and crosses toward the
                     // stage. Placing them around the stage instead left the rider
@@ -504,7 +533,7 @@ public final class ClientCinematicCameraController {
                         continue;
                     }
                     double proportion = RIDER_SCREEN_HEIGHT / Math.max(1.0D, riderDistance);
-                    if (proportion < MIN_RIDER_PROPORTION || proportion > MAX_RIDER_PROPORTION) {
+                    if (proportion < shotClass.proportionMin() || proportion > MAX_RIDER_PROPORTION) {
                         debugSearchCounters.proportion++;
                         continue;
                     }
@@ -512,7 +541,7 @@ public final class ClientCinematicCameraController {
                         debugSearchCounters.clearance++;
                         continue;
                     }
-                    if (!hasLineOfSight(level, position, aim, player)) {
+                    if (!hasLineOfSight(level, position, aim, player) || !hasLineOfSight(level, position, rider.add(0.0D, 0.9D, 0.0D), player)) {
                         debugSearchCounters.los++;
                         continue;
                     }
@@ -531,16 +560,19 @@ public final class ClientCinematicCameraController {
                 }
             }
         }
+        injectEdgeCandidates(level, player, rider, travel, stage, aim, shotClass, candidates);
         for (int i = 0; i < candidates.size(); i++) {
             ShotCandidate candidate = candidates.get(i);
-            double opennessScore = opennessAt(level, candidate.position(), aim.subtract(candidate.position()).normalize(), player) / 24.0D;
+            // Scenery-first scoring: how good the shot LOOKS, not how open the spot is.
+            double layerScore = depthLayeringScore(level, candidate.position(), aim, player);
+            double lineScore = leadingLineScore(level, candidate.position(), aim, rider, player);
+            double thirdsScore = thirdsPlacementScore(candidate.position(), aim, rider);
+            double skyScore = skyRatioScore(level, candidate.position(), aim, player);
             double distanceScore = 1.0D - Math.abs(candidate.distance() - shotClass.preferredDistance()) / Math.max(1.0D, shotClass.preferredDistance());
-            double proportionScore = 1.0D - Math.abs(RIDER_SCREEN_HEIGHT / candidate.distance() - 0.18D) / 0.18D;
-            // candidate.score() still carries the entry frame angle at this point.
-            double frameAngleScore = 1.0D - Math.min(1.0D, Math.abs(candidate.score() - 20.0D) / RIDER_MAX_FRAME_ANGLE);
+            double proportionScore = 1.0D - Math.abs(RIDER_SCREEN_HEIGHT / candidate.distance() - RIDER_SCREEN_HEIGHT / shotClass.preferredDistance()) * shotClass.preferredDistance() / RIDER_SCREEN_HEIGHT;
             double sideScore = previous == null || candidate.side() == previous.side() ? 0.2D : -0.2D;
             double classBonus = previous != null && candidate.shotClass() != previous.shotClass() ? 0.3D : 0.0D;
-            candidates.set(i, candidate.withScore(opennessScore * 1.5D + distanceScore + proportionScore * 0.5D + frameAngleScore * 0.4D + sideScore + classBonus));
+            candidates.set(i, candidate.withScore(layerScore * 1.2D + lineScore * 0.8D + thirdsScore * 0.6D + skyScore * 0.5D + distanceScore + proportionScore + sideScore + classBonus));
         }
         candidates.sort((a, b) -> Double.compare(b.score(), a.score()));
         ShotCandidate best = null;
@@ -550,8 +582,68 @@ public final class ClientCinematicCameraController {
             int pickRange = Math.min(TOP_PICK_RANGE, candidates.size());
             best = candidates.get(SHOT_RANDOM.nextInt(pickRange));
         }
-        debugSearchCounters.finish(context, shotClass, measureOpenness(level, rider, player), best == null ? -1.0D : best.score());
+        debugSearchCounters.finish(context, shotClass, sceneFeatures != null ? sceneFeatures.openness() : 0.0D, best == null ? -1.0D : best.score());
         return best != null && best.score() > MIN_SCORE ? best : null;
+    }
+
+    private static double[] candidateAngles(ShotClass shotClass) {
+        return switch (sceneShape) {
+            case CORRIDOR -> new double[] { 0.0D, 25.0D, -25.0D, 155.0D, -155.0D };
+            case WELL -> new double[] { 30.0D, -30.0D, 120.0D, -120.0D };
+            case BACKDROP -> new double[] { 80.0D, -80.0D, 120.0D, -120.0D, 60.0D, -60.0D };
+            default -> shotClass.angleDegrees();
+        };
+    }
+
+    private static double[] candidateDistances(ShotClass shotClass) {
+        if (sceneShape == ClientSceneProbe.SceneShape.CORRIDOR && sceneFeatures != null && sceneFeatures.axisLength() > 0.0D) {
+            double near = clamp(sceneFeatures.axisLength() * 0.45D, 4.0D, 24.0D);
+            double far = clamp(sceneFeatures.axisLength() * 0.7D, near + 2.0D, 26.0D);
+            return new double[] { near, far };
+        }
+        return shotClass.distances();
+    }
+
+    private static double[] candidateHeights(ShotClass shotClass) {
+        if (sceneShape == ClientSceneProbe.SceneShape.WELL) {
+            return new double[] { -1.0D, -0.2D, 0.5D };
+        }
+        if (sceneShape == ClientSceneProbe.SceneShape.BACKDROP) {
+            return new double[] { 1.5D, 4.0D, 8.0D };
+        }
+        if (sceneShape == ClientSceneProbe.SceneShape.CORRIDOR && sceneFeatures != null && sceneFeatures.skyOpenness() >= 0.7D) {
+            return new double[] { 2.0D, 5.0D, 10.0D };
+        }
+        return shotClass.heights();
+    }
+
+    private static void injectEdgeCandidates(Level level, LocalPlayer player, Vec3 rider, Vec3 travel, Vec3 stage, Vec3 aim, ShotClass shotClass, List<ShotCandidate> candidates) {
+        if (sceneFeatures == null || (sceneShape != ClientSceneProbe.SceneShape.EDGE && sceneShape != ClientSceneProbe.SceneShape.FIELD)) {
+            return;
+        }
+        for (ClientSceneProbe.EdgePoint edge : sceneFeatures.edgeTops()) {
+            Vec3 position = edge.topPos().add(edge.outwardDir().scale(1.5D)).add(0.0D, 1.2D, 0.0D);
+            double riderDistance = position.distanceTo(rider);
+            if (riderDistance > shotClass.subjectMaxDistance()) {
+                continue;
+            }
+            double proportion = RIDER_SCREEN_HEIGHT / Math.max(1.0D, riderDistance);
+            if (proportion < shotClass.proportionMin() || proportion > MAX_RIDER_PROPORTION) {
+                continue;
+            }
+            if (!hasClearance(level, position)) {
+                continue;
+            }
+            if (!hasLineOfSight(level, position, aim, player) || !hasLineOfSight(level, position, rider.add(0.0D, 0.9D, 0.0D), player)) {
+                continue;
+            }
+            double frameAngle = frameAngleDegrees(position, aim, rider);
+            if (frameAngle > RIDER_MAX_FRAME_ANGLE) {
+                continue;
+            }
+            candidates.add(new ShotCandidate(position, aim, stage, travel, context, shotClass, false, riderDistance, frameAngle));
+            debugSearchCounters.passed++;
+        }
     }
 
     private static Vec3 stageFor(ShotContext context, ShotClass shotClass, ClientSlideFeedbackController.Frame snapshot) {
@@ -563,7 +655,33 @@ public final class ClientCinematicCameraController {
     }
 
     private static Vec3 cruiseStage(ShotClass shotClass, ClientSlideFeedbackController.Frame snapshot) {
-        return snapshot.position().add(safeNormalize(snapshot.tangent()).scale(shotClass.stageLead()));
+        double lead = clamp(snapshot.speed() * 20.0D * 4.5D, 8.0D, 45.0D);
+        Vec3 travel = safeNormalize(snapshot.tangent());
+        // Bend anchoring: the stage is the end of the current connection (or the end of
+        // a chain of short ones) when it lies within the lead window, so the cut lands
+        // exactly on the bend instead of the rider whipping out of frame at it.
+        double walked = Math.max(0.0D, snapshot.connectionLength() - snapshot.distanceOnConnection());
+        if (walked > 1.0D && walked <= lead * 1.3D) {
+            List<ClientSlideController.SlidePreviewConnection> previews = ClientSlideController.slidePreviewConnections(4);
+            Vec3 stage = null;
+            for (int i = 0; i < previews.size(); i++) {
+                ClientSlideController.SlidePreviewConnection preview = previews.get(i);
+                PipeConnection connection = preview.connection();
+                stage = connection.positionAt(preview.direction() > 0 ? connection.length() : 0.0D);
+                if (connection.length() >= 10.0D || i + 1 >= previews.size()) {
+                    break;
+                }
+                double nextLength = previews.get(i + 1).connection().length();
+                if (walked + nextLength > lead * 1.3D) {
+                    break;
+                }
+                walked += nextLength;
+            }
+            if (stage != null) {
+                return stage;
+            }
+        }
+        return snapshot.position().add(travel.scale(lead));
     }
 
     /**
@@ -623,9 +741,16 @@ public final class ClientCinematicCameraController {
     }
 
     private static Vec3 directionFor(ShotContext context, Vec3 travel, double angleDegrees) {
+        if (sceneShape == ClientSceneProbe.SceneShape.CORRIDOR && sceneFeatures != null && sceneFeatures.axisDirection() != null) {
+            return rotateHorizontal(sceneFeatures.axisDirection(), Math.toRadians(angleDegrees));
+        }
         Vec3 horizontal = new Vec3(travel.x, 0.0D, travel.z);
         Vec3 base = horizontal.lengthSqr() < 1.0E-6D ? new Vec3(1.0D, 0.0D, 0.0D) : horizontal.normalize();
         return rotateHorizontal(base, Math.toRadians(angleDegrees));
+    }
+
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private static void writeCamera(Minecraft minecraft, LocalPlayer player, Camera camera, CameraAccessor access, float partialTick, double intensity) {
@@ -638,13 +763,15 @@ public final class ClientCinematicCameraController {
             lastSafePosition = position;
         }
         // Slow sinusoidal wander (per-shot random phase): the "handheld" breathing that
-        // keeps a parked shot alive. The amount eases toward the clearance state so the
+        // keeps a parked shot alive. Amplitude scales with shot distance so it stays
+        // visible on wide shots. The amount eases toward the clearance state so the
         // drift never snaps on or off.
+        double driftScale = Math.max(2.0D, shot.position().distanceTo(player.position())) * 0.025D;
         double time = (System.currentTimeMillis() % 200000L) / 1000.0D;
         Vec3 drift = new Vec3(
-                Math.sin(time * 0.55D + shot.driftPhase()) * 0.35D,
-                Math.sin(time * 0.42D + shot.driftPhase() * 1.7D) * 0.16D,
-                Math.sin(time * 0.61D + shot.driftPhase() * 2.3D) * 0.35D);
+                Math.sin(time * 0.55D + shot.driftPhase()) * driftScale,
+                Math.sin(time * 0.42D + shot.driftPhase() * 1.7D) * driftScale * 0.45D,
+                Math.sin(time * 0.61D + shot.driftPhase() * 2.3D) * driftScale);
         driftAmount = approachExp(driftAmount, hasClearance(minecraft.level, position.add(drift)) ? 1.0D : 0.0D, 6.0D, deltaSeconds(minecraft));
         position = position.add(drift.scale(driftAmount));
         Vec3 look = shot.aim().subtract(position);
@@ -664,13 +791,18 @@ public final class ClientCinematicCameraController {
     }
 
     /**
-     * Walks the eye -> target segment and returns the furthest clearance-valid point,
-     * so the blended camera never rests inside geometry (the x-ray / solid-color root
-     * cause). Returns null when even the first step is blocked.
+     * Walks the eye -> target segment with hysteresis: a clear target becomes the new
+     * safe point; a blocked target keeps the previous safe point; the bisection search
+     * only runs when the safe point itself is invalid. This stops the per-frame
+     * pass/fail oscillation at block boundaries (the in-wall tremor).
      */
     private static Vec3 clearanceFallback(Level level, Vec3 eye, Vec3 target) {
         if (hasClearance(level, target)) {
+            lastSafePosition = target;
             return target;
+        }
+        if (lastSafePosition != null && hasClearance(level, lastSafePosition)) {
+            return lastSafePosition;
         }
         Vec3 low = eye;
         Vec3 high = target;
@@ -682,30 +814,11 @@ public final class ClientCinematicCameraController {
                 high = mid;
             }
         }
-        return hasClearance(level, low) ? low : null;
-    }
-
-    private static double measureOpenness(Level level, Vec3 center, LocalPlayer player) {
-        double total = 0.0D;
-        for (int i = 0; i < 8; i++) {
-            double angle = Math.toRadians(i * 45.0D);
-            total += freeDistance(level, center, new Vec3(Math.cos(angle), 0.0D, Math.sin(angle)), 24.0D, player);
+        if (hasClearance(level, low)) {
+            lastSafePosition = low;
+            return low;
         }
-        total += freeDistance(level, center, new Vec3(0.35D, 0.85D, 0.35D).normalize(), 24.0D, player);
-        total += freeDistance(level, center, new Vec3(-0.35D, 0.85D, -0.35D).normalize(), 24.0D, player);
-        return total / 10.0D;
-    }
-
-    private static double opennessAt(Level level, Vec3 position, Vec3 direction, LocalPlayer player) {
-        double total = freeDistance(level, position, direction, 24.0D, player);
-        Vec3 perpendicular = direction.cross(new Vec3(0.0D, 1.0D, 0.0D));
-        if (perpendicular.lengthSqr() > 1.0E-6D) {
-            perpendicular = perpendicular.normalize();
-            total += freeDistance(level, position, direction.add(perpendicular.scale(0.35D)).normalize(), 24.0D, player);
-            total += freeDistance(level, position, direction.subtract(perpendicular.scale(0.35D)).normalize(), 24.0D, player);
-            return total / 3.0D;
-        }
-        return total;
+        return null;
     }
 
     private static double freeDistance(Level level, Vec3 from, Vec3 direction, double maxDistance, LocalPlayer player) {
@@ -781,6 +894,132 @@ public final class ClientCinematicCameraController {
         double cos = Math.cos(radians);
         double sin = Math.sin(radians);
         return new Vec3(forward.x * cos - forward.z * sin, 0.0D, forward.x * sin + forward.z * cos);
+    }
+
+    /**
+     * Projects a world point into the candidate camera frame (horizontal ~51 deg,
+     * vertical ~35 deg half angles). Returns [u, v, forward] or null when behind.
+     */
+    private static double[] projectToFrame(Vec3 position, Vec3 aim, Vec3 point) {
+        Vec3 view = aim.subtract(position);
+        if (view.lengthSqr() < 1.0E-6D) {
+            return null;
+        }
+        view = view.normalize();
+        Vec3 right = view.cross(new Vec3(0.0D, 1.0D, 0.0D));
+        right = right.lengthSqr() < 1.0E-6D ? new Vec3(1.0D, 0.0D, 0.0D) : right.normalize();
+        Vec3 up = right.cross(view).normalize();
+        Vec3 relative = point.subtract(position);
+        double forward = relative.dot(view);
+        if (forward < 0.1D) {
+            return null;
+        }
+        double tanH = Math.tan(Math.toRadians(51.0D));
+        double tanV = Math.tan(Math.toRadians(35.0D));
+        return new double[] { relative.dot(right) / (forward * tanH), relative.dot(up) / (forward * tanV), forward };
+    }
+
+    /**
+     * Depth layering: 15 rays in a small grid around the view direction, bucketed into
+     * near / mid / far. Rich near+far mixes score high; a single empty layer scores low.
+     */
+    private static double depthLayeringScore(Level level, Vec3 position, Vec3 aim, LocalPlayer player) {
+        Vec3 view = aim.subtract(position);
+        if (view.lengthSqr() < 1.0E-6D) {
+            return 0.0D;
+        }
+        view = view.normalize();
+        Vec3 right = view.cross(new Vec3(0.0D, 1.0D, 0.0D));
+        right = right.lengthSqr() < 1.0E-6D ? new Vec3(1.0D, 0.0D, 0.0D) : right.normalize();
+        Vec3 up = right.cross(view).normalize();
+        int near = 0;
+        int mid = 0;
+        int far = 0;
+        for (int i = -2; i <= 2; i++) {
+            for (int j = -1; j <= 1; j++) {
+                Vec3 direction = view.add(right.scale(i * 0.22D)).add(up.scale(j * 0.22D)).normalize();
+                double distance = freeDistance(level, position, direction, 30.0D, player);
+                if (distance < 8.0D) {
+                    near++;
+                } else if (distance < 24.0D) {
+                    mid++;
+                } else {
+                    far++;
+                }
+            }
+        }
+        double[] bands = { near / 15.0D, mid / 15.0D, far / 15.0D };
+        double entropy = 0.0D;
+        for (double band : bands) {
+            if (band > 1.0E-6D) {
+                entropy -= band * (Math.log(band) / Math.log(2.0D));
+            }
+        }
+        return entropy / (Math.log(3.0D) / Math.log(2.0D)) * 0.7D + (far > 0 ? 0.3D : 0.0D);
+    }
+
+    /**
+     * Leading line: samples the pipe itself (a free, structured leading line) into the
+     * candidate frame and rewards long visible runs pointing across the view.
+     */
+    private static double leadingLineScore(Level level, Vec3 position, Vec3 aim, Vec3 rider, LocalPlayer player) {
+        List<PipeConnection> connections = ClientPipeNetworkCache.connectionsNear(level.dimension(), rider, 20.0D);
+        int inFrame = 0;
+        int total = 0;
+        for (PipeConnection connection : connections) {
+            double length = Math.min(connection.length(), 24.0D);
+            int samples = 8;
+            for (int i = 0; i <= samples; i++) {
+                Vec3 point = connection.positionAt(connection.length() * i / samples);
+                if (projectToFrame(position, aim, point) != null) {
+                    inFrame++;
+                }
+                total++;
+            }
+        }
+        return total == 0 ? 0.0D : clamp(inFrame / 8.0D, 0.0D, 1.0D);
+    }
+
+    /**
+     * Thirds placement: how close the rider's projection sits to a rule-of-thirds point
+     * instead of dead center or the sliver edge.
+     */
+    private static double thirdsPlacementScore(Vec3 position, Vec3 aim, Vec3 rider) {
+        double[] projection = projectToFrame(position, aim, rider);
+        if (projection == null) {
+            return 0.0D;
+        }
+        double best = Double.MAX_VALUE;
+        for (double u : new double[] { -1.0D / 3.0D, 1.0D / 3.0D }) {
+            for (double v : new double[] { -1.0D / 3.0D, 1.0D / 3.0D }) {
+                best = Math.min(best, Math.hypot(projection[0] - u, projection[1] - v));
+            }
+        }
+        return clamp(1.0D - best * 1.2D, 0.0D, 1.0D);
+    }
+
+    /**
+     * Sky ratio: how much of the upper frame is open sky (great for backlit/profile
+     * shots), from an 8-ray fan above the view axis.
+     */
+    private static double skyRatioScore(Level level, Vec3 position, Vec3 aim, LocalPlayer player) {
+        Vec3 view = aim.subtract(position);
+        if (view.lengthSqr() < 1.0E-6D) {
+            return 0.0D;
+        }
+        view = view.normalize();
+        Vec3 right = view.cross(new Vec3(0.0D, 1.0D, 0.0D));
+        right = right.lengthSqr() < 1.0E-6D ? new Vec3(1.0D, 0.0D, 0.0D) : right.normalize();
+        Vec3 up = right.cross(view).normalize();
+        int clear = 0;
+        for (int i = 0; i < 8; i++) {
+            double spread = (i - 3.5D) * 0.18D;
+            Vec3 direction = view.add(right.scale(spread)).add(up.scale(0.45D)).normalize();
+            if (freeDistance(level, position, direction, 24.0D, player) >= 23.5D) {
+                clear++;
+            }
+        }
+        return clear / 8.0D;
     }
 
     private static double frameAngleDegrees(Vec3 position, Vec3 aim, Vec3 subject) {
