@@ -43,6 +43,9 @@ public final class ClientCinematicCameraController {
     private static final double CUT_COOLDOWN_SECONDS = 3.0D;
     private static final double MIN_SHOT_DWELL_SECONDS = 2.0D;
     private static final double SEARCH_FAIL_GRACE_SECONDS = 5.0D;
+    // How long a slide-frame gap (collision detach/recapture flapping) is absorbed by
+    // freezing the blend before it is treated as a real dismount.
+    private static final double SLIDE_GAP_GRACE_SECONDS = 1.0D;
     private static final double BLEND_RATE_PER_SECOND = 3.0D;
     private static final double BLEND_OUT_RATE_PER_SECOND = 1.5D;
     // Framing
@@ -76,6 +79,7 @@ public final class ClientCinematicCameraController {
     private static double noneStreakSeconds;
     private static double cooldownSeconds;
     private static double searchFailSeconds;
+    private static double slideGapSeconds;
     private static double contextDwellSeconds;
     private static int dipFrames;
     private static ShotContext context = ShotContext.CRUISE;
@@ -125,6 +129,7 @@ public final class ClientCinematicCameraController {
         searchFailSeconds = 0.0D;
         contextDwellSeconds = 0.0D;
         dipFrames = 0;
+        slideGapSeconds = 0.0D;
         lastRiderPos = null;
         lastLevelKey = null;
         lastSafePosition = null;
@@ -178,7 +183,21 @@ public final class ClientCinematicCameraController {
         Optional<ClientSlideFeedbackController.Frame> frame = ClientSlideFeedbackController.currentRenderFrame();
         double intensity = ClientConfig.CINEMATIC_CAMERA_INTENSITY.get();
         boolean enabled = ClientSafetyOptions.cinematicCameraEnabled() && !ClientGazeChoiceController.hasActiveChoice() && intensity > 1.0E-6D;
-        double targetBlend = enabled && frame.isPresent() ? frame.get().alpha() : 0.0D;
+        // Collision churn grace: while the slide session flaps between detach and
+        // recapture (block collisions), the blend is held steady for a short window so
+        // the camera never oscillates with the session's alpha. Only a sustained gap
+        // (real dismount) starts the blend-out.
+        slideGapSeconds = frame.isEmpty() ? slideGapSeconds + deltaSeconds : 0.0D;
+        double targetBlend;
+        if (!enabled) {
+            targetBlend = 0.0D;
+        } else if (frame.isPresent()) {
+            targetBlend = frame.get().alpha();
+        } else if (shot != null && slideGapSeconds < SLIDE_GAP_GRACE_SECONDS) {
+            targetBlend = blend;
+        } else {
+            targetBlend = 0.0D;
+        }
         blend = approachExp(blend, targetBlend, targetBlend > blend ? BLEND_RATE_PER_SECOND : BLEND_OUT_RATE_PER_SECOND, deltaSeconds);
         if (blend <= 0.02D) {
             blend = targetBlend <= 0.0D ? 0.0D : blend;
@@ -200,7 +219,9 @@ public final class ClientCinematicCameraController {
 
         ClientSlideFeedbackController.Frame snapshot = frame.get();
         Vec3 rider = snapshot.position();
-        if (lastRiderPos != null && (rider.distanceToSqr(lastRiderPos) > 64.0D || !Objects.equals(lastLevelKey, player.level().dimension()))) {
+        // Only large teleports void the shot: reconcile hops after block collisions are
+        // small and must not churn the framing.
+        if (lastRiderPos != null && (rider.distanceToSqr(lastRiderPos) > 576.0D || !Objects.equals(lastLevelKey, player.level().dimension()))) {
             shot = null;
             lastSafePosition = null;
         }
