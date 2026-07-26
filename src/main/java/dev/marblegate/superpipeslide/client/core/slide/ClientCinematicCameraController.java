@@ -42,7 +42,6 @@ public final class ClientCinematicCameraController {
     private static final int LOS_FAIL_CUT_STREAK = 3;
     private static final double CUT_COOLDOWN_SECONDS = 3.0D;
     private static final double MIN_SHOT_DWELL_SECONDS = 2.0D;
-    private static final double SEARCH_FAIL_GRACE_SECONDS = 5.0D;
     private static final double BLEND_RATE_PER_SECOND = 3.0D;
     // Duration of the eased return to first person after a real dismount.
     private static final double RETURN_SECONDS = 0.7D;
@@ -90,9 +89,7 @@ public final class ClientCinematicCameraController {
     private static double enterStreakSeconds = Double.MAX_VALUE;
     private static double classStreakSeconds;
     private static ShotClass pendingClass;
-    private static double noneStreakSeconds;
     private static double cooldownSeconds;
-    private static double searchFailSeconds;
     private static double contextDwellSeconds;
     private static int losFailStreak;
     private static ShotContext context = ShotContext.CRUISE;
@@ -114,7 +111,7 @@ public final class ClientCinematicCameraController {
     }
 
     private enum CutReason {
-        LOS_BROKEN, TOO_FAR, OFF_AXIS, CROSSED_STAGE, TOO_CLOSE, SHOT_AGE, CLASS_CHANGE, SEARCH_TIMEOUT
+        LOS_BROKEN, TOO_FAR, OFF_AXIS, CROSSED_STAGE, TOO_CLOSE, SHOT_AGE, CLASS_CHANGE
     }
 
     private record Shot(Vec3 position, Vec3 aim, Vec3 stage, Vec3 travel, ShotContext context, ShotClass shotClass, boolean side, double minCut, double maxCut, double ageSeconds, double driftPhase) {
@@ -142,9 +139,7 @@ public final class ClientCinematicCameraController {
         enterStreakSeconds = Double.MAX_VALUE;
         classStreakSeconds = 0.0D;
         pendingClass = null;
-        noneStreakSeconds = 0.0D;
         cooldownSeconds = 0.0D;
-        searchFailSeconds = 0.0D;
         contextDwellSeconds = 0.0D;
         losFailStreak = 0;
         lastRiderPos = null;
@@ -345,10 +340,6 @@ public final class ClientCinematicCameraController {
                 cutTo(level, player, snapshot, CutReason.CLASS_CHANGE);
                 return;
             }
-            if (searchFailSeconds >= SEARCH_FAIL_GRACE_SECONDS) {
-                cutTo(level, player, snapshot, CutReason.SEARCH_TIMEOUT);
-                return;
-            }
             // Refresh vertical long-run stage silently, but only re-anchor when the
             // stage has actually drifted away from the rider; constant re-anchoring on
             // sloped curves used to make the camera chase the rider's heading.
@@ -367,15 +358,6 @@ public final class ClientCinematicCameraController {
             return;
         }
 
-        if (probed == ShotClass.NONE) {
-            noneStreakSeconds += EVAL_INTERVAL_SECONDS;
-            enterStreakSeconds = 0.0D;
-            // The rider is always owed a camera: tight spots get a guaranteed close
-            // over-shoulder shot instead of dropping back to first person.
-            applyShot(fallbackShot(snapshot.position(), safeNormalize(snapshot.tangent()), context, ShotClass.INTERIOR, player), snapshot);
-            return;
-        }
-        noneStreakSeconds = 0.0D;
         ShotCandidate next = searchShot(level, player, snapshot, probed, context, null);
         if (next == null) {
             applyShot(fallbackShot(snapshot.position(), safeNormalize(snapshot.tangent()), context, probed, player), snapshot);
@@ -479,7 +461,6 @@ public final class ClientCinematicCameraController {
         ShotCandidate next = searchShot(level, player, snapshot, pendingClass == null ? ShotClass.NONE : pendingClass, context, shot);
         if (next != null && (next.shotClass() != shot.shotClass() || reason != CutReason.SHOT_AGE) && next.position().distanceTo(shot.position()) > 0.5D) {
             applyShot(next, snapshot);
-            searchFailSeconds = 0.0D;
             return;
         }
         if (reason == CutReason.LOS_BROKEN || reason == CutReason.TOO_FAR) {
@@ -510,7 +491,6 @@ public final class ClientCinematicCameraController {
                 0.0D,
                 SHOT_RANDOM.nextDouble() * 100.0D);
         cooldownSeconds = 0.0D;
-        searchFailSeconds = 0.0D;
         losFailStreak = 0;
     }
 
