@@ -176,6 +176,9 @@ public class SuperPipeSlideClient {
                 }
             }
             while (TOGGLE_CINEMATIC_CAMERA.consumeClick()) {
+                if (!ClientSlideController.isSlidingOrTransferring()) {
+                    continue;
+                }
                 boolean enabled = !ClientConfig.ENABLE_CINEMATIC_CAMERA.get();
                 ClientSafetyOptions.setCinematicCameraEnabled(enabled);
                 player.sendOverlayMessage(Component.translatable(enabled ? "message.superpipeslide.cinematic_camera.enabled" : "message.superpipeslide.cinematic_camera.disabled"));
