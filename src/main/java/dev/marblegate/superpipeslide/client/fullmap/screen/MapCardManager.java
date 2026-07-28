@@ -48,11 +48,6 @@ final class MapCardManager {
 
     private final List<MapCard> cardStack = new ArrayList<>();
     private final Map<String, SPSGui.Rect> cardWindowBounds = new HashMap<>();
-    // Per-frame bounds (stack order) and top-card bounds, rebuilt by
-    // updateWindowBounds. Nothing reads them today; kept for parity with the
-    // pre-extraction screen state.
-    private final List<SPSGui.Rect> cardBounds = new ArrayList<>();
-    private SPSGui.Rect topCardBounds = new SPSGui.Rect(0, 0, 0, 0);
     /** Screen-side cleanup for a card that left the stack (render regions, focus keys). */
     private final Consumer<String> cardRemovedListener;
     /** Screen-side notification that a push evicted the oldest card (card-limit toast). */
@@ -220,8 +215,6 @@ final class MapCardManager {
      * after the map hover test had already run against last frame's bounds).
      */
     void updateWindowBounds(int screenWidth, int screenHeight) {
-        this.topCardBounds = new SPSGui.Rect(0, 0, 0, 0);
-        this.cardBounds.clear();
         Set<String> activeKeys = this.cardStack.stream().map(MapCard::windowKey).collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
         this.cardWindowBounds.keySet().removeIf(key -> !activeKeys.contains(key));
         for (int i = 0; i < this.cardStack.size(); i++) {
@@ -231,10 +224,6 @@ final class MapCardManager {
             SPSGui.Rect bounds = this.cardWindowBounds.computeIfAbsent(key, ignored -> this.defaultCardBounds(card, cardIndex, screenWidth, screenHeight));
             bounds = this.resizeAndClampCard(card, bounds, screenWidth, screenHeight);
             this.cardWindowBounds.put(key, bounds);
-            this.cardBounds.add(bounds);
-            if (i == this.cardStack.size() - 1) {
-                this.topCardBounds = bounds;
-            }
         }
     }
 
