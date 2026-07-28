@@ -5,6 +5,8 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
+import java.util.function.IntUnaryOperator;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
@@ -23,6 +25,147 @@ public final class SmoothGuiPrimitives {
 
     private SmoothGuiPrimitives() {}
 
+    /**
+     * A recorded, hover-independent sequence of GUI draw operations: captured
+     * {@link GuiElementRenderState} instances interleaved with live replay actions
+     * (text re-issue, hover-conditional decorations) and two-way variant switches.
+     * Replaying a program re-submits the exact same states, in the exact same order,
+     * that a fresh tessellation of the same content would produce, so the composed
+     * frame is pixel-identical while skipping all world-to-screen transforms, lane
+     * offsetting and quad tessellation.
+     */
+    public static final class FrameProgram {
+        private final List<ProgramItem> items = new ArrayList<>();
+
+        private FrameProgram() {}
+
+        public void replay(GuiGraphicsExtractor graphics) {
+            for (ProgramItem item : this.items) {
+                if (item instanceof StateItem state) {
+                    graphics.submitGuiElementRenderState(state.state());
+                } else if (item instanceof ActionItem action) {
+                    action.action().run(graphics);
+                } else if (item instanceof SwitchItem variant) {
+                    (variant.condition().getAsBoolean() ? variant.whenTrue() : variant.whenFalse()).forEach(graphics::submitGuiElementRenderState);
+                }
+            }
+        }
+
+        public int itemCount() {
+            return this.items.size();
+        }
+    }
+
+    /** Arbitrary draw code re-executed against live graphics when a {@link FrameProgram} replays. */
+    @FunctionalInterface
+    public interface ReplayAction {
+        void run(GuiGraphicsExtractor graphics);
+    }
+
+    private sealed interface ProgramItem permits StateItem, ActionItem, SwitchItem {}
+
+    private record StateItem(GuiElementRenderState state) implements ProgramItem {}
+
+    private record ActionItem(ReplayAction action) implements ProgramItem {}
+
+    private record SwitchItem(List<GuiElementRenderState> whenFalse, List<GuiElementRenderState> whenTrue, BooleanSupplier condition) implements ProgramItem {}
+
+    // Render-thread-only capture state: the program currently being recorded plus, while
+    // captureBranch collects a variant, the branch list that diverts state recording.
+    private static @Nullable FrameProgram activeProgram;
+    private static @Nullable List<GuiElementRenderState> activeBranch;
+
+    public static boolean frameCaptureActive() {
+        return activeProgram != null;
+    }
+
+    /**
+     * Starts recording a {@link FrameProgram}. Every primitive submitted through this
+     * class until {@link #endFrameCapture()} is diverted into the program instead of
+     * reaching the GUI renderer; poses, scissor areas and bounds are resolved against
+     * the live graphics at record time, exactly as a direct submission would.
+     */
+    public static void beginFrameCapture() {
+        if (activeProgram != null) {
+            throw new IllegalStateException("Nested SmoothGuiPrimitives frame capture");
+        }
+        activeProgram = new FrameProgram();
+    }
+
+    /** Stops recording and returns the captured program; always pair with {@link #beginFrameCapture()} in a finally block. */
+    public static FrameProgram endFrameCapture() {
+        FrameProgram program = activeProgram;
+        if (program == null) {
+            throw new IllegalStateException("No active SmoothGuiPrimitives frame capture to end");
+        }
+        activeProgram = null;
+        activeBranch = null;
+        return program;
+    }
+
+    /**
+     * Records {@code action} into the active program so it re-runs at replay time, or
+     * runs it immediately when no capture is recording. Use for draw calls this class
+     * cannot capture as render states (text, hover-conditional decorations) and for
+     * recompute-at-replay logic.
+     */
+    public static void recordOrReplay(GuiGraphicsExtractor graphics, ReplayAction action) {
+        FrameProgram program = activeProgram;
+        if (program == null || activeBranch != null) {
+            action.run(graphics);
+            return;
+        }
+        program.items.add(new ActionItem(action));
+    }
+
+    /**
+     * Runs {@code draws} while diverting their submitted states into a standalone list
+     * instead of the program stream, so a caller can capture two paint variants of the
+     * same element for {@link #recordVariantSwitch}. Requires an active capture.
+     */
+    public static List<GuiElementRenderState> captureBranch(Runnable draws) {
+        if (activeProgram == null || activeBranch != null) {
+            throw new IllegalStateException("captureBranch requires an active, non-nested frame capture");
+        }
+        List<GuiElementRenderState> branch = new ArrayList<>();
+        activeBranch = branch;
+        try {
+            draws.run();
+        } finally {
+            activeBranch = null;
+        }
+        return branch;
+    }
+
+    /**
+     * Records a two-way choice between two pre-captured state lists; at replay time the
+     * live {@code condition} selects which list is submitted. Only one of the two lists
+     * is ever submitted, matching what a fresh render would draw for that condition.
+     * Without an active capture the live choice is submitted directly.
+     */
+    public static void recordVariantSwitch(GuiGraphicsExtractor graphics, List<GuiElementRenderState> whenFalse, List<GuiElementRenderState> whenTrue, BooleanSupplier condition) {
+        FrameProgram program = activeProgram;
+        if (program == null || activeBranch != null) {
+            (condition.getAsBoolean() ? whenTrue : whenFalse).forEach(graphics::submitGuiElementRenderState);
+            return;
+        }
+        program.items.add(new SwitchItem(List.copyOf(whenFalse), List.copyOf(whenTrue), condition));
+    }
+
+    private static void dispatch(GuiGraphicsExtractor graphics, GuiElementRenderState state) {
+        List<GuiElementRenderState> branch = activeBranch;
+        if (branch != null) {
+            branch.add(state);
+            return;
+        }
+        FrameProgram program = activeProgram;
+        if (program != null) {
+            program.items.add(new StateItem(state));
+            return;
+        }
+        graphics.submitGuiElementRenderState(state);
+    }
+
     public static void line(GuiGraphicsExtractor graphics, Vec2 a, Vec2 b, double width, int color) {
         if (a == null || b == null || alpha(color) <= 0 || width <= 0.0D) {
             return;
@@ -30,6 +173,61 @@ public final class SmoothGuiPrimitives {
         PrimitiveBuilder builder = new PrimitiveBuilder();
         builder.capsule(a, b, width + EDGE_AA_PX, withScaledAlpha(color, 0.32D));
         builder.capsule(a, b, width, color);
+        builder.submit(graphics);
+    }
+
+    /**
+     * Batched dashed stroke: walks the polyline segment by segment with the dash pattern
+     * restarting at every segment (matching the historical behavior of drawing each dash
+     * through a separate {@link #line} call) and emits every dash as a rounded capsule
+     * with the same anti-aliased halo, all inside a single primitive batch and submitted
+     * as one render state.
+     */
+    public static void dashedPolyline(GuiGraphicsExtractor graphics, List<Vec2> points, double width, int color, double dashLength, double gapLength) {
+        if (alpha(color) <= 0) {
+            return;
+        }
+        dashedPolyline(graphics, points, width, dashLength, gapLength, dashIndex -> color);
+    }
+
+    /**
+     * Same as {@link #dashedPolyline(GuiGraphicsExtractor, List, double, int, double, double)}
+     * but resolves the dash color from its ordinal along the polyline, which allows fading
+     * dash patterns without splitting the batch into one render state per dash. Dashes
+     * whose resolved color has a zero alpha channel are skipped.
+     */
+    public static void dashedPolyline(GuiGraphicsExtractor graphics, List<Vec2> points, double width, double dashLength, double gapLength, IntUnaryOperator colorForDashIndex) {
+        if (points == null || points.size() < 2 || colorForDashIndex == null || width <= 0.0D || dashLength <= 0.0D || gapLength < 0.0D) {
+            return;
+        }
+        PrimitiveBuilder builder = new PrimitiveBuilder();
+        int dashIndex = 0;
+        for (int i = 0; i + 1 < points.size(); i++) {
+            Vec2 a = points.get(i);
+            Vec2 b = points.get(i + 1);
+            if (a == null || b == null) {
+                continue;
+            }
+            double dx = b.x() - a.x();
+            double dy = b.y() - a.y();
+            double length = Math.hypot(dx, dy);
+            if (length <= 0.0D) {
+                continue;
+            }
+            double ux = dx / length;
+            double uy = dy / length;
+            for (double start = 0.0D; start < length; start += dashLength + gapLength) {
+                double end = Math.min(length, start + dashLength);
+                int dashColor = colorForDashIndex.applyAsInt(dashIndex++);
+                if (alpha(dashColor) <= 0) {
+                    continue;
+                }
+                Vec2 dashStart = new Vec2(a.x() + ux * start, a.y() + uy * start);
+                Vec2 dashEnd = new Vec2(a.x() + ux * end, a.y() + uy * end);
+                builder.capsule(dashStart, dashEnd, width + EDGE_AA_PX, withScaledAlpha(dashColor, 0.32D));
+                builder.capsule(dashStart, dashEnd, width, dashColor);
+            }
+        }
         builder.submit(graphics);
     }
 
@@ -145,6 +343,27 @@ public final class SmoothGuiPrimitives {
         builder.submit(graphics);
     }
 
+    /**
+     * Draws many thin polylines as plain per-segment rectangles — no rounded caps or
+     * joins and no anti-aliasing halo — accumulated into a single primitive batch and
+     * submitted once. Intended for dense, nearly straight decoration such as the
+     * tilted-camera background grid, where the full smoothing pipeline of
+     * {@link #polyline} costs far more than it contributes visually.
+     */
+    public static void thinSegments(GuiGraphicsExtractor graphics, List<ThinStroke> strokes) {
+        if (strokes == null || strokes.isEmpty()) {
+            return;
+        }
+        PrimitiveBuilder builder = new PrimitiveBuilder();
+        for (ThinStroke stroke : strokes) {
+            if (stroke == null || stroke.points() == null || stroke.points().size() < 2 || alpha(stroke.color()) <= 0 || stroke.width() <= 0.0D) {
+                continue;
+            }
+            builder.thinSegments(stroke.points(), stroke.width(), stroke.color());
+        }
+        builder.submit(graphics);
+    }
+
     public static void texturedQuad(GuiGraphicsExtractor graphics, TextureAtlasSprite sprite, Vec2 a, Vec2 b, Vec2 c, Vec2 d, int color, float u0, float u1, float v0, float v1) {
         texturedQuad(graphics, RenderPipelines.GUI_TEXTURED, sprite, a, b, c, d, color, u0, u1, v0, v1);
     }
@@ -180,7 +399,7 @@ public final class SmoothGuiPrimitives {
                 ? new TexturedQuad(d.x(), d.y(), u0, v1, c.x(), c.y(), u1, v1, b.x(), b.y(), u1, v0, a.x(), a.y(), u0, v0, color)
                 : new TexturedQuad(a.x(), a.y(), u0, v0, b.x(), b.y(), u1, v0, c.x(), c.y(), u1, v1, d.x(), d.y(), u0, v1, color);
         AbstractTexture atlas = Minecraft.getInstance().getTextureManager().getTexture(textureId);
-        graphics.submitGuiElementRenderState(new SmoothTexturedQuadRenderState(
+        dispatch(graphics, new SmoothTexturedQuadRenderState(
                 pipeline,
                 TextureSetup.singleTexture(atlas.getTextureView(), atlas.getSampler()),
                 pose,
@@ -303,6 +522,8 @@ public final class SmoothGuiPrimitives {
 
     public record GradientQuad(Vec2 a, Vec2 b, Vec2 c, Vec2 d, int c1, int c2, int c3, int c4) {}
 
+    public record ThinStroke(List<Vec2> points, double width, int color) {}
+
     private record TexturedQuad(double x1, double y1, float u1, float v1, double x2, double y2, float u2, float v2, double x3, double y3, float u3, float v3, double x4, double y4, float u4, float v4, int color) {}
 
     private static final class PrimitiveBuilder {
@@ -370,6 +591,27 @@ public final class SmoothGuiPrimitives {
             }
             if (endCap) {
                 this.circle(points.getLast(), radius, color);
+            }
+        }
+
+        void thinSegments(List<Vec2> points, double width, int color) {
+            double radius = width * 0.5D;
+            for (int i = 0; i + 1 < points.size(); i++) {
+                Vec2 a = points.get(i);
+                Vec2 b = points.get(i + 1);
+                double dx = b.x() - a.x();
+                double dy = b.y() - a.y();
+                double length = Math.hypot(dx, dy);
+                if (length <= 0.001D) {
+                    continue;
+                }
+                double nx = -dy / length * radius;
+                double ny = dx / length * radius;
+                this.quad(
+                        a.x() + nx, a.y() + ny, color,
+                        b.x() + nx, b.y() + ny, color,
+                        b.x() - nx, b.y() - ny, color,
+                        a.x() - nx, a.y() - ny, color);
             }
         }
 
@@ -473,7 +715,7 @@ public final class SmoothGuiPrimitives {
             if (bounds == null) {
                 return;
             }
-            graphics.submitGuiElementRenderState(new SmoothPrimitiveRenderState(RenderPipelines.GUI, TextureSetup.noTexture(), pose, List.copyOf(this.quads), scissor, bounds));
+            dispatch(graphics, new SmoothPrimitiveRenderState(RenderPipelines.GUI, TextureSetup.noTexture(), pose, List.copyOf(this.quads), scissor, bounds));
         }
     }
 

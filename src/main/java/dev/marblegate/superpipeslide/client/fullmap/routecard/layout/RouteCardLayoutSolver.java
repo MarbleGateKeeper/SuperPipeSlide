@@ -3,6 +3,7 @@ package dev.marblegate.superpipeslide.client.fullmap.routecard.layout;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
+import dev.marblegate.superpipeslide.client.fullmap.routecard.RouteCardGeometry;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardEdge;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardNode;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardNodeId;
@@ -43,10 +44,6 @@ public final class RouteCardLayoutSolver {
             new Vec2(-SQRT_HALF, -SQRT_HALF),
             new Vec2(0.0D, -1.0D),
             new Vec2(SQRT_HALF, -SQRT_HALF));
-
-    public RouteCardVisualGraph solve(RouteCardSemanticGraph graph) {
-        return this.solvePractical(graph);
-    }
 
     public RouteCardVisualGraph solvePractical(RouteCardSemanticGraph graph) {
         return this.solve(graph, RouteCardSolveMode.PRACTICAL);
@@ -1226,6 +1223,13 @@ public final class RouteCardLayoutSolver {
         };
     }
 
+    /**
+     * Space reserved around a node for its label. Mirrors the renderer's candidate
+     * order in {@code RouteLineCardRenderer.labelCandidates}, which evaluates the
+     * below-slot first (and uses it as fallback) and the above-slot second, so the
+     * solver reserves the union of the below and above slots instead of guessing a
+     * right-side slot the renderer only picks as third choice.
+     */
     private static Aabb2 labelReservation(RouteCardNode node, Vec2 point) {
         if (node.label().isBlank() || isBoundaryPort(node)) {
             return Aabb2.empty();
@@ -1233,17 +1237,17 @@ public final class RouteCardLayoutSolver {
         double radius = nodeRadius(node);
         double width = Math.max(26.0D, Math.min(118.0D, node.label().length() * 4.8D + 10.0D));
         double height = 10.0D;
-        Aabb2 right = new Aabb2(
-                point.x() + radius + 7.0D,
-                point.y() - height * 0.5D,
-                point.x() + radius + 7.0D + width,
-                point.y() + height * 0.5D);
+        Aabb2 bottom = new Aabb2(
+                point.x() - width * 0.5D,
+                point.y() + radius + 7.0D,
+                point.x() + width * 0.5D,
+                point.y() + radius + 7.0D + height);
         Aabb2 top = new Aabb2(
                 point.x() - width * 0.5D,
                 point.y() - radius - height - 7.0D,
                 point.x() + width * 0.5D,
                 point.y() - radius - 7.0D);
-        return right.include(top).inflate(SEGMENT_LABEL_PADDING);
+        return bottom.include(top).inflate(SEGMENT_LABEL_PADDING);
     }
 
     private static double edgeFootprintPadding(RouteCardEdge edge) {
@@ -1252,21 +1256,11 @@ public final class RouteCardLayoutSolver {
     }
 
     private static int nodePriority(RouteCardNode node) {
-        return switch (node.kind()) {
-            case STATION -> 650;
-            case PORTAL_BOUNDARY -> 755;
-            case FOLD_BOUNDARY -> 760;
-            case MISSING_PATH_BOUNDARY -> 720;
-        } + Math.max(0, 100 - node.layoutOccurrence());
+        return RouteCardGeometry.nodePriority(node);
     }
 
     private static double nodeRadius(RouteCardNode node) {
-        return switch (node.kind()) {
-            case STATION -> 6.0D;
-            case PORTAL_BOUNDARY -> 5.2D;
-            case FOLD_BOUNDARY -> 6.0D;
-            case MISSING_PATH_BOUNDARY -> 3.5D;
-        };
+        return RouteCardGeometry.baseRadius(node.kind());
     }
 
     private static Aabb2 worldBounds(List<RouteCardNode> nodes) {
@@ -1617,23 +1611,11 @@ public final class RouteCardLayoutSolver {
     }
 
     private static double distanceToPolyline(Vec2 point, List<Vec2> points) {
-        double best = Double.POSITIVE_INFINITY;
-        for (int i = 0; i + 1 < points.size(); i++) {
-            best = Math.min(best, distanceToSegment(point, points.get(i), points.get(i + 1)));
-        }
-        return best;
+        return RouteCardGeometry.distanceToPolyline(point, points);
     }
 
     private static double distanceToSegment(Vec2 point, Vec2 a, Vec2 b) {
-        double dx = b.x() - a.x();
-        double dy = b.y() - a.y();
-        double len2 = dx * dx + dy * dy;
-        if (len2 <= 1.0E-6D) {
-            return point.distanceTo(a);
-        }
-        double t = ((point.x() - a.x()) * dx + (point.y() - a.y()) * dy) / len2;
-        double clamped = Math.max(0.0D, Math.min(1.0D, t));
-        return point.distanceTo(new Vec2(a.x() + dx * clamped, a.y() + dy * clamped));
+        return RouteCardGeometry.distanceToSegment(point, a, b);
     }
 
     private static boolean pathsIntersect(List<Vec2> first, List<Vec2> second) {
@@ -1702,11 +1684,7 @@ public final class RouteCardLayoutSolver {
     }
 
     private static Aabb2 boundsFor(List<Vec2> points) {
-        Aabb2 bounds = Aabb2.empty();
-        for (Vec2 point : points) {
-            bounds = bounds.include(point.x(), point.y());
-        }
-        return bounds;
+        return RouteCardGeometry.boundsFor(points);
     }
 
     private static Aabb2 boundsForPositions(Map<RouteCardNodeId, Vec2> positions) {

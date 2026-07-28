@@ -1,15 +1,20 @@
 package dev.marblegate.superpipeslide.client.fullmap.screen;
 
+import dev.marblegate.superpipeslide.client.SuperPipeSlideClient;
+import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.navigation.ClientNavigationController;
+import dev.marblegate.superpipeslide.client.core.navigation.NavigationSemanticColors;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.fullmap.cache.FullRouteMapCache;
+import dev.marblegate.superpipeslide.client.fullmap.cache.FullRouteMapSessionState;
 import dev.marblegate.superpipeslide.client.fullmap.card.CardKind;
 import dev.marblegate.superpipeslide.client.fullmap.card.MapCard;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.hit.ClusterCardHit;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.hit.ClusterCardHitKind;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.layout.ClusterCardLayoutSolver;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.model.ClusterCardEdge;
+import dev.marblegate.superpipeslide.client.fullmap.cluster.model.ClusterCardEdgeKind;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.model.ClusterCardNode;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.model.ClusterCardNodeKind;
 import dev.marblegate.superpipeslide.client.fullmap.cluster.model.ClusterCardProfile;
@@ -22,6 +27,9 @@ import dev.marblegate.superpipeslide.client.fullmap.cluster.semantic.ClusterCard
 import dev.marblegate.superpipeslide.client.fullmap.cluster.visual.ClusterCardVisualGraph;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapLayoutMode;
+import dev.marblegate.superpipeslide.client.fullmap.diagnostic.DiagnosticType;
+import dev.marblegate.superpipeslide.client.fullmap.diagnostic.MapBuildDiagnostic;
+import dev.marblegate.superpipeslide.client.fullmap.diagnostic.MissingCrossDimensionReason;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapCluster;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapDimensionGraph;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapEdge;
@@ -33,7 +41,6 @@ import dev.marblegate.superpipeslide.client.fullmap.model.NodeKind;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.ViewportState;
-import dev.marblegate.superpipeslide.client.fullmap.model.hit.HitKind;
 import dev.marblegate.superpipeslide.client.fullmap.model.hit.HitTarget;
 import dev.marblegate.superpipeslide.client.fullmap.model.search.SearchKind;
 import dev.marblegate.superpipeslide.client.fullmap.model.search.SearchResult;
@@ -52,7 +59,10 @@ import dev.marblegate.superpipeslide.client.fullmap.routecard.hit.RouteLineCardH
 import dev.marblegate.superpipeslide.client.fullmap.routecard.hit.ViewModeChipHit;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.layout.RouteCardLayoutSolver;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.layout.RouteCardPhysicalLayoutBuilder;
+import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardEdge;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardNode;
+import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardNodeId;
+import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardNodeKind;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardSemanticGraph;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardViewMode;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardViewport;
@@ -61,6 +71,7 @@ import dev.marblegate.superpipeslide.client.fullmap.routecard.render.RouteLineCa
 import dev.marblegate.superpipeslide.client.fullmap.routecard.render.RouteLineCardState;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.semantic.RouteCardSemanticBuilder;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.visual.RouteCardVisualGraph;
+import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicQualityReport;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualEdgePath;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualNode;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualRouteMapGraph;
@@ -79,6 +90,7 @@ import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
 import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationTransferLink;
+import dev.marblegate.superpipeslide.config.ClientConfig;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -89,6 +101,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -98,19 +111,63 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 import org.lwjgl.glfw.GLFW;
 
 public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScreen {
-    private static final int MAX_CARD_STACK_DEPTH = 10;
     private static final int MAX_ROUTE_CARD_GRAPH_CACHE_ENTRIES = 96;
+    private static final int MAX_CLUSTER_CARD_GRAPH_CACHE_ENTRIES = 32;
     private static final int NAVIGATION_RESULT_LIMIT = 32;
     private static final int NAVIGATION_RESULT_ROW_HEIGHT = 30;
     private static final int NAVIGATION_SIMPLE_STEP_HEIGHT = 22;
     private static final int NAVIGATION_RIDE_STATION_ROW_HEIGHT = 10;
     private static final int NAVIGATION_ITINERARY_STEP_GAP = 2;
+    private static final double MAP_CLICK_DRAG_THRESHOLD_PX = 6.0D;
+    private static final long MAP_DOUBLE_CLICK_INTERVAL_MILLIS = 400L;
+    private static final long NAVIGATION_CANCEL_CONFIRM_TIMEOUT_MILLIS = 3000L;
+    private static final long NAVIGATION_UNDO_TOAST_DURATION_MILLIS = 5000L;
+    // D1: viewport tween / inertia / soft bounds tuning.
+    private static final long VIEWPORT_TWEEN_DURATION_MILLIS = 240L;
+    private static final long VIEWPORT_SCROLL_TWEEN_DURATION_MILLIS = 120L;
+    private static final double MAP_WHEEL_ZOOM_STEP = 1.18D;
+    private static final double MAP_KEY_ZOOM_STEP = 1.25D;
+    private static final double MAP_DOUBLE_CLICK_ZOOM_FACTOR = 1.5D;
+    private static final double MAP_PAN_KEY_STEP_RATIO = 0.15D;
+    private static final double MAP_PAN_KEY_SHIFT_MULTIPLIER = 3.0D;
+    private static final long TOAST_DURATION_MILLIS = 1800L;
+
+    /** Wheel zoom step with the player's configured sensitivity applied (1.0 = default). */
+    private static double wheelZoomStep() {
+        return Math.pow(MAP_WHEEL_ZOOM_STEP, ClientConfig.FULL_ROUTE_MAP_ZOOM_SENSITIVITY.get());
+    }
+
+    private static final double MAP_SOFT_BOUNDS_PADDING_RATIO = 0.2D;
+    private static final double MAP_SOFT_BOUNDS_MIN_PADDING_BLOCKS = 64.0D;
+    private static final double MAP_INERTIA_DECAY_PER_FRAME = 0.88D;
+    private static final long MAP_INERTIA_MAX_MILLIS = 1200L;
+    private static final double MAP_INERTIA_MIN_SPEED_PX_PER_FRAME = 0.4D;
+    private static final double MAP_INERTIA_MAX_SPEED_PX_PER_FRAME = 60.0D;
+    // F5: hover focus ring / tooltip fade-in durations. Both transitions are skipped
+    // entirely while the photosensitivity safety option is on (same gating as the
+    // world-space pulses in phase A).
+    private static final long HOVER_FOCUS_FADE_IN_MILLIS = 120L;
+    private static final long TOOLTIP_FADE_IN_MILLIS = 80L;
+    // F6: named text scales for labels that have no FullMapTheme.TYPE_* counterpart
+    // (the theme only defines TYPE_TITLE/BODY/META/TINY at 1.0/0.80/0.64/0.55, and it
+    // is owned by another change, so these stay local to the screen).
+    private static final float ROW_TITLE_TEXT_SCALE = 0.68F;
+    private static final float ROW_DETAIL_TEXT_SCALE = 0.56F;
+    private static final float ROW_META_TEXT_SCALE = 0.54F;
+    private static final float ROW_SUB_TEXT_SCALE = 0.52F;
+    private static final float ROW_ENDPOINT_TEXT_SCALE = 0.57F;
+    private static final float ACTION_LABEL_TEXT_SCALE = 0.58F;
+    private static final float SCALE_BAR_TEXT_SCALE = 0.62F;
+    private static final float COMPASS_TEXT_SCALE = 0.50F;
 
     private final FullRouteMapRenderer renderer = new FullRouteMapRenderer();
     private final FullMapNavigationOverlayRenderer navigationOverlayRenderer = new FullMapNavigationOverlayRenderer();
@@ -122,8 +179,10 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private final ClusterCardLayoutSolver clusterCardLayoutSolver = new ClusterCardLayoutSolver();
     private final ClusterCardRenderer clusterCardRenderer = new ClusterCardRenderer();
     private final Map<ResourceKey<Level>, ViewportState> viewports = new HashMap<>();
-    private final List<MapCard> cardStack = new ArrayList<>();
-    private final List<SPSGui.Rect> cardBounds = new ArrayList<>();
+    // G8: the card stack, its window bounds and all stack operations live in
+    // MapCardManager; the callbacks wire the screen-side cleanup (render regions,
+    // focus keys) and the card-limit eviction toast back in.
+    private final MapCardManager cardManager = new MapCardManager(this::onCardRemovedFromStack, this::showCardLimitToast);
     private final Map<String, Double> lineStripScrolls = new HashMap<>();
     private final Map<String, SPSGui.Rect> lineStripRegions = new HashMap<>();
     private final Map<String, Double> lineStripMaxScrolls = new HashMap<>();
@@ -133,7 +192,6 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private final Map<String, Double> stationCardRouteScrolls = new HashMap<>();
     private final Map<String, SPSGui.Rect> stationCardRouteRegions = new HashMap<>();
     private final Map<String, Double> stationCardRouteMaxScrolls = new HashMap<>();
-    private final Map<String, SPSGui.Rect> cardWindowBounds = new HashMap<>();
     private final Map<String, SPSGui.Rect> routeCardMapRegions = new HashMap<>();
     private final Map<String, List<SPSGui.Rect>> routeCardControlRegions = new HashMap<>();
     private final Map<String, RouteCardViewport> routeCardResolvedViewports = new HashMap<>();
@@ -141,6 +199,12 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         @Override
         protected boolean removeEldestEntry(Map.Entry<RouteCardGraphCacheKey, RouteCardGraphBundle> eldest) {
             return this.size() > MAX_ROUTE_CARD_GRAPH_CACHE_ENTRIES;
+        }
+    };
+    private final Map<ClusterCardGraphCacheKey, ClusterCardGraphBundle> clusterCardGraphCache = new LinkedHashMap<>(32, 0.75F, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<ClusterCardGraphCacheKey, ClusterCardGraphBundle> eldest) {
+            return this.size() > MAX_CLUSTER_CARD_GRAPH_CACHE_ENTRIES;
         }
     };
     private final Map<String, SPSGui.Rect> clusterCardMapRegions = new HashMap<>();
@@ -165,11 +229,14 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private Optional<String> focusedClusterCardKey = Optional.empty();
     private ResourceKey<Level> activeDimension;
     private SPSGui.Rect mapRect = new SPSGui.Rect(0, 0, 0, 0);
-    private SPSGui.Rect topCardBounds = new SPSGui.Rect(0, 0, 0, 0);
     private SPSGui.Rect layoutModeStripBounds = new SPSGui.Rect(0, 0, 0, 0);
     private SPSGui.Rect cameraCompassBounds = new SPSGui.Rect(0, 0, 0, 0);
     private SPSGui.Rect schematicLegendBounds = new SPSGui.Rect(0, 0, 0, 0);
     private SPSGui.Rect dimensionChipBounds = new SPSGui.Rect(0, 0, 0, 0);
+    private SPSGui.Rect diagnosticsBadgeBounds = new SPSGui.Rect(0, 0, 0, 0);
+    private SPSGui.Rect diagnosticsPanelBounds = new SPSGui.Rect(0, 0, 0, 0);
+    private boolean diagnosticsPanelOpen;
+    private double diagnosticsScroll;
     private SPSGui.Rect dimensionMenuBounds = new SPSGui.Rect(0, 0, 0, 0);
     private SPSGui.Rect searchControlBounds = new SPSGui.Rect(0, 0, 0, 0);
     private SPSGui.Rect searchResultsBounds = new SPSGui.Rect(0, 0, 0, 0);
@@ -185,12 +252,23 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private boolean searchExpanded;
     private boolean navigationSheetExpanded;
     private boolean navigationCrossDimensionConfirmationArmed;
+    private boolean navigationCancelArmed;
+    private long navigationCancelArmedAtMillis;
     private boolean draggingMapCamera;
     private boolean draggingNavigationDrawer;
     private boolean schematicLegendCollapsed;
     private double schematicLegendScroll;
     private double schematicLegendMaxScroll;
     private Optional<UUID> schematicLegendHoverRouteLineId = Optional.empty();
+    @Nullable
+    private MapDimensionGraph cachedSchematicLegendGraph;
+    @Nullable
+    private VisualRouteMapGraph cachedSchematicLegendVisualGraph;
+    @Nullable
+    private ViewportState cachedSchematicLegendViewport;
+    private int cachedSchematicLegendMapWidth = -1;
+    private int cachedSchematicLegendMapHeight = -1;
+    private List<SchematicLegendRow> cachedSchematicLegendRows = List.of();
     @Nullable
     private UUID selectedNavigationStationGroupId;
     @Nullable
@@ -204,15 +282,90 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     @Nullable
     private ResourceKey<Level> cachedNavigationLevelKey;
     private List<ClientNavigationController.DestinationSearchResult> cachedNavigationResults = List.of();
+    private String cachedSearchQuery = "";
+    private long cachedSearchRouteRevision = Long.MIN_VALUE;
+    @Nullable
+    private ResourceKey<Level> cachedSearchDimension;
+    private List<SearchResult> cachedSearchResults = List.of();
+    private long cachedDimensionCountsRouteRevision = Long.MIN_VALUE;
+    private long cachedDimensionCountsPipeRevision = Long.MIN_VALUE;
+    private final Map<ResourceKey<Level>, int[]> cachedDimensionCounts = new HashMap<>();
     private double navigationResultScroll;
     private double navigationItineraryScroll;
     private final Set<Integer> navigationExpandedRideSteps = new HashSet<>();
     private HitTarget hover = HitTarget.none();
+    // F5: hover focus ring fade-in. FullRouteMapRenderer owns the ring geometry but
+    // exposes no alpha hook, so during the fade window the screen strips the node id
+    // from the hit target handed to the renderer (suppressing its focus ring) and
+    // draws an equivalent ring itself with a ramped alpha; once the ramp completes
+    // the renderer takes over again.
+    private Object hoverFocusKey = "";
+    private long hoverFocusChangedAtMillis = Long.MIN_VALUE;
+    private List<HoverFocusRing> hoverFocusRings = List.of();
+    private float hoverFocusAlpha = 1.0F;
+    // F5: tooltip fade-in. Keyed on the tooltip text; the ramp restarts when the
+    // content changes or the tooltip was absent for at least one frame (re-hover).
+    private String tooltipFadeKey = "";
+    private long tooltipFadeShownAtMillis = Long.MIN_VALUE;
+    private long tooltipFadeLastSeenFrame = Long.MIN_VALUE;
+    private long tooltipFadeFrameCounter;
     private String toast = "";
     private long toastUntilMillis;
+    @Nullable
+    private Runnable toastAction;
+    private String toastActionLabel = "";
+    private Optional<PendingMapClick> pendingMapClick = Optional.empty();
+    private long lastMapClickReleaseMillis = Long.MIN_VALUE;
+    private double lastMapClickReleaseX;
+    private double lastMapClickReleaseY;
+    @Nullable
+    private ViewportTween viewportTween;
+    private boolean panningMap;
+    private long lastPanSampleMillis;
+    private double panVelocityX;
+    private double panVelocityZ;
+    private boolean mapInertiaActive;
+    private double mapInertiaVelocityX;
+    private double mapInertiaVelocityZ;
+    private long mapInertiaStartedMillis;
+    private long mapInertiaLastTickMillis;
+    // D3: search text restored from the previous session; consumed by the first rebuildWidgets.
+    private String restoredSearchText = "";
+    // D4: per-frame scroll bar bindings (re-registered at each bar's draw site) plus the
+    // transient scroll-drag state machine.
+    private final Map<String, FullMapScrollBar.Binding> scrollBarBindings = new LinkedHashMap<>();
+    @Nullable
+    private FullMapScrollBar.Drag scrollBarDrag;
+    @Nullable
+    private PendingRowScroll pendingRowScroll;
+    // D5: sticky tooltip/preview placement across frames (placement hysteresis).
+    @Nullable
+    private SPSGui.Rect tooltipPlacement;
+    @Nullable
+    private SPSGui.Rect hoverPreviewPlacement;
 
     public FullRouteMapScreen() {
         super(Component.translatable("screen.superpipeslide.full_map"));
+        // D3: adopt the previous session's UI state. Restored cards whose data vanished
+        // meanwhile fall back to the renderers' "missing" branches; card windows outside
+        // the current window size are clamped by the card manager's per-frame bounds pass.
+        FullRouteMapSessionState.Snapshot session = FullRouteMapSessionState.snapshot();
+        this.viewports.putAll(session.viewports());
+        this.cardManager.restore(session.cardWindowBounds(), session.cardStack());
+        this.restoredSearchText = session.searchText();
+        this.navigationDrawerUserXRatio = session.navigationDrawerUserXRatio();
+        this.navigationDrawerUserYRatio = session.navigationDrawerUserYRatio();
+        if (Double.isFinite(this.navigationDrawerUserXRatio) || Double.isFinite(this.navigationDrawerUserYRatio)) {
+            // computeNavigationDrawerBounds derives the drawer position from the ratios
+            // whenever userBounds is non-null; the ratios rescale to the new window size.
+            this.navigationDrawerUserBounds = new SPSGui.Rect(0, 0, 0, 0);
+        }
+        this.lineStripScrolls.putAll(session.lineStripScrolls());
+        this.routeCardStopListScrolls.putAll(session.routeCardStopListScrolls());
+        this.stationCardRouteScrolls.putAll(session.stationCardRouteScrolls());
+        this.navigationResultScroll = session.navigationResultScroll();
+        this.navigationItineraryScroll = session.navigationItineraryScroll();
+        this.schematicLegendScroll = session.schematicLegendScroll();
     }
 
     @Override
@@ -223,18 +376,26 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     @Override
     protected void rebuildWidgets() {
         this.clearWidgets();
-        this.searchBox = this.borderlessBox(-1000, -1000, 1, this.searchBox == null ? "" : this.searchBox.getValue());
+        this.searchBox = this.borderlessBox(-1000, -1000, 1, this.searchBox == null ? this.restoredSearchText : this.searchBox.getValue());
     }
 
     @Override
     public void refreshFromRouteSnapshot() {
         FullRouteMapCache.invalidate();
         this.routeCardGraphCache.clear();
+        this.clusterCardGraphCache.clear();
+        this.cachedSearchRouteRevision = Long.MIN_VALUE;
+        this.cachedDimensionCountsRouteRevision = Long.MIN_VALUE;
+        this.cachedDimensionCountsPipeRevision = Long.MIN_VALUE;
+        this.cachedDimensionCounts.clear();
+        this.cachedSchematicLegendGraph = null;
+        this.cachedSchematicLegendVisualGraph = null;
     }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         this.beginFrame();
+        this.tooltipFadeFrameCounter++;
         this.lineStripRegions.clear();
         this.lineStripMaxScrolls.clear();
         this.routeCardMapRegions.clear();
@@ -252,10 +413,13 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         this.hoverOverlayAvoidRects.clear();
         this.deferredCardOverlays.clear();
         this.mapChromeBounds.clear();
+        this.scrollBarBindings.clear();
         this.mapRect = new SPSGui.Rect(0, 0, this.width, this.height);
         FullRouteMapCache.refresh(false);
         this.refreshSelectedNavigationPlanIfStale(ClientRouteDataCache.revision(), ClientPipeNetworkCache.aggregateRevision());
         this.ensureActiveDimension();
+        this.tickViewportDynamics();
+        this.cardManager.updateWindowBounds(this.width, this.height);
         this.updateMapChromeBounds();
 
         Optional<MapDimensionGraph> graph = this.activeDimension == null ? Optional.empty() : FullRouteMapCache.graph(this.activeDimension);
@@ -266,10 +430,12 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         this.schematicLegendHoverRouteLineId = Optional.empty();
         if (FullRouteMapCache.layoutMode().physical() && physicalGraph.isPresent()) {
             ViewportState viewport = this.viewportFor(physicalGraph.get());
-            this.hover = this.topmostCardAt(mouseX, mouseY).isPresent() || mapChromeBlocksHover || contextPickerBlocksHover
+            this.hover = this.cardManager.topmostCardAt(mouseX, mouseY).isPresent() || mapChromeBlocksHover || contextPickerBlocksHover
                     ? HitTarget.none()
                     : this.renderer.hitTestPhysical(physicalGraph.get(), viewport, this.mapRect, mouseX, mouseY);
-            this.renderer.renderPhysical(graphics, this.font, physicalGraph.get(), viewport, this.mapRect, this.hover, mouseX, mouseY);
+            HitTarget renderHover = this.beginHoverFocusFade(physicalGraph.get(), viewport);
+            this.renderer.renderPhysical(graphics, this.font, physicalGraph.get(), viewport, this.mapRect, renderHover, mouseX, mouseY);
+            this.renderHoverFocusFade(graphics);
             this.currentNavigationOverlayPlan().ifPresent(plan -> this.navigationOverlayRenderer.renderPhysical(
                     graphics,
                     physicalGraph.get(),
@@ -278,13 +444,15 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     plan,
                     this.navigationActiveSegmentIndex(plan)));
         } else if (graph.isPresent()) {
-            ViewportState viewport = this.viewportFor(graph.get());
+            ViewportState viewport = this.displayViewport(graph.get());
             List<SchematicLegendRow> schematicLegendRows = this.schematicLegendRows(graph.get(), visualGraph.orElse(null), viewport);
             this.schematicLegendHoverRouteLineId = this.hoveredSchematicLegendRoute(schematicLegendRows, mouseX, mouseY);
-            this.hover = this.topmostCardAt(mouseX, mouseY).isPresent() || mapChromeBlocksHover || contextPickerBlocksHover
+            this.hover = this.cardManager.topmostCardAt(mouseX, mouseY).isPresent() || mapChromeBlocksHover || contextPickerBlocksHover
                     ? HitTarget.none()
                     : this.renderer.hitTest(graph.get(), visualGraph.orElse(null), viewport, this.mapRect, mouseX, mouseY);
-            this.renderer.render(graphics, this.font, graph.get(), visualGraph.orElse(null), viewport, this.mapRect, this.hover, mouseX, mouseY, this.schematicLegendHoverRouteLineId);
+            HitTarget renderHover = this.beginHoverFocusFade(graph.get(), visualGraph.orElse(null), viewport);
+            this.renderer.render(graphics, this.font, graph.get(), visualGraph.orElse(null), viewport, this.mapRect, renderHover, mouseX, mouseY, this.schematicLegendHoverRouteLineId);
+            this.renderHoverFocusFade(graphics);
             this.currentNavigationOverlayPlan().ifPresent(plan -> this.navigationOverlayRenderer.render(
                     graphics,
                     graph.get(),
@@ -293,26 +461,40 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     this.mapRect,
                     plan,
                     this.navigationActiveSegmentIndex(plan)));
+            // A dimension with nothing to draw usually means broken data: surface the
+            // first diagnostic instead of leaving a blank map (ghost dimension).
+            if (graph.get().nodes().isEmpty() && !graph.get().diagnostics().isEmpty()) {
+                MapBuildDiagnostic first = graph.get().diagnostics().getFirst();
+                SPSGui.centeredText(graphics, this.font, Component.translatable(diagnosticNameKey(first.type())), this.width / 2, this.height / 2 - 8, FullMapTheme.WARNING);
+                SPSGui.centeredText(graphics, this.font, Component.translatable(diagnosticGuideKey(first.type())), this.width / 2, this.height / 2 + 6, FullMapTheme.TEXT_MUTED);
+            }
         } else {
             FullRouteMapRenderer.drawMapBackground(graphics, this.mapRect, 0.0D, 0.0D, FullRouteMapConfig.BASE_SCALE, FullRouteMapCache.layoutMode());
             SPSGui.centeredText(graphics, this.font, Component.translatable("screen.superpipeslide.full_map.no_data"), this.width / 2, this.height / 2, FullRouteMapConfig.MAP_LABEL_MUTED);
             this.hover = HitTarget.none();
+            this.trackHoverFocusChange();
+            this.hoverFocusRings = List.of();
+            this.hoverFocusAlpha = 1.0F;
         }
 
         this.renderScaleBar(graphics);
         this.renderLayoutModeStrip(graphics, mouseX, mouseY);
+        this.renderBuildingIndicator(graphics);
+        this.renderSchematicQualityOverlay(graphics, visualGraph.orElse(null));
         this.renderCameraCompass(graphics, mouseX, mouseY);
         this.renderSchematicRouteLegend(graphics, graph.orElse(null), visualGraph.orElse(null), mouseX, mouseY);
         this.renderDimensionControl(graphics, mouseX, mouseY);
+        this.renderDiagnosticsControl(graphics, mouseX, mouseY);
         this.renderSearchControl(graphics, mouseX, mouseY);
         super.extractRenderState(graphics, mouseX, mouseY, partialTick);
         this.renderCards(graphics, mouseX, mouseY);
         this.renderFullMapNavigationSearch(graphics, mouseX, mouseY);
         this.renderFullMapNavigationPanel(graphics, mouseX, mouseY);
         this.renderDimensionMenu(graphics, mouseX, mouseY);
+        this.renderDiagnosticsPanel(graphics, mouseX, mouseY);
         this.renderContextPicker(graphics, mouseX, mouseY);
         this.renderToast(graphics);
-        if (this.topmostCardAt(mouseX, mouseY).isEmpty() && this.contextPicker.isEmpty()) {
+        if (this.cardManager.topmostCardAt(mouseX, mouseY).isEmpty() && this.contextPicker.isEmpty()) {
             if (FullRouteMapCache.layoutMode().physical()) {
                 this.renderPhysicalFoldHoverPreview(graphics, physicalGraph.orElse(null), mouseX, mouseY);
                 this.renderPhysicalHoverTooltip(graphics, physicalGraph.orElse(null), mouseX, mouseY);
@@ -344,13 +526,13 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             ContextPicker picker = this.contextPicker.get();
             for (int i = 0; i < Math.min(this.contextPickerActionBounds.size(), picker.actions().size()); i++) {
                 if (this.contextPickerActionBounds.get(i).contains(mouseX, mouseY) && !picker.actions().get(i).tooltip().getString().isBlank()) {
-                    FullMapTooltipCard.renderComponent(graphics, this.font, this.screenBounds(), mouseX, mouseY, picker.actions().get(i).tooltip());
+                    this.tooltipPlacement = FullMapTooltipCard.renderComponent(graphics, this.font, this.screenBounds(), mouseX, mouseY, this.tooltipPlacement, picker.actions().get(i).tooltip(), this.tooltipFadeOpacity(picker.actions().get(i).tooltip().getString()));
                     return;
                 }
             }
             return;
         }
-        Optional<String> hoveredCard = this.mapPopoverBlocks(mouseX, mouseY) ? Optional.empty() : this.topmostCardAt(mouseX, mouseY);
+        Optional<String> hoveredCard = this.mapPopoverBlocks(mouseX, mouseY) ? Optional.empty() : this.cardManager.topmostCardAt(mouseX, mouseY);
         List<ClickAction> actions = hoveredCard
                 .map(key -> this.cardClickActions.getOrDefault(key, List.of()))
                 .orElse(this.backgroundClickActions);
@@ -359,11 +541,168 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 if (clickAction.tooltip().getString().isBlank()) {
                     continue;
                 }
-                FullMapTooltipCard.renderComponent(graphics, this.font, this.screenBounds(), mouseX, mouseY, clickAction.tooltip());
+                this.tooltipPlacement = FullMapTooltipCard.renderComponent(graphics, this.font, this.screenBounds(), mouseX, mouseY, this.tooltipPlacement, clickAction.tooltip(), this.tooltipFadeOpacity(clickAction.tooltip().getString()));
                 return;
             }
         }
     }
+
+    // === F5: hover focus ring fade-in ===
+    // The renderer's focus ring reads static colors and takes no alpha parameter, and
+    // FullRouteMapRenderer is out of scope for this change. The fade is therefore done
+    // as a screen-layer takeover: while the ramp runs, the node id is stripped from the
+    // hit target handed to the renderer (suppressing its ring and only its ring --
+    // edge/hint hovers ride along untouched) and renderHoverFocusFade draws an
+    // equivalent ring with a ramped alpha. Once the ramp completes the renderer draws
+    // its own ring again, so no geometry duplication persists beyond the 120ms window.
+
+    /**
+     * Tracks hover-target changes and, while the fade-in ramp runs, returns the hit
+     * target to hand to the renderer with the node id stripped. Outside the ramp the
+     * live hover passes through untouched.
+     */
+    private HitTarget beginHoverFocusFade(MapDimensionGraph graph, @Nullable VisualRouteMapGraph visualGraph, ViewportState viewport) {
+        this.trackHoverFocusChange();
+        this.hoverFocusRings = List.of();
+        this.hoverFocusAlpha = 1.0F;
+        if (ClientSafetyOptions.reducePhotosensitivityRisk() || !(this.hover instanceof HitTarget.NodeHit(var hoveredNodeId))) {
+            return this.hover;
+        }
+        MapNode hovered = graph.node(hoveredNodeId).orElse(null);
+        if (hovered == null) {
+            return this.hover;
+        }
+        // Only plain nodes fade: hovering a transfer station or a fold anchor also
+        // lights auxiliary nodes (transfer group / fold peer) through renderer-side
+        // derivations the screen cannot reproduce here, so those keep the instant
+        // treatment rather than fading partially.
+        if (hovered.kind() == NodeKind.FOLD_ANCHOR || hovered.isTransferStation()) {
+            return this.hover;
+        }
+        float alpha = this.hoverFocusRamp();
+        if (alpha >= 1.0F) {
+            return this.hover;
+        }
+        Vec2 visual = FullRouteMapRenderer.visualPosition(graph, visualGraph, hovered);
+        this.hoverFocusRings = List.of(new HoverFocusRing(FullRouteMapRenderer.worldToScreen(visual.x(), visual.y(), viewport, this.mapRect), mapNodeRingRadius(hovered, viewport.zoom()), false));
+        this.hoverFocusAlpha = alpha;
+        // The node id is the whole payload of a NodeHit, so the stripped target is "no hit".
+        return HitTarget.none();
+    }
+
+    /** Physical-graph variant of {@link #beginHoverFocusFade(MapDimensionGraph, VisualRouteMapGraph, ViewportState)}. */
+    private HitTarget beginHoverFocusFade(PhysicalRouteMapGraph graph, ViewportState viewport) {
+        this.trackHoverFocusChange();
+        this.hoverFocusRings = List.of();
+        this.hoverFocusAlpha = 1.0F;
+        if (ClientSafetyOptions.reducePhotosensitivityRisk() || !(this.hover instanceof HitTarget.PhysicalNodeHit(var hoveredNodeId))) {
+            return this.hover;
+        }
+        PhysicalMapNode hovered = graph.node(hoveredNodeId).orElse(null);
+        if (hovered == null) {
+            return this.hover;
+        }
+        float alpha = this.hoverFocusRamp();
+        if (alpha >= 1.0F) {
+            return this.hover;
+        }
+        // Every node the renderer would ring for this hover (the direct target, the
+        // same station group's platforms, a fold counterpart living in the same graph)
+        // fades together, so nothing pops in when the renderer takes over at full alpha.
+        Optional<UUID> stationGroup = hovered.stationGroupId();
+        Optional<PipeAnchorId> foldCounterpart = hovered.foldAnchorId().flatMap(ClientPipeNetworkCache::globalFoldCounterpart);
+        List<HoverFocusRing> rings = new ArrayList<>();
+        for (PhysicalMapNode node : graph.nodes()) {
+            boolean ringed = node.id().equals(hovered.id())
+                    || stationGroup.isPresent() && node.stationGroupId().filter(stationGroup.get()::equals).isPresent()
+                    || foldCounterpart.isPresent() && node.foldAnchorId().filter(foldCounterpart.get()::equals).isPresent();
+            if (ringed) {
+                rings.add(new HoverFocusRing(
+                        FullRouteMapRenderer.worldToScreen(node.worldX(), node.worldZ(), viewport, this.mapRect),
+                        physicalNodeRingRadius(node.kind(), viewport.zoom()),
+                        node.kind() == PhysicalNodeKind.FOLD_ANCHOR));
+            }
+        }
+        this.hoverFocusRings = rings;
+        this.hoverFocusAlpha = alpha;
+        // The node id is the whole payload of a PhysicalNodeHit, so the stripped target is "no hit".
+        return HitTarget.none();
+    }
+
+    /** Draws the fade-in focus rings collected by {@code beginHoverFocusFade} this frame. */
+    private void renderHoverFocusFade(GuiGraphicsExtractor graphics) {
+        if (this.hoverFocusRings.isEmpty() || this.hoverFocusAlpha >= 1.0F) {
+            return;
+        }
+        int halo = fadeAlpha(FullRouteMapConfig.MAP_FOCUS_HALO, this.hoverFocusAlpha);
+        int ring = fadeAlpha(FullRouteMapConfig.MAP_FOCUS_RING, this.hoverFocusAlpha);
+        for (HoverFocusRing focus : this.hoverFocusRings) {
+            if (focus.diamond()) {
+                SmoothGuiPrimitives.diamond(graphics, focus.center(), focus.radius() + 5.0D, halo);
+                SmoothGuiPrimitives.diamond(graphics, focus.center(), focus.radius() + 2.0D, ring);
+            } else {
+                SmoothGuiPrimitives.circle(graphics, focus.center(), focus.radius() + 5.0D, halo);
+                SmoothGuiPrimitives.circle(graphics, focus.center(), focus.radius() + 2.0D, ring);
+            }
+        }
+    }
+
+    private void trackHoverFocusChange() {
+        Object key = switch (this.hover) {
+            case HitTarget.NodeHit(var nodeId) -> nodeId;
+            case HitTarget.PhysicalNodeHit(var nodeId) -> "physical:" + nodeId;
+            default -> "";
+        };
+        if (!key.equals(this.hoverFocusKey)) {
+            this.hoverFocusKey = key;
+            this.hoverFocusChangedAtMillis = System.currentTimeMillis();
+        }
+    }
+
+    private float hoverFocusRamp() {
+        return Math.max(0.0F, Math.min(1.0F, (System.currentTimeMillis() - this.hoverFocusChangedAtMillis) / (float) HOVER_FOCUS_FADE_IN_MILLIS));
+    }
+
+    /**
+     * Fade-in opacity for a tooltip identified by {@code key}. The ramp restarts when
+     * the key changes or when the tooltip skipped at least one frame (it reappeared).
+     */
+    private float tooltipFadeOpacity(String key) {
+        if (ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return 1.0F;
+        }
+        long now = System.currentTimeMillis();
+        if (!key.equals(this.tooltipFadeKey) || this.tooltipFadeLastSeenFrame < this.tooltipFadeFrameCounter - 1L) {
+            this.tooltipFadeKey = key;
+            this.tooltipFadeShownAtMillis = now;
+        }
+        this.tooltipFadeLastSeenFrame = this.tooltipFadeFrameCounter;
+        return Math.min(1.0F, (now - this.tooltipFadeShownAtMillis) / (float) TOOLTIP_FADE_IN_MILLIS);
+    }
+
+    /** Scales a color's own alpha channel by {@code factor} (0..1). */
+    private static int fadeAlpha(int color, float factor) {
+        return SPSGui.withAlpha(color, Math.round((color >>> 24) * factor));
+    }
+
+    // Ring radii mirror FullRouteMapRenderer's node sizing (iconScale / nodeRadius /
+    // physicalNodeRadius). Exact for the flat camera; with the perspective camera
+    // tilted the overlay radius is approximate for the fade's 120ms, after which the
+    // renderer's exact ring takes over.
+    private static double mapNodeRingRadius(MapNode node, double zoom) {
+        double scale = Math.max(0.35D, Math.min(1.0D, zoom));
+        double base = node.kind() == NodeKind.CLUSTER || node.kind() == NodeKind.DEEP_CLUSTER ? FullRouteMapConfig.CLUSTER_RADIUS_PX : FullRouteMapConfig.NODE_RADIUS_PX;
+        double min = node.kind() == NodeKind.CLUSTER || node.kind() == NodeKind.DEEP_CLUSTER ? 4.0D : 2.0D;
+        return Math.max(min, (int) Math.round(base * scale));
+    }
+
+    private static double physicalNodeRingRadius(PhysicalNodeKind kind, double zoom) {
+        double scale = Math.max(0.48D, Math.min(1.45D, 0.62D + zoom * 0.12D));
+        double base = kind == PhysicalNodeKind.FOLD_ANCHOR ? FullRouteMapConfig.NODE_RADIUS_PX + 1.0D : FullRouteMapConfig.NODE_RADIUS_PX - 1.0D;
+        return Math.max(3.0D, base * scale);
+    }
+
+    private record HoverFocusRing(Vec2 center, double radius, boolean diamond) {}
 
     private void renderDeferredCardOverlays() {
         for (Runnable overlay : this.deferredCardOverlays) {
@@ -393,6 +732,8 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         this.navigationDrawerBounds = this.computeNavigationDrawerBounds();
         this.activeNavigationPillBounds = this.computeActiveNavigationPillBounds();
         this.dimensionMenuBounds = this.computeDimensionMenuBounds();
+        this.diagnosticsBadgeBounds = this.computeDiagnosticsBadgeBounds();
+        this.diagnosticsPanelBounds = this.computeDiagnosticsPanelBounds();
         this.mapChromeBounds.add(this.layoutModeStripBounds);
         if (this.cameraCompassBounds.width() > 0 && this.cameraCompassBounds.height() > 0) {
             this.mapChromeBounds.add(this.cameraCompassBounds);
@@ -414,6 +755,12 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (this.dimensionMenuBounds.width() > 0 && this.dimensionMenuBounds.height() > 0) {
             this.mapChromeBounds.add(this.dimensionMenuBounds);
         }
+        if (this.diagnosticsBadgeBounds.width() > 0 && this.diagnosticsBadgeBounds.height() > 0) {
+            this.mapChromeBounds.add(this.diagnosticsBadgeBounds);
+        }
+        if (this.diagnosticsPanelOpen && this.diagnosticsPanelBounds.width() > 0 && this.diagnosticsPanelBounds.height() > 0) {
+            this.mapChromeBounds.add(this.diagnosticsPanelBounds);
+        }
     }
 
     private void renderDimensionControl(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
@@ -434,6 +781,123 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         }, Component.translatable("screen.superpipeslide.full_map.dimension_menu"));
     }
 
+    private static final int DIAGNOSTIC_GROUP_HEIGHT = 34;
+
+    private List<MapBuildDiagnostic> activeDiagnostics() {
+        if (this.activeDimension == null) {
+            return List.of();
+        }
+        List<MapBuildDiagnostic> result = new ArrayList<>(FullRouteMapCache.graph(this.activeDimension).map(MapDimensionGraph::diagnostics).orElse(List.of()));
+        if (FullRouteMapCache.layoutMode().physical()) {
+            result.addAll(FullRouteMapCache.physicalGraph(this.activeDimension).map(PhysicalRouteMapGraph::diagnostics).orElse(List.of()));
+        }
+        return result;
+    }
+
+    private SPSGui.Rect computeDiagnosticsBadgeBounds() {
+        if (this.activeDiagnostics().isEmpty() || this.dimensionChipBounds.width() <= 0) {
+            return new SPSGui.Rect(0, 0, 0, 0);
+        }
+        return new SPSGui.Rect(this.dimensionChipBounds.right() + 4, this.dimensionChipBounds.y(), 40, this.dimensionChipBounds.height());
+    }
+
+    private SPSGui.Rect computeDiagnosticsPanelBounds() {
+        if (!this.diagnosticsPanelOpen || this.activeDiagnostics().isEmpty()) {
+            return new SPSGui.Rect(0, 0, 0, 0);
+        }
+        int height = Math.min(280, 30 + this.diagnosticsGroups().size() * DIAGNOSTIC_GROUP_HEIGHT + 8);
+        return new SPSGui.Rect(this.dimensionChipBounds.x(), this.dimensionChipBounds.bottom() + 4, 280, height);
+    }
+
+    private List<DiagnosticGroup> diagnosticsGroups() {
+        Map<String, DiagnosticGroup> groups = new LinkedHashMap<>();
+        for (MapBuildDiagnostic diagnostic : this.activeDiagnostics()) {
+            groups.computeIfAbsent(diagnostic.type().name() + "|" + diagnostic.message(), ignored -> new DiagnosticGroup(diagnostic.type(), diagnostic.message())).count++;
+        }
+        return List.copyOf(groups.values());
+    }
+
+    private static String diagnosticNameKey(DiagnosticType type) {
+        return "screen.superpipeslide.full_map.diagnostic." + type.name().toLowerCase(Locale.ROOT) + ".name";
+    }
+
+    private static String diagnosticGuideKey(DiagnosticType type) {
+        return "screen.superpipeslide.full_map.diagnostic." + type.name().toLowerCase(Locale.ROOT) + ".guide";
+    }
+
+    private static final class DiagnosticGroup {
+        private final DiagnosticType type;
+        private final String message;
+        private int count;
+
+        private DiagnosticGroup(DiagnosticType type, String message) {
+            this.type = type;
+            this.message = message;
+        }
+    }
+
+    private void renderDiagnosticsControl(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        List<MapBuildDiagnostic> diagnostics = this.activeDiagnostics();
+        if (diagnostics.isEmpty()) {
+            return;
+        }
+        SPSGui.Rect bounds = this.diagnosticsBadgeBounds;
+        boolean hovered = bounds.contains(mouseX, mouseY);
+        FullMapUi.toolbarPanel(graphics, bounds);
+        SPSGui.smallText(graphics, this.font, "⚠ " + diagnostics.size(), bounds.x() + 6, bounds.y() + 7, FullMapTheme.WARNING, FullMapTheme.TYPE_BODY);
+        this.addClick(bounds, () -> {
+            this.diagnosticsPanelOpen = !this.diagnosticsPanelOpen;
+            this.dimensionMenuOpen = false;
+        }, Component.translatable("screen.superpipeslide.full_map.diagnostics.badge", diagnostics.size()));
+    }
+
+    private void renderDiagnosticsPanel(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        if (!this.diagnosticsPanelOpen || this.diagnosticsPanelBounds.width() <= 0 || this.diagnosticsPanelBounds.height() <= 0) {
+            return;
+        }
+        SPSGui.Rect bounds = this.diagnosticsPanelBounds;
+        graphics.fill(bounds.x() + 2, bounds.y() + 3, bounds.right() + 2, bounds.bottom() + 3, FullMapTheme.SHADOW);
+        graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), FullMapTheme.SURFACE_CARD_ACTIVE);
+        graphics.outline(bounds.x(), bounds.y(), bounds.width(), bounds.height(), FullMapTheme.BORDER_ACTIVE);
+        graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.y() + 2, FullMapTheme.INNER_HIGHLIGHT_STRONG);
+        SPSGui.smallText(graphics, this.font, Component.translatable("screen.superpipeslide.full_map.diagnostics.title").getString(), bounds.x() + 8, bounds.y() + 7, FullMapTheme.TEXT_PRIMARY, FullMapTheme.TYPE_BODY);
+
+        List<DiagnosticGroup> groups = this.diagnosticsGroups();
+        SPSGui.Rect list = new SPSGui.Rect(bounds.x() + 6, bounds.y() + 22, bounds.width() - 12, bounds.height() - 30);
+        int contentHeight = groups.size() * DIAGNOSTIC_GROUP_HEIGHT;
+        double maxScroll = Math.max(0.0D, contentHeight - list.height());
+        this.diagnosticsScroll = Math.max(0.0D, Math.min(this.diagnosticsScroll, maxScroll));
+        graphics.enableScissor(list.x(), list.y(), list.right(), list.bottom());
+        int y = list.y() + 2 - (int) Math.round(this.diagnosticsScroll);
+        for (DiagnosticGroup group : groups) {
+            if (y > list.bottom()) {
+                break;
+            }
+            if (y + DIAGNOSTIC_GROUP_HEIGHT > list.y()) {
+                String name = Component.translatable(diagnosticNameKey(group.type)).getString()
+                        + (group.count > 1 ? Component.translatable("screen.superpipeslide.full_map.diagnostics.count_suffix", group.count).getString() : "");
+                SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, name, Math.round((list.width() - 6) / FullMapTheme.TYPE_BODY)), list.x() + 2, y, FullMapTheme.WARNING, FullMapTheme.TYPE_BODY);
+                SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, Component.translatable(diagnosticGuideKey(group.type)).getString(), Math.round((list.width() - 6) / FullMapTheme.TYPE_META)), list.x() + 2, y + 11, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
+                SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, group.message, Math.round((list.width() - 6) / FullMapTheme.TYPE_TINY)), list.x() + 2, y + 21, FullMapTheme.TEXT_DISABLED, FullMapTheme.TYPE_TINY);
+            }
+            y += DIAGNOSTIC_GROUP_HEIGHT;
+        }
+        graphics.disableScissor();
+        if (maxScroll > 0.0D) {
+            FullMapScrollBar.Binding binding = new FullMapScrollBar.Binding(
+                    "diagnostics",
+                    list,
+                    contentHeight,
+                    this.diagnosticsScroll,
+                    maxScroll,
+                    FullMapScrollBar.INFO,
+                    true,
+                    value -> this.diagnosticsScroll = value);
+            this.registerScrollBar(binding);
+            FullMapScrollBar.render(graphics, binding);
+        }
+    }
+
     private void renderDimensionMenu(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         if (!this.dimensionMenuOpen || this.dimensionMenuBounds.width() <= 0 || this.dimensionMenuBounds.height() <= 0) {
             return;
@@ -442,7 +906,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         graphics.fill(bounds.x() + 2, bounds.y() + 3, bounds.right() + 2, bounds.bottom() + 3, FullMapTheme.SHADOW);
         graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), FullMapTheme.SURFACE_CARD_ACTIVE);
         graphics.outline(bounds.x(), bounds.y(), bounds.width(), bounds.height(), FullMapTheme.BORDER_ACTIVE);
-        graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.y() + 2, 0xBFFFFFFF);
+        graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.y() + 2, FullMapTheme.INNER_HIGHLIGHT_STRONG);
 
         int y = bounds.y() + 4;
         int rowHeight = 24;
@@ -497,31 +961,22 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         this.addClick(icon, this::focusSearch, Component.translatable("screen.superpipeslide.full_map.search_hint"));
     }
 
+    /**
+     * Renders the card stack bottom-to-top. Window bounds come from the card manager's
+     * per-frame pass (see {@code MapCardManager#updateWindowBounds}), which runs ahead
+     * of any hover testing so the topmost-card hit test never falls through a card on
+     * the first frame after it opens.
+     */
     private void renderCards(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-        this.topCardBounds = new SPSGui.Rect(0, 0, 0, 0);
-        this.cardBounds.clear();
-        Set<String> activeKeys = this.cardStack.stream().map(MapCard::windowKey).collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
-        this.cardWindowBounds.keySet().removeIf(key -> !activeKeys.contains(key));
-        for (int i = 0; i < this.cardStack.size(); i++) {
-            MapCard card = this.cardStack.get(i);
-            int cardIndex = i;
-            String key = card.windowKey();
-            SPSGui.Rect bounds = this.cardWindowBounds.computeIfAbsent(key, ignored -> this.defaultCardBounds(card, cardIndex));
-            bounds = this.resizeAndClampCard(card, bounds);
-            this.cardWindowBounds.put(key, bounds);
-            this.cardBounds.add(bounds);
-            if (i == this.cardStack.size() - 1) {
-                this.topCardBounds = bounds;
-            }
-        }
-        Optional<String> hoveredCard = this.contextPicker.isEmpty() && !this.mapPopoverBlocks(mouseX, mouseY) ? this.topmostCardAt(mouseX, mouseY) : Optional.empty();
-        for (int i = 0; i < this.cardStack.size(); i++) {
-            MapCard card = this.cardStack.get(i);
-            SPSGui.Rect bounds = this.cardWindowBounds.get(card.windowKey());
+        Optional<String> hoveredCard = this.contextPicker.isEmpty() && !this.mapPopoverBlocks(mouseX, mouseY) ? this.cardManager.topmostCardAt(mouseX, mouseY) : Optional.empty();
+        List<MapCard> cards = this.cardManager.cards();
+        for (int i = 0; i < cards.size(); i++) {
+            MapCard card = cards.get(i);
+            SPSGui.Rect bounds = this.cardManager.windowBounds(card.windowKey());
             if (bounds == null) {
                 continue;
             }
-            boolean active = i == this.cardStack.size() - 1;
+            boolean active = i == cards.size() - 1;
             boolean hoverable = hoveredCard.filter(card.windowKey()::equals).isPresent();
             this.renderCard(graphics, card, bounds, active, hoverable, mouseX, mouseY);
         }
@@ -559,7 +1014,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (layouts.isEmpty()) {
             SPSGui.colorStripe(graphics, bounds.x(), bounds.y(), bounds.height(), line.get().themeColors());
             DisplayNameStack name = FullMapText.displayNameStack(line.get());
-            FullMapUi.drawNameStack(graphics, this.font, name, bounds.x() + 8, bounds.y() + 5, bounds.width() - 58, FullMapTheme.TEXT_PRIMARY, FullMapTheme.TEXT_MUTED, 1.0F, FullMapTheme.TYPE_META, 0);
+            FullMapUi.drawNameStack(graphics, this.font, name, bounds.x() + 8, bounds.y() + 5, bounds.width() - FullMapTheme.CARD_HEADER_TITLE_RESERVE, FullMapTheme.TEXT_PRIMARY, FullMapTheme.TEXT_MUTED, 1.0F, FullMapTheme.TYPE_META, 0);
             SPSGui.text(graphics, this.font, Component.translatable("screen.superpipeslide.layout.none"), bounds.x() + 8, bounds.y() + (name.hasSecondary() ? 35 : 28), SPSGui.TEXT_MUTED);
             return;
         }
@@ -602,22 +1057,26 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 }
             }
             for (ViewModeChipHit chip : result.viewModeChips()) {
-                this.addPriorityClick(chip.bounds(), () -> this.updateRouteCardState(card.windowKey(), effectiveState.withViewMode(chip.viewMode())), routeCardViewModeTooltip(chip.viewMode()));
+                this.addPriorityClick(chip.bounds(), () -> {
+                    this.cardManager.updateRouteCardState(card.windowKey(), effectiveState.withViewMode(chip.viewMode()));
+                    // Instant feedback for the mode flip, mirroring the main-map layout-mode toast.
+                    this.toast(Component.translatable(chip.viewMode().translationKey()).getString());
+                }, routeCardViewModeTooltip(chip.viewMode()));
             }
             if (result.hover().kind() != RouteLineCardHitKind.NONE) {
-                this.addClick(result.mapBounds(), () -> this.handleRouteCardHit(card.withRouteLineState(effectiveState), semanticGraph, result.hover()), Component.empty());
-                this.addClick(result.stopListBounds(), () -> this.handleRouteCardHit(card.withRouteLineState(effectiveState), stopListGraph, result.hover()), Component.empty());
+                this.addClick(result.mapBounds(), () -> this.handleRouteCardHit(card.withRouteLineState(effectiveState), semanticGraph, result.hover(), result.mapBounds(), mouseX, mouseY), Component.empty());
+                this.addClick(result.stopListBounds(), () -> this.handleRouteCardHit(card.withRouteLineState(effectiveState), stopListGraph, result.hover(), result.stopListBounds(), mouseX, mouseY), Component.empty());
             }
-            this.addPriorityClick(result.fitViewportBounds(), () -> this.updateRouteCardState(card.windowKey(), effectiveState.fitViewport()), Component.translatable("screen.superpipeslide.full_map.route_card.fit_view"));
+            this.addPriorityClick(result.fitViewportBounds(), () -> this.cardManager.updateRouteCardState(card.windowKey(), effectiveState.fitViewport()), Component.translatable("screen.superpipeslide.full_map.route_card.fit_view"));
             this.addClick(result.locateFirstBounds(), () -> this.locateFirstStation(selectedLayout), Component.translatable("screen.superpipeslide.full_map.locate_first_station"));
-            this.addClick(result.locateLayoutBounds(), () -> this.locateRouteCardLayout(semanticGraph), Component.translatable("screen.superpipeslide.full_map.route_card.locate_layout"));
+            this.addClick(result.locateLayoutBounds(), () -> this.locateRouteCardLayout(line.get(), semanticGraph), Component.translatable("screen.superpipeslide.full_map.route_card.locate_layout"));
         }
         if (hoverable) {
             RouteCardSemanticGraph hoverGraph = result.mapBounds().contains(mouseX, mouseY) ? semanticGraph : stopListGraph;
             this.deferredCardOverlays.add(() -> result.tooltipOverride()
                     .ifPresentOrElse(
-                            tooltip -> FullMapTooltipCard.renderComponent(graphics, this.font, this.screenBounds(), mouseX, mouseY, tooltip),
-                            () -> this.routeLineCardRenderer.renderHoverTooltip(graphics, this.font, hoverGraph, visualGraph, result.hover(), this.screenBounds(), List.of(), mouseX, mouseY)));
+                            tooltip -> this.tooltipPlacement = FullMapTooltipCard.renderComponent(graphics, this.font, this.screenBounds(), mouseX, mouseY, this.tooltipPlacement, tooltip, this.tooltipFadeOpacity(tooltip.getString())),
+                            () -> FullMapTooltipCard.withScopedOpacity(this.tooltipFadeOpacity("routeCard:" + result.hover()), () -> this.routeLineCardRenderer.renderHoverTooltip(graphics, this.font, hoverGraph, visualGraph, result.hover(), this.screenBounds(), List.of(), mouseX, mouseY))));
         }
     }
 
@@ -646,74 +1105,27 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         return new RouteCardGraphBundle(stopListGraph, semanticGraph, visualGraph);
     }
 
+    private ClusterCardGraphBundle clusterCardGraph(MapDimensionGraph graph, MapCluster cluster, ClusterCardProfile profile) {
+        ClusterCardGraphCacheKey key = new ClusterCardGraphCacheKey(
+                ClientRouteDataCache.revision(),
+                ClientPipeNetworkCache.aggregateRevision(),
+                cluster.nodeId(),
+                profile);
+        return this.clusterCardGraphCache.computeIfAbsent(key, ignored -> this.buildClusterCardGraph(graph, cluster, profile));
+    }
+
+    private ClusterCardGraphBundle buildClusterCardGraph(MapDimensionGraph graph, MapCluster cluster, ClusterCardProfile profile) {
+        ClusterCardSemanticGraph semanticGraph = this.clusterCardSemanticBuilder.build(graph, cluster, profile);
+        ClusterCardVisualGraph visualGraph = this.clusterCardLayoutSolver.solve(semanticGraph);
+        return new ClusterCardGraphBundle(semanticGraph, visualGraph);
+    }
+
     private static SPSGui.Rect routeCardMapBounds(SPSGui.Rect bounds) {
         return RouteLineCardRenderer.mapBoundsForCard(bounds);
     }
 
     private static boolean isClusterFocusCard(MapCard card) {
         return card.kind() == CardKind.CLUSTER || card.kind() == CardKind.DEEP_CLUSTER;
-    }
-
-    private SPSGui.Rect defaultCardBounds(MapCard card, int index) {
-        int width = this.preferredCardWidth(card);
-        int height = Math.min(this.height - 16, this.preferredCardHeight(card));
-        int x = this.width - width - 10 - (index % 4) * 14;
-        int y = 34 + (index % 5) * 18;
-        return this.clampCardBounds(new SPSGui.Rect(x, y, width, Math.max(76, height)));
-    }
-
-    private SPSGui.Rect resizeAndClampCard(MapCard card, SPSGui.Rect bounds) {
-        int width = this.preferredCardWidth(card);
-        int height = Math.min(this.height - 16, this.preferredCardHeight(card));
-        return this.clampCardBounds(new SPSGui.Rect(bounds.x(), bounds.y(), width, Math.max(76, height)));
-    }
-
-    private int preferredCardWidth(MapCard card) {
-        return switch (card.kind()) {
-            case ROUTE_LINE -> Math.min(this.width - 20, Math.max(460, Math.min(620, (int) Math.round(this.width * 0.36D))));
-            case DEEP_CLUSTER -> Math.min(330, Math.max(300, this.width / 4));
-            case CLUSTER -> Math.min(310, Math.max(280, this.width / 4));
-            case FOLD_PEEK -> Math.min(300, Math.max(260, this.width / 4));
-            case STATION -> Math.min(280, Math.max(248, this.width / 5));
-        };
-    }
-
-    private int preferredCardHeight(MapCard card) {
-        return switch (card.kind()) {
-            case ROUTE_LINE -> 320;
-            case FOLD_PEEK -> 200;
-            case STATION -> this.preferredStationCardHeight(card.id());
-            case DEEP_CLUSTER -> 208;
-            case CLUSTER -> 188;
-        };
-    }
-
-    private int preferredStationCardHeight(UUID stationId) {
-        int layoutRows = ClientRouteDataCache.platformStopsInStation(stationId).stream()
-                .flatMap(platform -> ClientRouteDataCache.routeLayoutIdsForPlatformStop(platform.id()).stream())
-                .distinct()
-                .toList()
-                .size();
-        int transferRows = ClientRouteDataCache.stationTransferLinksForStation(stationId).size();
-        int visibleRows = Math.min(6, layoutRows);
-        int visibleTransferRows = Math.min(2, transferRows);
-        int headerExtra = ClientRouteDataCache.stationGroup(stationId)
-                .map(FullMapText::displayNameStack)
-                .filter(DisplayNameStack::hasSecondary)
-                .map(ignored -> 8)
-                .orElse(0);
-        return Math.max(116, Math.min(214, 72 + headerExtra + visibleTransferRows * 16 + visibleRows * 16 + (layoutRows > visibleRows ? 12 : 8)));
-    }
-
-    private SPSGui.Rect clampCardBounds(SPSGui.Rect bounds) {
-        int width = Math.min(bounds.width(), Math.max(156, this.width - 8));
-        int height = Math.min(bounds.height(), Math.max(76, this.height - 8));
-        int maxX = Math.max(4, this.width - width - 4);
-        int minY = 4;
-        int maxY = Math.max(minY, this.height - height - 4);
-        int x = Math.max(4, Math.min(maxX, bounds.x()));
-        int y = Math.max(minY, Math.min(maxY, bounds.y()));
-        return new SPSGui.Rect(x, y, width, height);
     }
 
     private static SPSGui.Rect cardHeaderBounds(SPSGui.Rect bounds) {
@@ -728,8 +1140,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             return;
         }
         ClusterCardState state = card.clusterState().orElse(ClusterCardState.create());
-        ClusterCardSemanticGraph semanticGraph = this.clusterCardSemanticBuilder.build(graph, cluster);
-        ClusterCardVisualGraph visualGraph = this.clusterCardLayoutSolver.solve(semanticGraph);
+        ClusterCardGraphBundle graphBundle = this.clusterCardGraph(graph, cluster, ClusterCardProfile.ORDINARY);
+        ClusterCardSemanticGraph semanticGraph = graphBundle.semanticGraph();
+        ClusterCardVisualGraph visualGraph = graphBundle.visualGraph();
         DisplayNameStack title = DisplayNameStack.of(cluster.label());
         Component meta = Component.translatable("screen.superpipeslide.full_map.cluster_summary", cluster.stationGroupIds().size(), dimensionLabel(cluster.levelKey()));
         FullMapUi.cardHeader(
@@ -739,6 +1152,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 title,
                 meta,
                 active);
+        this.renderClusterLocateButton(graphics, graph, cluster, bounds, active, hoverable, mouseX, mouseY);
         int pad = FullMapTheme.CARD_PADDING;
         int mapTop = bounds.y() + FullMapUi.cardHeaderHeight(title, meta) + 6;
         SPSGui.Rect map = new SPSGui.Rect(bounds.x() + pad, mapTop, bounds.width() - pad * 2, Math.max(72, bounds.bottom() - mapTop - 30));
@@ -752,7 +1166,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             if (result.hover().kind() != ClusterCardHitKind.NONE) {
                 this.addClick(result.mapBounds(), () -> this.handleClusterCardHit(graph, semanticGraph, result.hover(), result.mapBounds(), mouseX, mouseY), Component.empty());
             }
-            this.addPriorityClick(result.fitViewportBounds(), () -> this.updateClusterCardState(card.windowKey(), state.fitViewport()), Component.translatable("screen.superpipeslide.full_map.route_card.fit_view"));
+            this.addPriorityClick(result.fitViewportBounds(), () -> this.cardManager.updateClusterCardState(card.windowKey(), state.resetViewport()), Component.translatable("screen.superpipeslide.full_map.route_card.fit_view"));
         }
         int lineY = bounds.bottom() - 22;
         SPSGui.smallText(graphics, this.font, Component.translatable("screen.superpipeslide.full_map.lines_inside").getString(), bounds.x() + pad, lineY + 2, SPSGui.TEXT_MUTED, FullMapTheme.TYPE_TINY);
@@ -762,7 +1176,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (hoverable) {
             this.deferredCardOverlays.add(() -> {
                 List<SPSGui.Rect> tooltipAvoidRects = this.renderClusterCardHoverPreview(graphics, graph, semanticGraph, visualGraph, viewport, map, result.hover(), this.screenBounds(), mouseX, mouseY);
-                this.clusterCardRenderer.renderHoverTooltip(graphics, this.font, semanticGraph, result.hover(), this.screenBounds(), tooltipAvoidRects, mouseX, mouseY);
+                FullMapTooltipCard.withScopedOpacity(this.tooltipFadeOpacity("clusterCard:" + result.hover()), () -> this.clusterCardRenderer.renderHoverTooltip(graphics, this.font, semanticGraph, result.hover(), this.screenBounds(), tooltipAvoidRects, mouseX, mouseY));
             });
         }
     }
@@ -775,13 +1189,13 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             return;
         }
         ClusterCardState state = card.clusterState().orElse(ClusterCardState.create());
-        ClusterCardSemanticGraph semanticGraph = this.clusterCardSemanticBuilder.build(graph, cluster, ClusterCardProfile.DEEP);
-        ClusterCardVisualGraph visualGraph = this.clusterCardLayoutSolver.solve(semanticGraph);
-        int span = semanticGraph.worldBounds().isEmpty()
-                ? 0
-                : (int) Math.round(Math.max(semanticGraph.worldBounds().maxX() - semanticGraph.worldBounds().minX(), semanticGraph.worldBounds().maxY() - semanticGraph.worldBounds().minY()));
+        ClusterCardGraphBundle graphBundle = this.clusterCardGraph(graph, cluster, ClusterCardProfile.DEEP);
+        ClusterCardSemanticGraph semanticGraph = graphBundle.semanticGraph();
+        ClusterCardVisualGraph visualGraph = graphBundle.visualGraph();
+        // Header meta keeps the compact form; the center/span readout lives in the
+        // renderer's footer_meta row, where it fits without truncating.
         DisplayNameStack title = DisplayNameStack.of("\u229b " + cluster.label());
-        Component meta = Component.translatable("screen.superpipeslide.full_map.deep_cluster_summary", cluster.stationGroupIds().size(), dimensionLabel(cluster.levelKey()), (int) Math.round(cluster.worldX()), (int) Math.round(cluster.worldZ()), span);
+        Component meta = Component.translatable("screen.superpipeslide.full_map.deep_cluster_summary_compact", cluster.stationGroupIds().size(), dimensionLabel(cluster.levelKey()));
         FullMapUi.cardHeader(
                 graphics,
                 this.font,
@@ -789,6 +1203,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 title,
                 meta,
                 active);
+        this.renderClusterLocateButton(graphics, graph, cluster, bounds, active, hoverable, mouseX, mouseY);
 
         int pad = FullMapTheme.CARD_PADDING;
         int mapTop = bounds.y() + FullMapUi.cardHeaderHeight(title, meta) + 6;
@@ -803,7 +1218,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             if (result.hover().kind() != ClusterCardHitKind.NONE) {
                 this.addClick(result.mapBounds(), () -> this.handleClusterCardHit(graph, semanticGraph, result.hover(), result.mapBounds(), mouseX, mouseY), Component.empty());
             }
-            this.addPriorityClick(result.fitViewportBounds(), () -> this.updateClusterCardState(card.windowKey(), state.fitViewport()), Component.translatable("screen.superpipeslide.full_map.route_card.fit_view"));
+            this.addPriorityClick(result.fitViewportBounds(), () -> this.cardManager.updateClusterCardState(card.windowKey(), state.resetViewport()), Component.translatable("screen.superpipeslide.full_map.route_card.fit_view"));
         }
         int lineY = bounds.bottom() - 22;
         SPSGui.smallText(graphics, this.font, Component.translatable("screen.superpipeslide.full_map.lines_inside").getString(), bounds.x() + pad, lineY + 2, SPSGui.TEXT_MUTED, FullMapTheme.TYPE_TINY);
@@ -813,9 +1228,23 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (hoverable) {
             this.deferredCardOverlays.add(() -> {
                 List<SPSGui.Rect> tooltipAvoidRects = this.renderClusterCardHoverPreview(graphics, graph, semanticGraph, visualGraph, viewport, map, result.hover(), this.screenBounds(), mouseX, mouseY);
-                this.clusterCardRenderer.renderHoverTooltip(graphics, this.font, semanticGraph, result.hover(), this.screenBounds(), tooltipAvoidRects, mouseX, mouseY);
+                FullMapTooltipCard.withScopedOpacity(this.tooltipFadeOpacity("clusterCard:" + result.hover()), () -> this.clusterCardRenderer.renderHoverTooltip(graphics, this.font, semanticGraph, result.hover(), this.screenBounds(), tooltipAvoidRects, mouseX, mouseY));
             });
         }
+    }
+
+    /** Header button that jumps the main map to this cluster and closes the card. */
+    private void renderClusterLocateButton(GuiGraphicsExtractor graphics, MapDimensionGraph graph, MapCluster cluster, SPSGui.Rect bounds, boolean active, boolean hoverable, int mouseX, int mouseY) {
+        SPSGui.Rect locate = new SPSGui.Rect(bounds.right() - 38, bounds.y() + 4, FullMapTheme.ICON_BUTTON_SMALL, FullMapTheme.ICON_BUTTON_SMALL);
+        FullMapUi.iconButton(graphics, locate, hoverable && locate.contains(mouseX, mouseY), false, false, SPSGui.Icon.LOCATE);
+        if (active) {
+            this.addPriorityClick(locate, () -> this.locateClusterOnMainMap(graph, cluster), Component.translatable("screen.superpipeslide.full_map.locate_station", cluster.label()));
+        }
+    }
+
+    private void locateClusterOnMainMap(MapDimensionGraph graph, MapCluster cluster) {
+        graph.node(cluster.nodeId()).ifPresent(this::locateNode);
+        this.popCard();
     }
 
     private static List<Integer> routeLineColors(RouteLine line) {
@@ -870,10 +1299,10 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (maxScroll > 0.0D) {
             int markerColor = SPSGui.withAlpha(SPSGui.TEXT_MUTED, 0xAA);
             if (scroll > 0.0D) {
-                SPSGui.smallText(graphics, this.font, "<", strip.x() - 5, strip.y() + 4, markerColor, 0.68F);
+                SPSGui.smallText(graphics, this.font, "<", strip.x() - 5, strip.y() + 4, markerColor, ROW_TITLE_TEXT_SCALE);
             }
             if (scroll < maxScroll) {
-                SPSGui.smallText(graphics, this.font, ">", strip.right() + 1, strip.y() + 4, markerColor, 0.68F);
+                SPSGui.smallText(graphics, this.font, ">", strip.right() + 1, strip.y() + 4, markerColor, ROW_TITLE_TEXT_SCALE);
             }
         }
     }
@@ -898,11 +1327,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     }
 
     private static MapCluster findCluster(MapDimensionGraph graph, UUID clusterId, NodeKind kind) {
-        return graph.clustersById().values().stream()
-                .filter(value -> value.nodeId().kind() == kind)
-                .filter(value -> value.nodeId().primaryId().equals(clusterId))
-                .findFirst()
-                .orElse(null);
+        return graph.cluster(kind, clusterId).orElse(null);
     }
 
     private void renderStationCard(GuiGraphicsExtractor graphics, MapCard card, SPSGui.Rect bounds, boolean active, boolean hoverable, int mouseX, int mouseY) {
@@ -997,10 +1422,17 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         }
         graphics.disableScissor();
         if (maxScroll > 0.0D) {
-            int barHeight = Math.max(14, (int) Math.round(list.height() * list.height() / (double) Math.max(list.height(), layoutIds.size() * rowHeight)));
-            int barY = list.y() + (int) Math.round((list.height() - barHeight) * (scroll / maxScroll));
-            graphics.fill(list.right() - 2, list.y(), list.right() - 1, list.bottom(), SPSGui.withAlpha(FullMapTheme.TEXT_MUTED, 0x30));
-            graphics.fill(list.right() - 3, barY, list.right(), barY + barHeight, SPSGui.withAlpha(FullMapTheme.TEXT_MUTED, 0x88));
+            FullMapScrollBar.Binding binding = new FullMapScrollBar.Binding(
+                    "stationRoutes:" + cardKey,
+                    list,
+                    layoutIds.size() * rowHeight,
+                    scroll,
+                    maxScroll,
+                    FullMapScrollBar.MUTED,
+                    true,
+                    value -> this.stationCardRouteScrolls.put(cardKey, value));
+            this.registerScrollBar(binding);
+            FullMapScrollBar.render(graphics, binding);
         }
     }
 
@@ -1051,7 +1483,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         graphics.fill(panel.x() + 2, panel.y() + 3, panel.right() + 2, panel.bottom() + 3, FullMapTheme.SHADOW);
         graphics.fill(panel.x(), panel.y(), panel.right(), panel.bottom(), FullMapTheme.SURFACE_CARD_ACTIVE);
         graphics.outline(panel.x(), panel.y(), panel.width(), panel.height(), FullMapTheme.BORDER);
-        graphics.fill(panel.x() + 1, panel.y() + 1, panel.right() - 1, panel.y() + 2, 0x66FFFFFF);
+        graphics.fill(panel.x() + 1, panel.y() + 1, panel.right() - 1, panel.y() + 2, FullMapTheme.INNER_HIGHLIGHT_SOFT);
         if (destinations.isEmpty() && results.isEmpty()) {
             Component hint = this.searchBox.getValue().trim().isEmpty()
                     ? Component.translatable("screen.superpipeslide.full_map.search_empty_hint")
@@ -1089,10 +1521,17 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         double maxScroll = this.maxNavigationResultScroll(destinations, results, panel);
         if (maxScroll > 0.0D) {
             int contentHeight = destinations.size() * NAVIGATION_RESULT_ROW_HEIGHT + results.size() * 23 + (destinations.isEmpty() || results.isEmpty() ? 0 : 4);
-            int barHeight = Math.max(18, (int) Math.round(list.height() * list.height() / (double) Math.max(list.height(), contentHeight)));
-            int barY = list.y() + (int) Math.round((list.height() - barHeight) * (this.navigationResultScroll / maxScroll));
-            graphics.fill(list.right() - 2, list.y(), list.right() - 1, list.bottom(), SPSGui.withAlpha(FullMapTheme.TEXT_MUTED, 0x30));
-            graphics.fill(list.right() - 3, barY, list.right(), barY + barHeight, SPSGui.withAlpha(SPSGui.INFO, 0xAA));
+            FullMapScrollBar.Binding binding = new FullMapScrollBar.Binding(
+                    "navigationResults",
+                    list,
+                    contentHeight,
+                    this.navigationResultScroll,
+                    maxScroll,
+                    FullMapScrollBar.INFO,
+                    true,
+                    value -> this.navigationResultScroll = value);
+            this.registerScrollBar(binding);
+            FullMapScrollBar.render(graphics, binding);
         }
     }
 
@@ -1154,9 +1593,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         graphics.fill(panel.x() + 2, panel.y() + 3, panel.right() + 2, panel.bottom() + 3, FullMapTheme.SHADOW);
         graphics.fill(panel.x(), panel.y(), panel.right(), panel.bottom(), FullMapTheme.SURFACE_CARD_ACTIVE);
         graphics.outline(panel.x(), panel.y(), panel.width(), panel.height(), preview.reachable() ? FullMapTheme.BORDER_SELECTED : FullMapTheme.BORDER);
-        graphics.fill(panel.x() + 1, panel.y() + 1, panel.right() - 1, panel.y() + 2, 0x99FFFFFF);
+        graphics.fill(panel.x() + 1, panel.y() + 1, panel.right() - 1, panel.y() + 2, FullMapTheme.INNER_HIGHLIGHT_MEDIUM);
         SPSGui.Rect header = new SPSGui.Rect(panel.x() + 6, panel.y() + 5, panel.width() - 12, 58);
-        this.renderNavigationSummary(graphics, header, preview, mouseX, mouseY, true);
+        this.renderNavigationSummary(graphics, header, preview, mouseX, mouseY);
         int listTop = header.bottom() + 4;
         this.navigationItineraryBounds = new SPSGui.Rect(panel.x() + 6, listTop, panel.width() - 12, Math.max(42, panel.bottom() - listTop - 6));
         this.renderNavigationItinerary(graphics, this.navigationItineraryBounds, preview, mouseX, mouseY);
@@ -1181,9 +1620,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         SPSGui.Rect cancel = new SPSGui.Rect(panel.right() - 22, panel.y() + 6, 16, 16);
         SPSGui.Rect open = new SPSGui.Rect(cancel.x() - 20, panel.y() + 6, 16, 16);
         FullMapUi.iconButton(graphics, open, open.contains(mouseX, mouseY), false, false, SPSGui.Icon.ROUTE_LINE);
-        this.renderNavigationDangerIconButton(graphics, cancel, cancel.contains(mouseX, mouseY), SPSGui.Icon.REMOVE);
+        this.renderNavigationDangerIconButton(graphics, cancel, cancel.contains(mouseX, mouseY), SPSGui.Icon.REMOVE, this.navigationCancelArmed());
         this.addPriorityClick(open, this::expandActiveNavigation, Component.translatable("screen.superpipeslide.full_map.navigation.view_route"));
-        this.addPriorityClick(cancel, this::cancelNavigationFromMap, Component.translatable("screen.superpipeslide.navigation.cancel"));
+        this.addPriorityClick(cancel, this::cancelNavigationFromMap, this.navigationCancelTooltip());
         this.addClick(panel, this::expandActiveNavigation, Component.translatable("screen.superpipeslide.full_map.navigation.view_route"));
 
         int textX = panel.x() + 12;
@@ -1193,59 +1632,44 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         SPSGui.smallText(graphics, this.font, SPSGui.scrollingText(this.font, summary, Math.round(textWidth / FullMapTheme.TYPE_TINY), summary.hashCode()), textX, panel.y() + 17, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_TINY);
     }
 
-    private void renderNavigationSummary(GuiGraphicsExtractor graphics, SPSGui.Rect rect, FullMapNavigationViewModel.RoutePreview preview, int mouseX, int mouseY, boolean expanded) {
-        int accent = preview.reachable() ? preview.primaryColor() : 0xFFFFB13B;
+    private void renderNavigationSummary(GuiGraphicsExtractor graphics, SPSGui.Rect rect, FullMapNavigationViewModel.RoutePreview preview, int mouseX, int mouseY) {
+        int accent = preview.reachable() ? preview.primaryColor() : FullMapTheme.WARNING;
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), SPSGui.withAlpha(accent, 0x10));
         graphics.outline(rect.x(), rect.y(), rect.width(), rect.height(), SPSGui.withAlpha(accent, preview.reachable() ? 0xAA : 0x88));
         graphics.fill(rect.x(), rect.y(), rect.x() + 4, rect.bottom(), SPSGui.withAlpha(accent, 0xD0));
         int right = rect.right() - 4;
-        if (expanded) {
-            SPSGui.Rect close = new SPSGui.Rect(right - 16, rect.y() + 5, 16, 16);
-            FullMapUi.iconButton(graphics, close, close.contains(mouseX, mouseY), false, false, SPSGui.Icon.CLOSE);
-            this.addPriorityClick(close, this::clearNavigationPreview, Component.translatable("screen.superpipeslide.full_map.navigation.close"));
-            right = close.x() - 4;
-        } else {
-            SPSGui.Rect cancel = new SPSGui.Rect(right - 16, rect.y() + 7, 16, 16);
-            this.renderNavigationDangerIconButton(graphics, cancel, cancel.contains(mouseX, mouseY), SPSGui.Icon.REMOVE);
-            this.addPriorityClick(cancel, this::cancelNavigationFromMap, Component.translatable("screen.superpipeslide.navigation.cancel"));
-            right = cancel.x() - 4;
-            SPSGui.Rect open = new SPSGui.Rect(right - 74, rect.y() + 7, 70, 16);
-            this.renderNavigationTextButton(graphics, open, Component.translatable("screen.superpipeslide.full_map.navigation.view_route").getString(), accent, true, open.contains(mouseX, mouseY));
-            this.addClick(open, this::expandActiveNavigation, Component.translatable("screen.superpipeslide.full_map.navigation.view_route"));
-            right = open.x() - 4;
-        }
+        SPSGui.Rect close = new SPSGui.Rect(right - 16, rect.y() + 5, 16, 16);
+        FullMapUi.iconButton(graphics, close, close.contains(mouseX, mouseY), false, false, SPSGui.Icon.CLOSE);
+        this.addPriorityClick(close, this::clearNavigationPreview, Component.translatable("screen.superpipeslide.full_map.navigation.close"));
+        right = close.x() - 4;
 
         int titleRight = right;
         int detailRight = right;
-        if (expanded) {
-            if (ClientNavigationController.isNavigating()) {
-                SPSGui.Rect cancel = new SPSGui.Rect(right - 16, rect.bottom() - 18, 16, 16);
-                this.renderNavigationDangerIconButton(graphics, cancel, cancel.contains(mouseX, mouseY), SPSGui.Icon.REMOVE);
-                this.addPriorityClick(cancel, this::cancelNavigationFromMap, Component.translatable("screen.superpipeslide.navigation.cancel"));
-                right = cancel.x() - 4;
-            }
-            String actionLabel = this.navigationCrossDimensionConfirmationArmed && preview.needsCrossDimensionConfirmation()
-                    ? Component.translatable("screen.superpipeslide.navigation.confirm_cross_dimension").getString()
-                    : preview.primaryActionLabel();
-            int maxActionWidth = Math.max(44, right - rect.x() - 4);
-            int actionWidth = Math.min(maxActionWidth, Math.min(132, Math.max(62, Math.round(this.font.width(actionLabel) * 0.58F) + 16)));
-            SPSGui.Rect action = new SPSGui.Rect(right - actionWidth, rect.bottom() - 18, actionWidth, 16);
-            this.renderNavigationTextButton(graphics, action, actionLabel, accent, preview.primaryAction() != FullMapNavigationViewModel.PrimaryAction.UNAVAILABLE, action.contains(mouseX, mouseY));
-            if (preview.primaryAction() != FullMapNavigationViewModel.PrimaryAction.UNAVAILABLE) {
-                this.addClick(action, () -> this.handleNavigationPrimaryAction(preview), Component.literal(actionLabel));
-            }
+        if (ClientNavigationController.isNavigating()) {
+            SPSGui.Rect cancel = new SPSGui.Rect(right - 16, rect.bottom() - 18, 16, 16);
+            this.renderNavigationDangerIconButton(graphics, cancel, cancel.contains(mouseX, mouseY), SPSGui.Icon.REMOVE, this.navigationCancelArmed());
+            this.addPriorityClick(cancel, this::cancelNavigationFromMap, this.navigationCancelTooltip());
+            right = cancel.x() - 4;
+        }
+        String actionLabel = this.navigationCrossDimensionConfirmationArmed && preview.needsCrossDimensionConfirmation()
+                ? Component.translatable("screen.superpipeslide.navigation.confirm_cross_dimension").getString()
+                : preview.primaryActionLabel();
+        int maxActionWidth = Math.max(44, right - rect.x() - 4);
+        int actionWidth = Math.min(maxActionWidth, Math.min(132, Math.max(62, Math.round(this.font.width(actionLabel) * ACTION_LABEL_TEXT_SCALE) + 16)));
+        SPSGui.Rect action = new SPSGui.Rect(right - actionWidth, rect.bottom() - 18, actionWidth, 16);
+        this.renderNavigationTextButton(graphics, action, actionLabel, accent, preview.primaryAction() != FullMapNavigationViewModel.PrimaryAction.UNAVAILABLE, action.contains(mouseX, mouseY));
+        if (preview.primaryAction() != FullMapNavigationViewModel.PrimaryAction.UNAVAILABLE) {
+            this.addClick(action, () -> this.handleNavigationPrimaryAction(preview), Component.literal(actionLabel));
         }
 
-        int textX = expanded ? rect.x() + 22 : rect.x() + 10;
-        if (expanded) {
-            SPSGui.icon(graphics, new SPSGui.Rect(rect.x() + 6, rect.y() + 5, 12, 12), SPSGui.Icon.DRAG, FullMapTheme.TEXT_MUTED);
-        }
+        int textX = rect.x() + 22;
+        SPSGui.icon(graphics, new SPSGui.Rect(rect.x() + 6, rect.y() + 5, 12, 12), SPSGui.Icon.DRAG, FullMapTheme.TEXT_MUTED);
         int titleWidth = Math.max(32, titleRight - textX);
         int detailWidth = Math.max(32, detailRight - textX);
-        SPSGui.text(graphics, this.font, SPSGui.scrollingText(this.font, preview.destinationName(), titleWidth, preview.destinationName().hashCode()), textX, rect.y() + 6, preview.reachable() ? FullMapTheme.TEXT_PRIMARY : 0xFFFFB13B);
+        SPSGui.text(graphics, this.font, SPSGui.scrollingText(this.font, preview.destinationName(), titleWidth, preview.destinationName().hashCode()), textX, rect.y() + 6, preview.reachable() ? FullMapTheme.TEXT_PRIMARY : FullMapTheme.WARNING);
         String summary = preview.summaryText().isBlank() ? preview.destinationSubtitle() : preview.summaryText();
-        SPSGui.smallText(graphics, this.font, SPSGui.scrollingText(this.font, summary, Math.round(detailWidth / FullMapTheme.TYPE_META), summary.hashCode()), textX, rect.y() + 20, preview.warnings().isEmpty() ? FullMapTheme.TEXT_SECONDARY : 0xFFFFB13B, FullMapTheme.TYPE_META);
-        if (expanded && !preview.destinationSubtitle().isBlank()) {
+        SPSGui.smallText(graphics, this.font, SPSGui.scrollingText(this.font, summary, Math.round(detailWidth / FullMapTheme.TYPE_META), summary.hashCode()), textX, rect.y() + 20, preview.warnings().isEmpty() ? FullMapTheme.TEXT_SECONDARY : FullMapTheme.WARNING, FullMapTheme.TYPE_META);
+        if (!preview.destinationSubtitle().isBlank()) {
             SPSGui.smallText(graphics, this.font, SPSGui.scrollingText(this.font, preview.destinationSubtitle(), Math.round(detailWidth / FullMapTheme.TYPE_TINY), preview.destinationSubtitle().hashCode()), textX, rect.y() + 32, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_TINY);
         }
     }
@@ -1258,12 +1682,26 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         SPSGui.centeredText(graphics, this.font, SPSGui.ellipsize(this.font, label, button.width() - 8), button.x() + button.width() / 2, button.y() + 4, enabled ? FullMapTheme.TEXT_PRIMARY : FullMapTheme.TEXT_DISABLED);
     }
 
-    private void renderNavigationDangerIconButton(GuiGraphicsExtractor graphics, SPSGui.Rect rect, boolean hovered, SPSGui.Icon icon) {
-        int fill = hovered ? SPSGui.withAlpha(SPSGui.DANGER, 0x22) : FullMapTheme.SURFACE_CONTROL;
-        int border = hovered ? SPSGui.withAlpha(SPSGui.DANGER, 0xE0) : SPSGui.withAlpha(SPSGui.DANGER, 0x88);
+    private void renderNavigationDangerIconButton(GuiGraphicsExtractor graphics, SPSGui.Rect rect, boolean hovered, SPSGui.Icon icon, boolean armed) {
+        int accent = armed ? FullMapTheme.WARNING : SPSGui.DANGER;
+        int fill = armed ? SPSGui.withAlpha(accent, 0x40) : hovered ? SPSGui.withAlpha(accent, 0x22) : FullMapTheme.SURFACE_CONTROL;
+        int border = hovered || armed ? SPSGui.withAlpha(accent, 0xE0) : SPSGui.withAlpha(accent, 0x88);
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), fill);
         graphics.outline(rect.x(), rect.y(), rect.width(), rect.height(), border);
-        SPSGui.icon(graphics, rect, icon, hovered ? SPSGui.DANGER : SPSGui.withAlpha(SPSGui.DANGER, 0xD8));
+        SPSGui.icon(graphics, rect, icon, hovered || armed ? accent : SPSGui.withAlpha(accent, 0xD8));
+    }
+
+    private boolean navigationCancelArmed() {
+        if (this.navigationCancelArmed && System.currentTimeMillis() - this.navigationCancelArmedAtMillis > NAVIGATION_CANCEL_CONFIRM_TIMEOUT_MILLIS) {
+            this.navigationCancelArmed = false;
+        }
+        return this.navigationCancelArmed;
+    }
+
+    private Component navigationCancelTooltip() {
+        return this.navigationCancelArmed()
+                ? Component.translatable("screen.superpipeslide.full_map.navigation.cancel_confirm")
+                : Component.translatable("screen.superpipeslide.navigation.cancel");
     }
 
     private void renderNavigationItinerary(GuiGraphicsExtractor graphics, SPSGui.Rect rect, FullMapNavigationViewModel.RoutePreview preview, int mouseX, int mouseY) {
@@ -1287,10 +1725,17 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         double maxScroll = this.maxNavigationItineraryScroll(preview, rect);
         if (maxScroll > 0.0D) {
             int contentHeight = this.navigationItineraryContentHeight(preview);
-            int barHeight = Math.max(18, (int) Math.round(rect.height() * rect.height() / (double) Math.max(rect.height(), contentHeight)));
-            int barY = rect.y() + (int) Math.round((rect.height() - barHeight) * (this.navigationItineraryScroll / maxScroll));
-            graphics.fill(rect.right() - 2, rect.y(), rect.right() - 1, rect.bottom(), SPSGui.withAlpha(FullMapTheme.TEXT_MUTED, 0x30));
-            graphics.fill(rect.right() - 3, barY, rect.right(), barY + barHeight, SPSGui.withAlpha(SPSGui.INFO, 0xAA));
+            FullMapScrollBar.Binding binding = new FullMapScrollBar.Binding(
+                    "navigationItinerary",
+                    rect,
+                    contentHeight,
+                    this.navigationItineraryScroll,
+                    maxScroll,
+                    FullMapScrollBar.INFO,
+                    true,
+                    value -> this.navigationItineraryScroll = value);
+            this.registerScrollBar(binding);
+            FullMapScrollBar.render(graphics, binding);
         }
     }
 
@@ -1310,14 +1755,14 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         this.drawNavigationStepGlyph(graphics, step.kind(), new Vec2(lineX, nodeY), color, primaryColor);
         int textX = rect.x() + 24;
         int textWidth = Math.max(24, rect.right() - textX - 4);
-        SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, step.title(), Math.round(textWidth / 0.68F)), textX, rect.y() + 2, step.warning() ? 0xFFFFB13B : FullMapTheme.TEXT_PRIMARY, 0.68F);
-        SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, step.detail(), Math.round(textWidth / 0.54F)), textX, rect.y() + 13, step.warning() ? 0xFFFFB13B : FullMapTheme.TEXT_MUTED, 0.54F);
+        SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, step.title(), Math.round(textWidth / ROW_TITLE_TEXT_SCALE)), textX, rect.y() + 2, step.warning() ? FullMapTheme.WARNING : FullMapTheme.TEXT_PRIMARY, ROW_TITLE_TEXT_SCALE);
+        SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, step.detail(), Math.round(textWidth / ROW_META_TEXT_SCALE)), textX, rect.y() + 13, step.warning() ? FullMapTheme.WARNING : FullMapTheme.TEXT_MUTED, ROW_META_TEXT_SCALE);
     }
 
     private void drawNavigationStepGlyph(GuiGraphicsExtractor graphics, FullMapNavigationViewModel.ItineraryKind kind, Vec2 center, int color, int primaryColor) {
         switch (kind) {
             case ORIGIN -> {
-                SmoothGuiPrimitives.circle(graphics, center, 6.2D, SPSGui.withAlpha(SPSGui.SUCCESS, 0xE0));
+                SmoothGuiPrimitives.circle(graphics, center, 6.2D, SPSGui.withAlpha(NavigationSemanticColors.DESTINATION, 0xE0));
                 SmoothGuiPrimitives.circle(graphics, center, 2.0D, 0xEFFFFFFF);
             }
             case DESTINATION -> {
@@ -1338,14 +1783,14 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     private void drawSameStationTransferGlyph(GuiGraphicsExtractor graphics, Vec2 center) {
         SmoothGuiPrimitives.circle(graphics, center, 6.4D, 0xEFFFFFFF);
-        SmoothGuiPrimitives.line(graphics, new Vec2(center.x() - 3.4D, center.y()), new Vec2(center.x() + 3.4D, center.y()), 1.8D, SPSGui.SUCCESS);
-        SmoothGuiPrimitives.circle(graphics, new Vec2(center.x() - 3.2D, center.y()), 2.4D, SPSGui.SUCCESS);
-        SmoothGuiPrimitives.circle(graphics, new Vec2(center.x() + 3.2D, center.y()), 2.4D, SPSGui.SUCCESS);
+        SmoothGuiPrimitives.line(graphics, new Vec2(center.x() - 3.4D, center.y()), new Vec2(center.x() + 3.4D, center.y()), 1.8D, NavigationSemanticColors.SAME_STATION_TRANSFER);
+        SmoothGuiPrimitives.circle(graphics, new Vec2(center.x() - 3.2D, center.y()), 2.4D, NavigationSemanticColors.SAME_STATION_TRANSFER);
+        SmoothGuiPrimitives.circle(graphics, new Vec2(center.x() + 3.2D, center.y()), 2.4D, NavigationSemanticColors.SAME_STATION_TRANSFER);
     }
 
     private void drawOutStationTransferGlyph(GuiGraphicsExtractor graphics, Vec2 center, boolean walkOnly) {
         SmoothGuiPrimitives.circle(graphics, center, 6.4D, 0xEFFFFFFF);
-        int color = 0xFFFFB13B;
+        int color = FullMapTheme.WARNING;
         if (walkOnly) {
             this.drawWalkGlyph(graphics, center, color);
             return;
@@ -1389,14 +1834,14 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         int detailX = textX + badgeWidth + 4;
         int detailWidth = rect.right() - detailX - 4;
         if (detailWidth >= 24) {
-            SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, step.detail(), Math.round(detailWidth / 0.56F)), detailX, rect.y() + 7, FullMapTheme.TEXT_MUTED, 0.56F);
+            SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, step.detail(), Math.round(detailWidth / ROW_DETAIL_TEXT_SCALE)), detailX, rect.y() + 7, FullMapTheme.TEXT_MUTED, ROW_DETAIL_TEXT_SCALE);
         }
 
         for (int i = 0; i < stations.size(); i++) {
             NavigationStationDisplay station = stations.get(i);
             int y = stationStartY + i * NAVIGATION_RIDE_STATION_ROW_HEIGHT;
             if (station.placeholder()) {
-                SPSGui.smallText(graphics, this.font, station.label(), textX + 11, y + 2, FullMapTheme.TEXT_MUTED, 0.54F);
+                SPSGui.smallText(graphics, this.font, station.label(), textX + 11, y + 2, FullMapTheme.TEXT_MUTED, ROW_META_TEXT_SCALE);
                 continue;
             }
             boolean endpoint = station.endpoint();
@@ -1406,10 +1851,12 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             } else {
                 SmoothGuiPrimitives.circle(graphics, new Vec2(lineX, y + 4), 2.4D, 0x92FFFFFF);
             }
-            SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, station.label(), Math.round((rect.right() - textX - 9) / 0.56F)), textX + 8, y + 1, endpoint ? FullMapTheme.TEXT_PRIMARY : FullMapTheme.TEXT_SECONDARY, endpoint ? 0.57F : 0.52F);
+            SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, station.label(), Math.round((rect.right() - textX - 9) / ROW_DETAIL_TEXT_SCALE)), textX + 8, y + 1, endpoint ? FullMapTheme.TEXT_PRIMARY : FullMapTheme.TEXT_SECONDARY, endpoint ? ROW_ENDPOINT_TEXT_SCALE : ROW_SUB_TEXT_SCALE);
         }
         if (step.expandable()) {
-            this.addClick(rect, () -> this.toggleNavigationRideExpanded(index), Component.literal(this.navigationExpandedRideSteps.contains(index) ? "Collapse stops" : "Expand stops"));
+            this.addClick(rect, () -> this.toggleNavigationRideExpanded(index), Component.translatable(this.navigationExpandedRideSteps.contains(index)
+                    ? "screen.superpipeslide.full_map.station_card.collapse_stops"
+                    : "screen.superpipeslide.full_map.station_card.expand_stops"));
         }
     }
 
@@ -1539,8 +1986,32 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     }
 
     private void cancelNavigationFromMap() {
+        if (!this.navigationCancelArmed()) {
+            this.navigationCancelArmed = true;
+            this.navigationCancelArmedAtMillis = System.currentTimeMillis();
+            return;
+        }
+        this.navigationCancelArmed = false;
+        Optional<UUID> destination = ClientNavigationController.activeSessionSnapshot().map(snapshot -> snapshot.plan().destinationStationGroupId());
         ClientNavigationController.cancelNavigation();
         this.clearNavigationPreview();
+        destination.ifPresent(stationGroupId -> this.toast(
+                Component.translatable("screen.superpipeslide.full_map.navigation.cancelled", FullMapNavigationViewModel.stationName(stationGroupId)).getString(),
+                Component.translatable("screen.superpipeslide.full_map.navigation.undo").getString(),
+                () -> this.restoreCancelledNavigation(stationGroupId),
+                NAVIGATION_UNDO_TOAST_DURATION_MILLIS));
+    }
+
+    private void restoreCancelledNavigation(UUID stationGroupId) {
+        if (this.minecraft == null || this.minecraft.player == null) {
+            return;
+        }
+        Optional<ClientNavigationController.NavigationPlan> plan = ClientNavigationController.startNavigation(this.minecraft.player, stationGroupId);
+        if (plan.isPresent()) {
+            this.toast(Component.translatable("screen.superpipeslide.full_map.navigation.restored", FullMapNavigationViewModel.stationName(plan.get().destinationStationGroupId())).getString());
+        } else {
+            this.toast(Component.translatable("screen.superpipeslide.full_map.navigation.restore_failed").getString());
+        }
     }
 
     private void clearNavigationPreview() {
@@ -1551,6 +2022,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         this.selectedNavigationPlanPipeRevision = Long.MIN_VALUE;
         this.navigationSheetExpanded = false;
         this.navigationCrossDimensionConfirmationArmed = false;
+        this.navigationCancelArmed = false;
         this.navigationItineraryScroll = 0.0D;
         this.navigationExpandedRideSteps.clear();
         this.navigationItineraryBounds = new SPSGui.Rect(0, 0, 0, 0);
@@ -1600,7 +2072,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private int navigationChipColor(FullMapNavigationViewModel.ChipTone tone) {
         return switch (tone) {
             case SUCCESS -> SPSGui.SUCCESS;
-            case WARNING -> 0xFFFFB13B;
+            case WARNING -> FullMapTheme.WARNING;
             case INFO -> SPSGui.INFO;
             case NEUTRAL -> FullMapTheme.TEXT_MUTED;
         };
@@ -1608,10 +2080,12 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     private int navigationStepColor(FullMapNavigationViewModel.ItineraryStep step, int primaryColor) {
         return switch (step.kind()) {
-            case ORIGIN, SAME_STATION_TRANSFER -> SPSGui.SUCCESS;
+            case ORIGIN -> NavigationSemanticColors.DESTINATION;
+            case SAME_STATION_TRANSFER -> NavigationSemanticColors.SAME_STATION_TRANSFER;
             case WALK_TO_BOARD -> FullMapTheme.TEXT_MUTED;
-            case OUT_OF_STATION_TRANSFER, FINAL_WALK -> 0xFFFFB13B;
-            case CROSS_DIMENSION_TRANSFER, CROSS_DIMENSION_FINAL_WALK -> SPSGui.INFO;
+            case OUT_OF_STATION_TRANSFER -> NavigationSemanticColors.OUT_OF_STATION_TRANSFER;
+            case FINAL_WALK -> NavigationSemanticColors.FINAL_WALK;
+            case CROSS_DIMENSION_TRANSFER, CROSS_DIMENSION_FINAL_WALK -> NavigationSemanticColors.CROSS_DIMENSION_TRANSFER;
             case DESTINATION -> primaryColor;
             case UNREACHABLE -> SPSGui.DANGER;
             case RIDE -> this.firstNavigationColor(step.colors());
@@ -1701,11 +2175,11 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     }
 
     private int drawNavigationLineBadge(GuiGraphicsExtractor graphics, int x, int y, String label, int color, int maxWidth) {
-        String text = SPSGui.ellipsize(this.font, label, Math.max(8, Math.round((maxWidth - 7) / 0.56F)));
-        int width = Math.min(maxWidth, Math.max(24, Math.round(this.font.width(text) * 0.56F) + 8));
+        String text = SPSGui.ellipsize(this.font, label, Math.max(8, Math.round((maxWidth - 7) / ROW_DETAIL_TEXT_SCALE)));
+        int width = Math.min(maxWidth, Math.max(24, Math.round(this.font.width(text) * ROW_DETAIL_TEXT_SCALE) + 8));
         graphics.fill(x, y, x + width, y + 12, SPSGui.withAlpha(color, 0xDD));
         graphics.outline(x, y, width, 12, SPSGui.withAlpha(color, 0xF2));
-        SPSGui.smallText(graphics, this.font, text, x + 4, y + 3, 0xFFFFFFFF, 0.56F);
+        SPSGui.smallText(graphics, this.font, text, x + 4, y + 3, 0xFFFFFFFF, ROW_DETAIL_TEXT_SCALE);
         return width;
     }
 
@@ -1722,10 +2196,17 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             return;
         }
         int width = this.font.width(this.toast) + 16;
-        SPSGui.Rect rect = new SPSGui.Rect((this.width - width) / 2, this.height - 30, width, 18);
+        int actionWidth = this.toastAction == null ? 0 : this.font.width(this.toastActionLabel) + 14;
+        SPSGui.Rect rect = new SPSGui.Rect((this.width - width - actionWidth) / 2, this.height - 30, width + actionWidth, 18);
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), 0xDD111820);
         graphics.outline(rect.x(), rect.y(), rect.width(), rect.height(), SPSGui.INFO);
-        SPSGui.centeredText(graphics, this.font, this.toast, rect.x() + rect.width() / 2, rect.y() + 5, 0xFFFFFFFF);
+        SPSGui.centeredText(graphics, this.font, this.toast, rect.x() + width / 2, rect.y() + 5, 0xFFFFFFFF);
+        if (this.toastAction != null) {
+            SPSGui.Rect action = new SPSGui.Rect(rect.right() - actionWidth + 1, rect.y() + 1, actionWidth - 2, 16);
+            graphics.outline(action.x(), action.y(), action.width(), action.height(), SPSGui.withAlpha(SPSGui.INFO, 0x88));
+            SPSGui.centeredText(graphics, this.font, this.toastActionLabel, action.x() + action.width() / 2, action.y() + 5, SPSGui.INFO);
+            this.addClick(action, this::runToastAction, Component.translatable("screen.superpipeslide.full_map.navigation.undo"));
+        }
     }
 
     private void renderContextPicker(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
@@ -1753,7 +2234,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         graphics.fill(bounds.x() + 2, bounds.y() + 3, bounds.right() + 2, bounds.bottom() + 3, FullMapTheme.SHADOW);
         graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), FullMapTheme.SURFACE_CARD_ACTIVE);
         graphics.outline(bounds.x(), bounds.y(), bounds.width(), bounds.height(), FullMapTheme.BORDER_ACTIVE);
-        graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.y() + 2, 0xBFFFFFFF);
+        graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.y() + 2, FullMapTheme.INNER_HIGHLIGHT_STRONG);
         graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.y() + headerHeight - 1, FullMapTheme.SURFACE_HEADER_ACTIVE);
         graphics.fill(bounds.x() + 1, bounds.y() + headerHeight, bounds.right() - 1, bounds.y() + headerHeight + 1, FullMapTheme.BORDER);
         int headerY = bounds.y() + 6;
@@ -1796,9 +2277,17 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         }
         graphics.disableScissor();
         if (this.contextPickerMaxScroll > 0.0D) {
-            int barHeight = Math.max(18, (int) Math.round(list.height() * list.height() / (double) (contentHeight + 1)));
-            int barY = list.y() + (int) Math.round((list.height() - barHeight) * (this.contextPickerScroll / this.contextPickerMaxScroll));
-            graphics.fill(list.right() - 2, barY, list.right(), barY + barHeight, SPSGui.withAlpha(SPSGui.INFO, 0xAA));
+            FullMapScrollBar.Binding binding = new FullMapScrollBar.Binding(
+                    "contextPicker",
+                    list,
+                    contentHeight,
+                    this.contextPickerScroll,
+                    this.contextPickerMaxScroll,
+                    FullMapScrollBar.FLOATING,
+                    true,
+                    value -> this.contextPickerScroll = value);
+            this.registerScrollBar(binding);
+            FullMapScrollBar.render(graphics, binding);
         }
     }
 
@@ -1841,6 +2330,32 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         return new SPSGui.Rect(x - 3, y - 3, FullRouteMapLayoutMode.values().length * size + (FullRouteMapLayoutMode.values().length - 1) * gap + 6, size + 6);
     }
 
+    private void renderBuildingIndicator(GuiGraphicsExtractor graphics) {
+        if (!FullRouteMapCache.building()) {
+            return;
+        }
+        SPSGui.smallText(graphics, this.font, Component.literal("Building map…").getString(), this.layoutModeStripBounds.right() + 8, this.layoutModeStripBounds.y() + 7, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
+    }
+
+    /**
+     * Opt-in debug overlay ({@link ClientConfig#FULL_MAP_DEBUG_OVERLAY}) drawing the active
+     * dimension's schematic quality summary as a single line in the bottom-left corner, just
+     * above the layout-mode strip. Every number comes straight from the solver's quality report.
+     */
+    private void renderSchematicQualityOverlay(GuiGraphicsExtractor graphics, VisualRouteMapGraph visualGraph) {
+        if (!ClientConfig.FULL_MAP_DEBUG_OVERLAY.get() || visualGraph == null) {
+            return;
+        }
+        SchematicQualityReport quality = visualGraph.quality();
+        String summary = "solve " + quality.solveTimeMillis() + "ms"
+                + " · overlaps " + quality.nodeOverlapCount()
+                + " · crossings " + quality.edgeCrossingCount()
+                + " · labels " + quality.labelOverlapCount()
+                + " · profile " + quality.profileName()
+                + (quality.timeout() ? " · timeout" : "");
+        SPSGui.smallText(graphics, this.font, Component.literal(summary).getString(), this.layoutModeStripBounds.x(), this.layoutModeStripBounds.y() - 11, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
+    }
+
     private void renderCameraCompass(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         if (FullRouteMapCache.layoutMode() == FullRouteMapLayoutMode.SCHEMATIC || this.cameraCompassBounds.width() <= 0 || this.cameraCompassBounds.height() <= 0) {
             return;
@@ -1867,7 +2382,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         Vec2 tip = new Vec2(center.x() + dx * 6.0D, center.y() + dy * 6.0D);
         Vec2 tail = new Vec2(center.x() - dx * 4.0D, center.y() - dy * 4.0D);
         SmoothGuiPrimitives.line(graphics, tail, tip, 1.2D, viewport.cameraTilted() ? SPSGui.INFO : FullMapTheme.TEXT_MUTED);
-        SPSGui.smallText(graphics, this.font, "N", (int) Math.round(tip.x() - 2.0D), (int) Math.round(tip.y() - 4.0D), viewport.cameraTilted() ? SPSGui.INFO : FullMapTheme.TEXT_MUTED, 0.50F);
+        SPSGui.smallText(graphics, this.font, "N", (int) Math.round(tip.x() - 2.0D), (int) Math.round(tip.y() - 4.0D), viewport.cameraTilted() ? SPSGui.INFO : FullMapTheme.TEXT_MUTED, COMPASS_TEXT_SCALE);
     }
 
     private SPSGui.Rect computeCameraCompassBounds() {
@@ -1882,6 +2397,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (this.activeDimension == null) {
             return;
         }
+        this.cancelViewportTween(this.activeDimension);
         ViewportState viewport = this.viewports.get(this.activeDimension);
         if (viewport != null) {
             this.viewports.put(this.activeDimension, viewport.withFlatCamera());
@@ -1905,7 +2421,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (graph.isEmpty() || visualGraph.isEmpty()) {
             return new SPSGui.Rect(0, 0, 0, 0);
         }
-        ViewportState viewport = this.viewportFor(graph.get());
+        ViewportState viewport = this.displayViewport(graph.get());
         List<SchematicLegendRow> rows = this.schematicLegendRows(graph.get(), visualGraph.get(), viewport);
         int rowHeight = schematicLegendRowHeight();
         int headerHeight = 22;
@@ -1923,7 +2439,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             this.schematicLegendMaxScroll = 0.0D;
             return;
         }
-        ViewportState viewport = this.viewportFor(graph);
+        ViewportState viewport = this.displayViewport(graph);
         List<SchematicLegendRow> rows = this.schematicLegendRows(graph, visualGraph, viewport);
         SPSGui.Rect bounds = this.schematicLegendBounds;
         FullMapUi.toolbarPanel(graphics, bounds);
@@ -1971,10 +2487,17 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         }
         graphics.disableScissor();
         if (this.schematicLegendMaxScroll > 0.0D) {
-            int barHeight = Math.max(12, (int) Math.round(list.height() * (list.height() / (double) contentHeight)));
-            int barY = list.y() + (int) Math.round((list.height() - barHeight) * (this.schematicLegendScroll / this.schematicLegendMaxScroll));
-            graphics.fill(list.right() - 3, list.y(), list.right() - 2, list.bottom(), FullMapTheme.BORDER_MUTED);
-            graphics.fill(list.right() - 4, barY, list.right() - 1, barY + barHeight, FullMapTheme.BORDER_SELECTED);
+            FullMapScrollBar.Binding binding = new FullMapScrollBar.Binding(
+                    "schematicLegend",
+                    list,
+                    contentHeight,
+                    this.schematicLegendScroll,
+                    this.schematicLegendMaxScroll,
+                    FullMapScrollBar.LEGEND,
+                    true,
+                    value -> this.schematicLegendScroll = value);
+            this.registerScrollBar(binding);
+            FullMapScrollBar.render(graphics, binding);
         }
     }
 
@@ -1986,9 +2509,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         int nameX = rowBounds.x() + 11;
         int nameWidth = Math.max(24, rowBounds.width() - 16);
         if (name.hasSecondary()) {
-            FullMapUi.drawNameStack(graphics, this.font, name, nameX, rowBounds.y() + 3, nameWidth, hovered ? SPSGui.INFO : FullMapTheme.TEXT_PRIMARY, FullMapTheme.TEXT_MUTED, 0.68F, 0.52F, 0);
+            FullMapUi.drawNameStack(graphics, this.font, name, nameX, rowBounds.y() + 3, nameWidth, hovered ? SPSGui.INFO : FullMapTheme.TEXT_PRIMARY, FullMapTheme.TEXT_MUTED, ROW_TITLE_TEXT_SCALE, ROW_SUB_TEXT_SCALE, 0);
         } else {
-            SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, name.primary(), Math.round(nameWidth / 0.68F)), nameX, rowBounds.y() + 6, hovered ? SPSGui.INFO : FullMapTheme.TEXT_PRIMARY, 0.68F);
+            SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, name.primary(), Math.round(nameWidth / ROW_TITLE_TEXT_SCALE)), nameX, rowBounds.y() + 6, hovered ? SPSGui.INFO : FullMapTheme.TEXT_PRIMARY, ROW_TITLE_TEXT_SCALE);
         }
     }
 
@@ -1999,13 +2522,33 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (FullRouteMapCache.layoutMode().physical()) {
             return FullRouteMapCache.physicalGraph(this.activeDimension).map(this::viewportFor);
         }
-        return this.currentGraph().map(this::viewportFor);
+        return this.currentGraph().map(this::displayViewport);
     }
 
     private List<SchematicLegendRow> schematicLegendRows(MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport) {
         if (FullRouteMapCache.layoutMode() != FullRouteMapLayoutMode.SCHEMATIC || graph == null || visualGraph == null) {
             return List.of();
         }
+        // Memoize per frame: chrome bounds, hover lookup and legend rendering all need the
+        // same rows, and recomputing walks every edge path through worldToScreen.
+        if (graph == this.cachedSchematicLegendGraph
+                && visualGraph == this.cachedSchematicLegendVisualGraph
+                && viewport.equals(this.cachedSchematicLegendViewport)
+                && this.mapRect.width() == this.cachedSchematicLegendMapWidth
+                && this.mapRect.height() == this.cachedSchematicLegendMapHeight) {
+            return this.cachedSchematicLegendRows;
+        }
+        List<SchematicLegendRow> rows = this.computeSchematicLegendRows(graph, visualGraph, viewport);
+        this.cachedSchematicLegendGraph = graph;
+        this.cachedSchematicLegendVisualGraph = visualGraph;
+        this.cachedSchematicLegendViewport = viewport;
+        this.cachedSchematicLegendMapWidth = this.mapRect.width();
+        this.cachedSchematicLegendMapHeight = this.mapRect.height();
+        this.cachedSchematicLegendRows = rows;
+        return rows;
+    }
+
+    private List<SchematicLegendRow> computeSchematicLegendRows(MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport) {
         Map<UUID, SchematicLegendAccumulator> accumulators = new LinkedHashMap<>();
         for (VisualEdgePath path : visualGraph.edgePaths()) {
             if (path.points().size() < 2 || path.routeLineIds().isEmpty()) {
@@ -2059,7 +2602,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private int schematicLegendWidth(List<SchematicLegendRow> rows) {
         int width = Math.round(this.font.width(Component.translatable("screen.superpipeslide.full_map.visible_routes").getString()) * FullMapTheme.TYPE_META) + 44;
         for (SchematicLegendRow row : rows) {
-            width = Math.max(width, FullMapUi.nameStackWidth(this.font, FullMapText.displayNameStack(row.line()), 0.68F, 0.52F) + 30);
+            width = Math.max(width, FullMapUi.nameStackWidth(this.font, FullMapText.displayNameStack(row.line()), ROW_TITLE_TEXT_SCALE, ROW_SUB_TEXT_SCALE) + 30);
         }
         return Math.max(126, Math.min(178, width));
     }
@@ -2249,7 +2792,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (graph.isEmpty()) {
             return;
         }
-        ViewportState viewport = this.viewportFor(graph.get());
+        ViewportState viewport = this.displayViewport(graph.get());
         double pixelsPerBlock = viewport.zoom() * FullRouteMapConfig.BASE_SCALE;
         if (pixelsPerBlock <= 0.001D) {
             return;
@@ -2264,7 +2807,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         graphics.fill(x, y, x + pixelLength, y + 2, FullRouteMapConfig.MAP_LABEL);
         graphics.fill(x, y - 4, x + 2, y + 6, FullRouteMapConfig.MAP_LABEL);
         graphics.fill(x + pixelLength - 2, y - 4, x + pixelLength, y + 6, FullRouteMapConfig.MAP_LABEL);
-        SPSGui.smallText(graphics, this.font, scaleBarLabel(blockLength), x, y - 10, FullRouteMapConfig.MAP_LABEL, 0.62F);
+        SPSGui.smallText(graphics, this.font, scaleBarLabel(blockLength), x, y - 10, FullRouteMapConfig.MAP_LABEL, SCALE_BAR_TEXT_SCALE);
     }
 
     private static double niceScaleLength(double targetBlocks) {
@@ -2301,7 +2844,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     }
 
     private static Component routeCardViewModeTooltip(RouteCardViewMode mode) {
-        return Component.literal(mode.label() + "\n" + Component.translatable(routeCardViewModeDescriptionKey(mode)).getString());
+        return Component.literal(Component.translatable(mode.translationKey()).getString() + "\n" + Component.translatable(routeCardViewModeDescriptionKey(mode)).getString());
     }
 
     private static String routeCardViewModeDescriptionKey(RouteCardViewMode mode) {
@@ -2309,10 +2852,10 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     }
 
     private void renderFoldHoverPreview(GuiGraphicsExtractor graphics, MapDimensionGraph graph, VisualRouteMapGraph visualGraph, int mouseX, int mouseY) {
-        if (graph == null || this.hover.nodeId().isEmpty()) {
+        if (graph == null || !(this.hover instanceof HitTarget.NodeHit(var hoveredNodeId))) {
             return;
         }
-        MapNode node = graph.node(this.hover.nodeId().get()).orElse(null);
+        MapNode node = graph.node(hoveredNodeId).orElse(null);
         if (node == null || node.kind() != NodeKind.FOLD_ANCHOR || node.foldPeerId().isEmpty()) {
             return;
         }
@@ -2329,10 +2872,10 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     }
 
     private void renderClusterHoverPreview(GuiGraphicsExtractor graphics, MapDimensionGraph graph, int mouseX, int mouseY) {
-        if (graph == null || this.hover.nodeId().isEmpty()) {
+        if (graph == null || !(this.hover instanceof HitTarget.NodeHit(var hoveredNodeId))) {
             return;
         }
-        MapNode node = graph.node(this.hover.nodeId().get()).orElse(null);
+        MapNode node = graph.node(hoveredNodeId).orElse(null);
         if (node == null || (node.kind() != NodeKind.CLUSTER && node.kind() != NodeKind.DEEP_CLUSTER)) {
             return;
         }
@@ -2341,13 +2884,12 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             return;
         }
         ClusterCardProfile profile = node.kind() == NodeKind.DEEP_CLUSTER ? ClusterCardProfile.DEEP : ClusterCardProfile.ORDINARY;
-        ClusterCardSemanticGraph semanticGraph = profile == ClusterCardProfile.DEEP
-                ? this.clusterCardSemanticBuilder.build(graph, cluster, ClusterCardProfile.DEEP)
-                : this.clusterCardSemanticBuilder.build(graph, cluster);
+        ClusterCardGraphBundle graphBundle = this.clusterCardGraph(graph, cluster, profile);
+        ClusterCardSemanticGraph semanticGraph = graphBundle.semanticGraph();
         if (semanticGraph.nodes().isEmpty()) {
             return;
         }
-        ClusterCardVisualGraph visualGraph = this.clusterCardLayoutSolver.solve(semanticGraph);
+        ClusterCardVisualGraph visualGraph = graphBundle.visualGraph();
         SPSGui.Rect rect = this.hoverPreviewBounds(mouseX, mouseY, profile == ClusterCardProfile.DEEP ? 152 : 136, profile == ClusterCardProfile.DEEP ? 124 : 112);
         this.hoverOverlayAvoidRects.add(rect);
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), SPSGui.PANEL_ELEVATED);
@@ -2426,11 +2968,12 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (cluster == null) {
             return List.of();
         }
-        ClusterCardSemanticGraph semanticGraph = this.clusterCardSemanticBuilder.build(graph, cluster, ClusterCardProfile.DEEP);
+        ClusterCardGraphBundle graphBundle = this.clusterCardGraph(graph, cluster, ClusterCardProfile.DEEP);
+        ClusterCardSemanticGraph semanticGraph = graphBundle.semanticGraph();
         if (semanticGraph.nodes().isEmpty()) {
             return List.of();
         }
-        ClusterCardVisualGraph visualGraph = this.clusterCardLayoutSolver.solve(semanticGraph);
+        ClusterCardVisualGraph visualGraph = graphBundle.visualGraph();
         List<SPSGui.Rect> avoidRects = new ArrayList<>();
         SPSGui.Rect rect = this.hoverPreviewBounds(boundary, mouseX, mouseY, 152, 124, avoidRects);
         avoidRects.add(rect);
@@ -2444,10 +2987,10 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     }
 
     private void renderPhysicalFoldHoverPreview(GuiGraphicsExtractor graphics, PhysicalRouteMapGraph graph, int mouseX, int mouseY) {
-        if (graph == null || this.hover.physicalNodeId().isEmpty()) {
+        if (graph == null || !(this.hover instanceof HitTarget.PhysicalNodeHit(var hoveredNodeId))) {
             return;
         }
-        PhysicalMapNode node = graph.node(this.hover.physicalNodeId().get()).orElse(null);
+        PhysicalMapNode node = graph.node(hoveredNodeId).orElse(null);
         if (node == null || node.kind() != PhysicalNodeKind.FOLD_ANCHOR || node.foldAnchorId().isEmpty()) {
             return;
         }
@@ -2464,11 +3007,13 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     }
 
     private SPSGui.Rect hoverPreviewBounds(int mouseX, int mouseY, int width, int height) {
-        return FullMapTooltipCard.place(new SPSGui.Rect(mouseX + 14, mouseY + 14, width, height), this.screenBounds(), this.hoverOverlayAvoidRects);
+        this.hoverPreviewPlacement = FullMapTooltipCard.place(new SPSGui.Rect(mouseX + 14, mouseY + 14, width, height), this.screenBounds(), this.hoverOverlayAvoidRects, this.hoverPreviewPlacement);
+        return this.hoverPreviewPlacement;
     }
 
     private SPSGui.Rect hoverPreviewBounds(SPSGui.Rect boundary, int mouseX, int mouseY, int width, int height, List<SPSGui.Rect> avoidRects) {
-        return FullMapTooltipCard.place(new SPSGui.Rect(mouseX + 14, mouseY + 14, width, height), boundary, avoidRects);
+        this.hoverPreviewPlacement = FullMapTooltipCard.place(new SPSGui.Rect(mouseX + 14, mouseY + 14, width, height), boundary, avoidRects, this.hoverPreviewPlacement);
+        return this.hoverPreviewPlacement;
     }
 
     private void drawHoverPreviewFrame(GuiGraphicsExtractor graphics, SPSGui.Rect rect) {
@@ -2483,7 +3028,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (!peerId.levelKey().equals(this.activeDimension)) {
             return false;
         }
-        ViewportState viewport = this.viewportFor(graph);
+        ViewportState viewport = this.displayViewport(graph);
         return this.displayNodeForFoldAnchor(peerId, viewport.zoom())
                 .map(peer -> FullRouteMapRenderer.visualPosition(graph, visualGraph, peer))
                 .map(peer -> FullRouteMapRenderer.worldToScreen(peer.x(), peer.y(), viewport, this.mapRect))
@@ -2517,7 +3062,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             SPSGui.centeredText(graphics, this.font, Component.translatable("screen.superpipeslide.full_map.fold_peer_missing"), preview.x() + preview.width() / 2, preview.y() + preview.height() / 2 - 4, SPSGui.TEXT_MUTED);
             return;
         }
-        double zoom = this.currentGraph().map(this::viewportFor).map(ViewportState::zoom).orElse(FullRouteMapConfig.DEFAULT_ZOOM);
+        double zoom = this.currentGraph().map(this::displayViewport).map(ViewportState::zoom).orElse(FullRouteMapConfig.DEFAULT_ZOOM);
         if (peerNode.kind() == NodeKind.CLUSTER) {
             zoom = clusterVisibleZoom();
         }
@@ -2539,7 +3084,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             SPSGui.centeredText(graphics, this.font, Component.translatable("screen.superpipeslide.full_map.fold_peer_missing"), preview.x() + preview.width() / 2, preview.y() + preview.height() / 2 - 4, SPSGui.TEXT_MUTED);
             return;
         }
-        double zoom = this.currentGraph().map(this::viewportFor).map(ViewportState::zoom).orElse(FullRouteMapConfig.DEFAULT_ZOOM);
+        double zoom = this.currentGraph().map(this::displayViewport).map(ViewportState::zoom).orElse(FullRouteMapConfig.DEFAULT_ZOOM);
         ViewportState viewport = new ViewportState(peerId.levelKey(), peerNode.get().worldX(), peerNode.get().worldZ(), zoom);
         graphics.enableScissor(preview.x(), preview.y(), preview.right(), preview.bottom());
         this.renderer.renderPhysical(graphics, this.font, peerGraph.get(), viewport, preview, HitTarget.physicalNode(peerNode.get().id()), 0, 0);
@@ -2550,142 +3095,151 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     }
 
     private void renderHoverTooltip(GuiGraphicsExtractor graphics, MapDimensionGraph graph, int mouseX, int mouseY) {
-        if (graph == null || this.hover.kind() == HitKind.NONE) {
+        if (graph == null) {
             return;
         }
-        if (this.hover.nodeId().isPresent()) {
-            MapNode node = graph.node(this.hover.nodeId().get()).orElse(null);
-            if (node == null) {
-                this.syntheticPortalNode(graph, this.hover.nodeId().get())
-                        .ifPresent(portal -> this.renderTooltipCard(
-                                graphics,
-                                mouseX,
-                                mouseY,
-                                DisplayNameStack.of(Component.translatable("screen.superpipeslide.full_map.tooltip_card.portal").getString()),
-                                Component.translatable("screen.superpipeslide.full_map.tooltip_card.portal_target", schematicPortalTargetLabel(portal)).getString(),
-                                List.of(),
-                                List.of(),
-                                FullMapTheme.BORDER_SELECTED));
-                return;
+        switch (this.hover) {
+            case HitTarget.NodeHit(var nodeId) -> {
+                MapNode node = graph.node(nodeId).orElse(null);
+                if (node == null) {
+                    this.syntheticPortalNode(graph, nodeId)
+                            .ifPresent(portal -> this.renderTooltipCard(
+                                    graphics,
+                                    mouseX,
+                                    mouseY,
+                                    DisplayNameStack.of(Component.translatable("screen.superpipeslide.full_map.tooltip_card.portal").getString()),
+                                    Component.translatable("screen.superpipeslide.full_map.tooltip_card.portal_target", schematicPortalTargetLabel(portal)).getString(),
+                                    List.of(),
+                                    List.of(),
+                                    FullMapTheme.BORDER_SELECTED));
+                    return;
+                }
+                this.renderNodeTooltip(graphics, node, mouseX, mouseY);
             }
-            this.renderNodeTooltip(graphics, node, mouseX, mouseY);
-            return;
-        }
-        if (this.hover.edgeId().isPresent()) {
-            MapEdge edge = graph.edges().stream().filter(value -> value.id().equals(this.hover.edgeId().get())).findFirst().orElse(null);
-            if (edge != null) {
-                this.renderEdgeTooltip(graphics, edge.routeLineIds(), mouseX, mouseY);
-                return;
+            case HitTarget.EdgeHit(var edgeId) -> {
+                MapEdge edge = graph.edge(edgeId).orElse(null);
+                if (edge != null) {
+                    this.renderEdgeTooltip(graphics, edge.routeLineIds(), mouseX, mouseY);
+                    return;
+                }
+                FullRouteMapCache.visualGraph(graph.levelKey())
+                        .flatMap(visualGraph -> visualGraph.edgePath(edgeId))
+                        .ifPresent(path -> this.renderEdgeTooltip(graphics, path.routeLineIds(), mouseX, mouseY));
             }
-            FullRouteMapCache.visualGraph(graph.levelKey())
-                    .flatMap(visualGraph -> visualGraph.edgePath(this.hover.edgeId().get()))
-                    .ifPresent(path -> this.renderEdgeTooltip(graphics, path.routeLineIds(), mouseX, mouseY));
-            return;
-        }
-        if (this.hover.transferHintId().isPresent()) {
-            graph.transferHints().stream()
-                    .filter(hint -> hint.id().equals(this.hover.transferHintId().get()))
+            case HitTarget.TransferHintHit(var hintId) -> graph.transferHints().stream()
+                    .filter(hint -> hint.id().equals(hintId))
                     .findFirst()
                     .ifPresent(hint -> this.renderTransferHintTooltip(graphics, graph, hint, mouseX, mouseY));
-            return;
-        }
-        if (this.hover.missingCrossDimensionHintId().isPresent()) {
-            graph.missingCrossDimensionPathHints().stream()
-                    .filter(hint -> hint.id().equals(this.hover.missingCrossDimensionHintId().get()))
+            case HitTarget.MissingCrossDimensionPathHit(var hintId) -> graph.missingCrossDimensionPathHints().stream()
+                    .filter(hint -> hint.id().equals(hintId))
                     .findFirst()
-                    .ifPresent(hint -> this.renderMissingCrossDimensionPathTooltip(graphics, hint.routeLineId(), hint.routeLayoutId(), hint.targetLevelKey(), mouseX, mouseY));
+                    .ifPresent(hint -> this.renderMissingCrossDimensionPathTooltip(graphics, hint.routeLineId(), hint.routeLayoutId(), hint.targetLevelKey(), hint.reason(), mouseX, mouseY));
+            default -> {}
         }
     }
 
     private void renderPhysicalHoverTooltip(GuiGraphicsExtractor graphics, PhysicalRouteMapGraph graph, int mouseX, int mouseY) {
-        if (graph == null || this.hover.kind() == HitKind.NONE) {
+        if (graph == null) {
             return;
         }
-        if (this.hover.physicalNodeId().isPresent()) {
-            PhysicalMapNode node = graph.node(this.hover.physicalNodeId().get()).orElse(null);
-            if (node == null) {
-                return;
-            }
-            if (node.kind() == PhysicalNodeKind.PLATFORM) {
-                DisplayNameStack station = node.stationGroupId()
-                        .flatMap(ClientRouteDataCache::stationGroup)
-                        .map(FullMapText::displayNameStack)
-                        .orElse(DisplayNameStack.of(node.label()));
+        switch (this.hover) {
+            case HitTarget.PhysicalNodeHit(var nodeId) -> {
+                PhysicalMapNode node = graph.node(nodeId).orElse(null);
+                if (node == null) {
+                    return;
+                }
+                if (node.kind() == PhysicalNodeKind.PLATFORM) {
+                    DisplayNameStack station = node.stationGroupId()
+                            .flatMap(ClientRouteDataCache::stationGroup)
+                            .map(FullMapText::displayNameStack)
+                            .orElse(DisplayNameStack.of(node.label()));
+                    this.renderTooltipCard(
+                            graphics,
+                            mouseX,
+                            mouseY,
+                            station,
+                            Component.translatable("screen.superpipeslide.full_map.tooltip_card.physical_platform").getString(),
+                            List.of(
+                                    tooltipRow("screen.superpipeslide.full_map.tooltip_field.platform", node.label()),
+                                    tooltipRow("screen.superpipeslide.full_map.tooltip_field.dimension", dimensionLabel(node.levelKey())),
+                                    tooltipRow("screen.superpipeslide.full_map.tooltip_field.position", (int) node.worldX() + ", " + (int) node.worldY() + ", " + (int) node.worldZ())),
+                            node.stationGroupId().stream()
+                                    .flatMap(stationId -> ClientRouteDataCache.platformStopsInStation(stationId).stream())
+                                    .flatMap(platform -> ClientRouteDataCache.routeLayoutIdsForPlatformStop(platform.id()).stream())
+                                    .map(ClientRouteDataCache::routeLayout)
+                                    .flatMap(Optional::stream)
+                                    .map(RouteLayout::routeLineId)
+                                    .distinct()
+                                    .map(ClientRouteDataCache::routeLine)
+                                    .flatMap(Optional::stream)
+                                    .map(FullRouteMapScreen::routeChip)
+                                    .toList(),
+                            primaryRouteColor(node.stationGroupId().stream()
+                                    .flatMap(stationId -> ClientRouteDataCache.platformStopsInStation(stationId).stream())
+                                    .flatMap(platform -> ClientRouteDataCache.routeLayoutIdsForPlatformStop(platform.id()).stream())
+                                    .map(ClientRouteDataCache::routeLayout)
+                                    .flatMap(Optional::stream)
+                                    .map(RouteLayout::routeLineId)
+                                    .distinct()
+                                    .toList()));
+                    return;
+                }
+                String peerDimension = node.foldAnchorId()
+                        .flatMap(ClientPipeNetworkCache::globalFoldCounterpart)
+                        .map(peer -> dimensionLabel(peer.levelKey()))
+                        .orElse("?");
                 this.renderTooltipCard(
                         graphics,
                         mouseX,
                         mouseY,
-                        station,
-                        Component.translatable("screen.superpipeslide.full_map.tooltip_card.physical_platform").getString(),
+                        DisplayNameStack.of(node.label()),
+                        Component.translatable("screen.superpipeslide.full_map.tooltip_card.fold_anchor").getString(),
+                        List.of(tooltipRow("screen.superpipeslide.full_map.tooltip_field.peer_dimension", peerDimension)),
+                        List.of(),
+                        FullRouteMapConfig.MAP_FOLD_MULTI_LINE);
+            }
+            case HitTarget.PhysicalEdgeHit(var edgeId) -> {
+                PhysicalMapEdge edge = graph.edge(edgeId).orElse(null);
+                if (edge == null) {
+                    return;
+                }
+                List<UUID> routeLineIds = FullRouteMapRenderer.physicalRouteLineIdsForEdge(graph, edge.id());
+                this.renderTooltipCard(
+                        graphics,
+                        mouseX,
+                        mouseY,
+                        edgeTitleStack(routeLineIds),
+                        Component.translatable("screen.superpipeslide.full_map.tooltip_card.physical_edge").getString(),
                         List.of(
-                                tooltipRow("screen.superpipeslide.full_map.tooltip_field.platform", node.label()),
-                                tooltipRow("screen.superpipeslide.full_map.tooltip_field.dimension", dimensionLabel(node.levelKey())),
-                                tooltipRow("screen.superpipeslide.full_map.tooltip_field.position", (int) node.worldX() + ", " + (int) node.worldY() + ", " + (int) node.worldZ())),
-                        node.stationGroupId().stream()
-                                .flatMap(stationId -> ClientRouteDataCache.platformStopsInStation(stationId).stream())
-                                .flatMap(platform -> ClientRouteDataCache.routeLayoutIdsForPlatformStop(platform.id()).stream())
-                                .map(ClientRouteDataCache::routeLayout)
-                                .flatMap(Optional::stream)
-                                .map(RouteLayout::routeLineId)
-                                .distinct()
-                                .map(ClientRouteDataCache::routeLine)
-                                .flatMap(Optional::stream)
-                                .map(FullRouteMapScreen::routeChip)
-                                .toList(),
-                        primaryRouteColor(node.stationGroupId().stream()
-                                .flatMap(stationId -> ClientRouteDataCache.platformStopsInStation(stationId).stream())
-                                .flatMap(platform -> ClientRouteDataCache.routeLayoutIdsForPlatformStop(platform.id()).stream())
-                                .map(ClientRouteDataCache::routeLayout)
-                                .flatMap(Optional::stream)
-                                .map(RouteLayout::routeLineId)
-                                .distinct()
-                                .toList()));
-                return;
+                                tooltipRow("screen.superpipeslide.full_map.tooltip_field.length", Component.translatable("screen.superpipeslide.full_map.tooltip_card.blocks", (int) Math.round(edge.metadata().lengthBlocks())).getString()),
+                                tooltipRow("screen.superpipeslide.full_map.tooltip_field.dimension", dimensionLabel(edge.levelKey()))),
+                        routeChips(routeLineIds),
+                        primaryRouteColor(routeLineIds));
             }
-            String peerDimension = node.foldAnchorId()
-                    .flatMap(ClientPipeNetworkCache::globalFoldCounterpart)
-                    .map(peer -> dimensionLabel(peer.levelKey()))
-                    .orElse("?");
-            this.renderTooltipCard(
-                    graphics,
-                    mouseX,
-                    mouseY,
-                    DisplayNameStack.of(node.label()),
-                    Component.translatable("screen.superpipeslide.full_map.tooltip_card.fold_anchor").getString(),
-                    List.of(tooltipRow("screen.superpipeslide.full_map.tooltip_field.peer_dimension", peerDimension)),
-                    List.of(),
-                    FullRouteMapConfig.MAP_FOLD_MULTI_LINE);
-            return;
-        }
-        if (this.hover.physicalEdgeId().isPresent()) {
-            PhysicalMapEdge edge = graph.edge(this.hover.physicalEdgeId().get()).orElse(null);
-            if (edge == null) {
-                return;
-            }
-            List<UUID> routeLineIds = FullRouteMapRenderer.physicalRouteLineIdsForEdge(graph, edge.id());
-            this.renderTooltipCard(
-                    graphics,
-                    mouseX,
-                    mouseY,
-                    edgeTitleStack(routeLineIds),
-                    Component.translatable("screen.superpipeslide.full_map.tooltip_card.physical_edge").getString(),
-                    List.of(
-                            tooltipRow("screen.superpipeslide.full_map.tooltip_field.length", Component.translatable("screen.superpipeslide.full_map.tooltip_card.blocks", (int) Math.round(edge.metadata().lengthBlocks())).getString()),
-                            tooltipRow("screen.superpipeslide.full_map.tooltip_field.dimension", dimensionLabel(edge.levelKey()))),
-                    routeChips(routeLineIds),
-                    primaryRouteColor(routeLineIds));
-            return;
-        }
-        if (this.hover.missingCrossDimensionHintId().isPresent()) {
-            graph.missingCrossDimensionPathHints().stream()
-                    .filter(hint -> hint.id().equals(this.hover.missingCrossDimensionHintId().get()))
+            case HitTarget.MissingCrossDimensionPathHit(var hintId) -> graph.missingCrossDimensionPathHints().stream()
+                    .filter(hint -> hint.id().equals(hintId))
                     .findFirst()
-                    .ifPresent(hint -> this.renderMissingCrossDimensionPathTooltip(graphics, hint.routeLineId(), hint.routeLayoutId(), hint.targetLevelKey(), mouseX, mouseY));
+                    .ifPresent(hint -> this.renderMissingCrossDimensionPathTooltip(graphics, hint.routeLineId(), hint.routeLayoutId(), hint.targetLevelKey(), hint.reason(), mouseX, mouseY));
+            default -> {}
         }
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        // Any press is new input: an inertia glide never survives it.
+        this.stopMapInertia();
+        this.panningMap = false;
+        if (event.button() == 0) {
+            this.pendingMapClick = Optional.empty();
+            this.scrollBarDrag = null;
+            this.pendingRowScroll = null;
+            // D4: scroll bar hit-testing precedes every other dispatch, since the bar
+            // slot overlaps the rightmost pixels of the rows beneath it.
+            if (this.handleScrollBarMousePress(event.x(), event.y())) {
+                return true;
+            }
+            this.pendingRowScroll = this.rowScrollPressAt(event.x(), event.y());
+        }
         if (event.button() == 0 && this.contextPicker.isPresent()) {
             if (this.contextPickerBounds.contains(event.x(), event.y())) {
                 ContextPicker picker = this.contextPicker.get();
@@ -2694,6 +3248,16 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                         picker.actions().get(i).action().run();
                         return true;
                     }
+                }
+                if (this.pendingRowScroll != null) {
+                    // Defer the row click to release: a drag past the 6px threshold
+                    // becomes a scroll instead of a click (same rule as map clicks).
+                    this.pendingMapClick = Optional.of(new PendingMapClick(
+                            (releaseX, releaseY) -> this.dispatchContextPickerRow(picker, releaseX, releaseY),
+                            null,
+                            event.x(),
+                            event.y()));
+                    return true;
                 }
                 for (int i = 0; i < Math.min(this.contextPickerRowBounds.size(), picker.rows().size()); i++) {
                     if (this.contextPickerRowBounds.get(i).contains(event.x(), event.y())) {
@@ -2720,6 +3284,15 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 this.dimensionMenuOpen = false;
             }
             if (this.mapPopoverBlocks(event.x(), event.y())) {
+                if (this.pendingRowScroll != null) {
+                    // Defer row clicks to release so a drag can become a scroll instead.
+                    this.pendingMapClick = Optional.of(new PendingMapClick(
+                            (releaseX, releaseY) -> this.dispatchClickActions(this.backgroundClickActions, releaseX, releaseY),
+                            null,
+                            event.x(),
+                            event.y()));
+                    return true;
+                }
                 if (this.dispatchClickActions(this.backgroundClickActions, event.x(), event.y())) {
                     return true;
                 }
@@ -2731,6 +3304,15 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 return true;
             }
             if (this.mapChromeBlocks(event.x(), event.y())) {
+                if (this.pendingRowScroll != null) {
+                    // Defer row clicks to release so a drag can become a scroll instead.
+                    this.pendingMapClick = Optional.of(new PendingMapClick(
+                            (releaseX, releaseY) -> this.dispatchClickActions(this.backgroundClickActions, releaseX, releaseY),
+                            null,
+                            event.x(),
+                            event.y()));
+                    return true;
+                }
                 if (this.dispatchClickActions(this.backgroundClickActions, event.x(), event.y())) {
                     return true;
                 }
@@ -2777,7 +3359,15 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 List<ClickAction> actions = this.cardClickActions.getOrDefault(clickedCard.get(), List.of());
                 boolean clickedClose = actions.stream().anyMatch(action -> isCloseAction(bounds, action.bounds()) && action.bounds().contains(event.x(), event.y()));
                 if (wasTop || clickedClose) {
-                    this.dispatchClickActions(actions, event.x(), event.y());
+                    String cardKey = clickedCard.get();
+                    // Double-click on a cluster card's map area fits its viewport, the
+                    // same gesture the main map offers (there it zooms instead).
+                    Runnable doubleClickAction = clusterMapClick ? () -> this.fitClusterCard(cardKey) : null;
+                    this.pendingMapClick = Optional.of(new PendingMapClick(
+                            (releaseX, releaseY) -> this.dispatchClickActions(this.cardClickActions.getOrDefault(cardKey, List.of()), releaseX, releaseY),
+                            doubleClickAction,
+                            event.x(),
+                            event.y()));
                 }
             }
             return true;
@@ -2816,46 +3406,40 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             Optional<PhysicalRouteMapGraph> physicalGraph = FullRouteMapCache.physicalGraph(graph.get().levelKey());
             if (physicalGraph.isPresent()) {
                 HitTarget hit = this.renderer.hitTestPhysical(physicalGraph.get(), this.viewportFor(physicalGraph.get()), this.mapRect, event.x(), event.y());
-                if (hit.kind() == HitKind.PHYSICAL_NODE && hit.physicalNodeId().isPresent()) {
-                    this.handlePhysicalNodeClick(physicalGraph.get(), hit.physicalNodeId().get(), event.x(), event.y());
-                    return true;
+                PendingClickAction action = null;
+                switch (hit) {
+                    case HitTarget.PhysicalNodeHit(var nodeId) -> action = (releaseX, releaseY) -> this.handlePhysicalNodeClick(physicalGraph.get(), nodeId, releaseX, releaseY);
+                    case HitTarget.PhysicalEdgeHit(var edgeId) -> action = (releaseX, releaseY) -> this.handlePhysicalEdgeClick(physicalGraph.get(), edgeId, releaseX, releaseY);
+                    case HitTarget.MissingCrossDimensionPathHit(var hintId) -> action = (releaseX, releaseY) -> this.handlePhysicalMissingCrossDimensionPathClick(physicalGraph.get(), hintId);
+                    default -> {}
                 }
-                if (hit.kind() == HitKind.PHYSICAL_EDGE && hit.physicalEdgeId().isPresent()) {
-                    this.handlePhysicalEdgeClick(physicalGraph.get(), hit.physicalEdgeId().get(), event.x(), event.y());
-                    return true;
-                }
-                if (hit.kind() == HitKind.MISSING_CROSS_DIMENSION_PATH && hit.missingCrossDimensionHintId().isPresent()) {
-                    this.handlePhysicalMissingCrossDimensionPathClick(physicalGraph.get(), hit.missingCrossDimensionHintId().get());
-                    return true;
-                }
+                this.pendingMapClick = Optional.of(new PendingMapClick(action, action == null ? () -> this.zoomMapViewport(event.x(), event.y(), MAP_DOUBLE_CLICK_ZOOM_FACTOR) : null, event.x(), event.y()));
                 return true;
             }
         }
-        HitTarget hit = this.renderer.hitTest(graph.get(), FullRouteMapCache.visualGraph(graph.get().levelKey()).orElse(null), this.viewportFor(graph.get()), this.mapRect, event.x(), event.y());
-        if (doubleClick && hit.nodeId().isPresent()) {
-            graph.get().node(hit.nodeId().get())
-                    .filter(node -> node.kind() != NodeKind.DEEP_CLUSTER)
-                    .ifPresent(this::locateNode);
-            return true;
-        }
-        if (hit.kind() == HitKind.NODE && hit.nodeId().isPresent()) {
-            if (graph.get().node(hit.nodeId().get()).isEmpty()) {
-                return true;
+        HitTarget hit = this.renderer.hitTest(graph.get(), FullRouteMapCache.visualGraph(graph.get().levelKey()).orElse(null), this.displayViewport(graph.get()), this.mapRect, event.x(), event.y());
+        PendingClickAction action = null;
+        Runnable doubleClickAction = null;
+        if (hit instanceof HitTarget.NodeHit(var nodeId)) {
+            MapNode node = graph.get().node(nodeId).orElse(null);
+            if (node != null) {
+                action = (releaseX, releaseY) -> this.handleNodeClick(graph.get(), nodeId, releaseX, releaseY);
+                if (node.kind() != NodeKind.DEEP_CLUSTER) {
+                    doubleClickAction = () -> this.locateNode(node);
+                }
             }
-            this.handleNodeClick(graph.get(), hit.nodeId().get(), event.x(), event.y());
-            return true;
         }
-        if (hit.kind() == HitKind.EDGE && hit.edgeId().isPresent()) {
-            this.handleEdgeClick(graph.get(), hit.edgeId().get(), event.x(), event.y());
-            return true;
+        if (action == null && hit instanceof HitTarget.EdgeHit(var edgeId)) {
+            action = (releaseX, releaseY) -> this.handleEdgeClick(graph.get(), edgeId, releaseX, releaseY);
         }
-        if (hit.kind() == HitKind.TRANSFER_HINT) {
-            return true;
+        if (action == null && hit instanceof HitTarget.MissingCrossDimensionPathHit(var hintId)) {
+            action = (releaseX, releaseY) -> this.handleMissingCrossDimensionPathClick(graph.get(), hintId);
         }
-        if (hit.kind() == HitKind.MISSING_CROSS_DIMENSION_PATH && hit.missingCrossDimensionHintId().isPresent()) {
-            this.handleMissingCrossDimensionPathClick(graph.get(), hit.missingCrossDimensionHintId().get());
-            return true;
+        if (action == null && doubleClickAction == null) {
+            // Double-click on blank map: zoom in one step, anchored at the clicked point.
+            doubleClickAction = () -> this.zoomMapViewport(event.x(), event.y(), MAP_DOUBLE_CLICK_ZOOM_FACTOR);
         }
+        this.pendingMapClick = Optional.of(new PendingMapClick(action, doubleClickAction, event.x(), event.y()));
         return true;
     }
 
@@ -2869,15 +3453,52 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        if (event.button() == 0 && this.scrollBarDrag != null) {
+            FullMapScrollBar.Binding binding = this.scrollBarBindings.get(this.scrollBarDrag.bindingId());
+            if (binding == null || !binding.scrollable()) {
+                this.scrollBarDrag = null;
+            } else {
+                if (this.scrollBarDrag.thumbMode()) {
+                    binding.write(FullMapScrollBar.scrollForThumbTop(binding, event.y() - this.scrollBarDrag.grabOffset()));
+                } else {
+                    binding.write(this.scrollBarDrag.startScroll() + (this.scrollBarDrag.pressY() - event.y()));
+                }
+                return true;
+            }
+        }
+        if (event.button() == 0 && this.pendingRowScroll != null) {
+            FullMapScrollBar.Binding binding = this.scrollBarBindings.get(this.pendingRowScroll.bindingId());
+            if (binding == null || !binding.scrollable()) {
+                this.pendingRowScroll = null;
+            } else if (Math.hypot(event.x() - this.pendingRowScroll.pressX(), event.y() - this.pendingRowScroll.pressY()) > MAP_CLICK_DRAG_THRESHOLD_PX) {
+                // Past the click/drag threshold: the gesture becomes a row-area scroll
+                // drag and any deferred row click is cancelled.
+                this.pendingMapClick = Optional.empty();
+                this.scrollBarDrag = FullMapScrollBar.Drag.row(binding, this.pendingRowScroll.pressY(), this.pendingRowScroll.startScroll());
+                this.pendingRowScroll = null;
+                binding.write(this.scrollBarDrag.startScroll() + (this.scrollBarDrag.pressY() - event.y()));
+                return true;
+            }
+        }
         if (this.contextPicker.isPresent()) {
             if (!this.contextPickerBounds.contains(event.x(), event.y())) {
                 this.clearContextPicker();
             }
             return true;
         }
+        if (event.button() == 0) {
+            this.pendingMapClick.ifPresent(pending -> {
+                if (Math.hypot(event.x() - pending.pressX(), event.y() - pending.pressY()) > MAP_CLICK_DRAG_THRESHOLD_PX) {
+                    this.pendingMapClick = Optional.empty();
+                }
+            });
+        }
         if (event.button() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE && this.draggingMapCamera && this.activeDimension != null && FullRouteMapCache.layoutMode() != FullRouteMapLayoutMode.SCHEMATIC) {
-            ViewportState viewport = this.currentViewport().orElse(null);
+            ViewportState viewport = this.currentViewport().isPresent() ? this.storedViewport(this.activeDimension) : null;
             if (viewport != null) {
+                // Manual camera control takes over from any in-flight tween without a jump.
+                this.cancelViewportTween(this.activeDimension);
+                viewport = this.storedViewport(this.activeDimension);
                 double nextPitch = viewport.pitchDegrees() - dragY * FullRouteMapConfig.CAMERA_PITCH_DRAG_DEGREES_PER_PIXEL;
                 double nextBearing = viewport.bearingDegrees() + dragX * FullRouteMapConfig.CAMERA_BEARING_DRAG_DEGREES_PER_PIXEL;
                 this.viewports.put(this.activeDimension, viewport.withCamera(nextPitch, nextBearing));
@@ -2932,10 +3553,30 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             }
             Optional<MapDimensionGraph> graph = this.currentGraph();
             if (graph.isPresent()) {
-                ViewportState viewport = this.viewportFor(graph.get());
-                Vec2 before = FullRouteMapRenderer.screenToWorld(event.x(), event.y(), viewport, this.mapRect);
-                Vec2 after = FullRouteMapRenderer.screenToWorld(event.x() - dragX, event.y() - dragY, viewport, this.mapRect);
-                this.viewports.put(this.activeDimension, viewport.withCenter(viewport.centerWorldX() + after.x() - before.x(), viewport.centerWorldZ() + after.y() - before.y()));
+                if (!this.panningMap) {
+                    // First event of a pan gesture: take over from tween/inertia seamlessly.
+                    this.panningMap = true;
+                    this.panVelocityX = 0.0D;
+                    this.panVelocityZ = 0.0D;
+                    this.stopMapInertia();
+                    this.cancelViewportTween(this.activeDimension);
+                    this.lastPanSampleMillis = System.currentTimeMillis();
+                }
+                ViewportState display = this.displayViewport(graph.get());
+                Vec2 before = FullRouteMapRenderer.screenToWorld(event.x(), event.y(), display, this.mapRect);
+                Vec2 after = FullRouteMapRenderer.screenToWorld(event.x() - dragX, event.y() - dragY, display, this.mapRect);
+                double deltaX = after.x() - before.x();
+                double deltaZ = after.y() - before.y();
+                ViewportState stored = this.storedViewport(this.activeDimension);
+                this.viewports.put(this.activeDimension, this.clampToSoftBounds(this.activeDimension, stored.withCenter(stored.centerWorldX() + deltaX, stored.centerWorldZ() + deltaZ)));
+                // Sample the release velocity (EMA over the last drag events) for inertia.
+                long now = System.currentTimeMillis();
+                long dtMillis = now - this.lastPanSampleMillis;
+                if (dtMillis > 0L) {
+                    this.panVelocityX = this.panVelocityX * 0.5D + deltaX / dtMillis * 0.5D;
+                    this.panVelocityZ = this.panVelocityZ * 0.5D + deltaZ / dtMillis * 0.5D;
+                    this.lastPanSampleMillis = now;
+                }
                 return true;
             }
         }
@@ -2952,11 +3593,46 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             this.draggingNavigationDrawer = false;
             return true;
         }
+        if (event.button() == 0) {
+            // A release ends every drag mode, not just the drawer/camera ones.
+            this.draggingCardKey = Optional.empty();
+            this.draggingRouteCardViewportKey = Optional.empty();
+            this.draggingClusterCardViewportKey = Optional.empty();
+            this.scrollBarDrag = null;
+            this.pendingRowScroll = null;
+            if (this.panningMap) {
+                this.panningMap = false;
+                this.startMapInertiaFromPan();
+            }
+        }
+        if (event.button() == 0 && this.pendingMapClick.isPresent()) {
+            PendingMapClick pending = this.pendingMapClick.get();
+            this.pendingMapClick = Optional.empty();
+            long now = System.currentTimeMillis();
+            boolean doubleClickChain = pending.doubleClickAction() != null
+                    && now - this.lastMapClickReleaseMillis <= MAP_DOUBLE_CLICK_INTERVAL_MILLIS
+                    && Math.hypot(event.x() - this.lastMapClickReleaseX, event.y() - this.lastMapClickReleaseY) <= MAP_CLICK_DRAG_THRESHOLD_PX;
+            this.lastMapClickReleaseMillis = now;
+            this.lastMapClickReleaseX = event.x();
+            this.lastMapClickReleaseY = event.y();
+            if (doubleClickChain) {
+                this.lastMapClickReleaseMillis = Long.MIN_VALUE;
+                pending.doubleClickAction().run();
+            } else if (pending.action() != null) {
+                pending.action().run(event.x(), event.y());
+            }
+            return true;
+        }
         return super.mouseReleased(event);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (this.diagnosticsPanelOpen && this.diagnosticsPanelBounds.width() > 0 && this.diagnosticsPanelBounds.contains(mouseX, mouseY)) {
+            double maxScroll = Math.max(0.0D, this.diagnosticsGroups().size() * DIAGNOSTIC_GROUP_HEIGHT - (this.diagnosticsPanelBounds.height() - 30));
+            this.diagnosticsScroll = clamp(this.diagnosticsScroll - scrollY * 26.0D, 0.0D, maxScroll);
+            return true;
+        }
         if (this.navigationItineraryBounds.width() > 0 && this.navigationItineraryBounds.contains(mouseX, mouseY)) {
             FullMapNavigationViewModel.RoutePreview preview = this.navigationPreviewModel();
             double maxScroll = this.maxNavigationItineraryScroll(preview, this.navigationItineraryBounds);
@@ -3056,12 +3732,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         }
         Optional<MapDimensionGraph> graph = this.currentGraph();
         if (graph.isPresent() && this.mapRect.contains(mouseX, mouseY)) {
-            ViewportState viewport = this.viewportFor(graph.get());
-            Vec2 before = this.renderer.screenToWorld(mouseX, mouseY, viewport, this.mapRect);
-            double factor = scrollY > 0 ? 1.18D : 1.0D / 1.18D;
-            ViewportState zoomed = viewport.withZoom(viewport.zoom() * factor);
-            Vec2 after = this.renderer.screenToWorld(mouseX, mouseY, zoomed, this.mapRect);
-            this.viewports.put(this.activeDimension, zoomed.withCenter(zoomed.centerWorldX() + before.x() - after.x(), zoomed.centerWorldZ() + before.y() - after.y()));
+            this.zoomMapViewport(mouseX, mouseY, scrollY > 0 ? wheelZoomStep() : 1.0D / wheelZoomStep());
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
@@ -3071,39 +3742,34 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     public boolean keyPressed(KeyEvent event) {
         int key = event.key();
         if (key == GLFW.GLFW_KEY_ESCAPE) {
-            if (this.selectedNavigationStationGroupId != null || this.navigationSheetExpanded) {
-                this.clearNavigationPreview();
-                return true;
-            }
-            if (this.searchBox != null && (this.searchBox.isFocused() || this.searchExpanded || !this.searchBox.getValue().isBlank())) {
-                if (!this.searchBox.getValue().isBlank()) {
-                    this.searchBox.setValue("");
-                } else {
-                    this.searchExpanded = false;
-                    this.searchBox.setFocused(false);
-                    this.setFocused(null);
-                }
-                return true;
-            }
-            if (this.dimensionMenuOpen) {
-                this.dimensionMenuOpen = false;
-                return true;
-            }
-            if (this.contextPicker.isPresent()) {
-                this.clearContextPicker();
-                return true;
-            }
-            if (!this.cardStack.isEmpty()) {
-                this.popCard();
-                return true;
-            }
-            return super.keyPressed(event);
+            return this.closeTopmostOverlayOrScreen(event, true);
         }
         if (this.searchBox != null && this.searchBox.isFocused()) {
             return super.keyPressed(event);
         }
-        if (key == GLFW.GLFW_KEY_0) {
-            this.resetViewport();
+        // Toggle key bound to open this screen: mirrors ESC's layered close, one layer per
+        // press, closing the screen itself once no overlay is left. (KeyMapping#matches is
+        // this version's equivalent of the older isActiveAndMatches check.)
+        if (SuperPipeSlideClient.OPEN_FULL_ROUTE_MAP.matches(event)) {
+            return this.closeTopmostOverlayOrScreen(event, false);
+        }
+        if (key == GLFW.GLFW_KEY_0 || key == GLFW.GLFW_KEY_HOME) {
+            // A focused cluster card owns the fit shortcut; otherwise reset the main map.
+            if (this.fitFocusedClusterCard()) {
+                return true;
+            }
+            this.resetViewport(true);
+            return true;
+        }
+        if (key == GLFW.GLFW_KEY_EQUAL || key == GLFW.GLFW_KEY_KP_ADD || key == GLFW.GLFW_KEY_MINUS || key == GLFW.GLFW_KEY_KP_SUBTRACT) {
+            boolean zoomIn = key == GLFW.GLFW_KEY_EQUAL || key == GLFW.GLFW_KEY_KP_ADD;
+            if (this.zoomFocusedClusterCardByKey(zoomIn)) {
+                return true;
+            }
+            this.zoomMapViewport(
+                    this.mapRect.x() + this.mapRect.width() * 0.5D,
+                    this.mapRect.y() + this.mapRect.height() * 0.5D,
+                    zoomIn ? MAP_KEY_ZOOM_STEP : 1.0D / MAP_KEY_ZOOM_STEP);
             return true;
         }
         if (key == GLFW.GLFW_KEY_LEFT || key == GLFW.GLFW_KEY_RIGHT || key == GLFW.GLFW_KEY_UP || key == GLFW.GLFW_KEY_DOWN) {
@@ -3113,16 +3779,83 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             if (this.panFocusedClusterCardByKey(key)) {
                 return true;
             }
-            this.panByKey(key);
+            this.panByKey(key, event.hasShiftDown());
             return true;
         }
         return super.keyPressed(event);
+    }
+
+    /**
+     * Closes the topmost overlay layer, one layer per invocation: search first, then
+     * context picker, dimension menu, navigation preview, and finally the topmost card.
+     * When nothing is left, ESC delegates to the super implementation (which closes the
+     * screen); other callers close directly.
+     */
+    private boolean closeTopmostOverlayOrScreen(KeyEvent event, boolean delegateToSuper) {
+        if (this.searchBox != null && (this.searchBox.isFocused() || this.searchExpanded || !this.searchBox.getValue().isBlank())) {
+            if (!this.searchBox.getValue().isBlank()) {
+                this.searchBox.setValue("");
+            } else {
+                this.searchExpanded = false;
+                this.searchBox.setFocused(false);
+                this.setFocused(null);
+            }
+            return true;
+        }
+        if (this.contextPicker.isPresent()) {
+            this.clearContextPicker();
+            return true;
+        }
+        if (this.diagnosticsPanelOpen) {
+            this.diagnosticsPanelOpen = false;
+            return true;
+        }
+        if (this.dimensionMenuOpen) {
+            this.dimensionMenuOpen = false;
+            return true;
+        }
+        if (this.selectedNavigationStationGroupId != null || this.navigationSheetExpanded) {
+            this.clearNavigationPreview();
+            return true;
+        }
+        if (!this.cardStack.isEmpty()) {
+            this.popCard();
+            return true;
+        }
+        if (delegateToSuper) {
+            return super.keyPressed(event);
+        }
+        this.onClose();
+        return true;
     }
 
     @Override
     public void onClose() {
         FullRouteMapCache.markClosed();
         super.onClose();
+    }
+
+    /**
+     * D3: single write-back point for the cross-open session state. Every exit path
+     * (ESC/P via onClose, direct setScreen calls, being replaced by another screen)
+     * funnels through removed(), so saving here covers them all.
+     */
+    @Override
+    public void removed() {
+        FullRouteMapSessionState.save(new FullRouteMapSessionState.Snapshot(
+                this.viewports,
+                this.cardWindowBounds,
+                this.cardStack,
+                this.searchBox == null ? this.restoredSearchText : this.searchBox.getValue(),
+                this.navigationDrawerUserXRatio,
+                this.navigationDrawerUserYRatio,
+                this.lineStripScrolls,
+                this.routeCardStopListScrolls,
+                this.stationCardRouteScrolls,
+                this.navigationResultScroll,
+                this.navigationItineraryScroll,
+                this.schematicLegendScroll));
+        super.removed();
     }
 
     private void handleNodeClick(MapDimensionGraph graph, NodeId nodeId, double mouseX, double mouseY) {
@@ -3151,7 +3884,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (graph == null) {
             return;
         }
-        MapEdge edge = graph.edges().stream().filter(value -> value.id().equals(edgeId)).findFirst().orElse(null);
+        MapEdge edge = graph.edge(edgeId).orElse(null);
         if (edge != null) {
             List<UUID> lineIds = edge.routeLineIds();
             if (lineIds.size() == 1) {
@@ -3351,7 +4084,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 .ifPresent(hint -> this.pushCard(MapCard.routeLine(hint.routeLineId(), Optional.of(hint.routeLayoutId()), graph.levelKey(), RouteCardViewMode.PHYSICAL)));
     }
 
-    private void handleRouteCardHit(MapCard card, RouteCardSemanticGraph graph, RouteLineCardHit hit) {
+    private void handleRouteCardHit(MapCard card, RouteCardSemanticGraph graph, RouteLineCardHit hit, SPSGui.Rect boundary, int mouseX, int mouseY) {
         if (hit.kind() == RouteLineCardHitKind.NODE && hit.node().isPresent()) {
             RouteCardNode node = graph.nodes().stream().filter(value -> value.id().equals(hit.node().get())).findFirst().orElse(null);
             if (node == null) {
@@ -3359,20 +4092,127 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             }
             if (node.stationGroupId().isPresent()) {
                 ClientRouteDataCache.stationGroup(node.stationGroupId().get()).ifPresent(this::locateStation);
+                return;
+            }
+            if (node.kind() == RouteCardNodeKind.FOLD_BOUNDARY) {
+                // The boundary node's world position is the anchor block center, so the
+                // anchor id is recovered exactly and the click jumps to the fold peer.
+                PipeAnchorId anchorId = new PipeAnchorId(node.levelKey(), BlockPos.containing(node.worldX(), node.worldY(), node.worldZ()));
+                ClientPipeNetworkCache.globalFoldCounterpart(anchorId).ifPresent(this::jumpToFoldPeer);
+                return;
+            }
+            if (node.kind() == RouteCardNodeKind.PORTAL_BOUNDARY) {
+                this.locateRouteCardPortalPeer(graph, node);
+                return;
             }
         }
         if (hit.kind() == RouteLineCardHitKind.EDGE && hit.edge().isPresent()) {
-            graph.edges().stream()
-                    .filter(edge -> edge.id().equals(hit.edge().get()))
+            RouteCardEdge edge = graph.edges().stream()
+                    .filter(value -> value.id().equals(hit.edge().get()))
                     .findFirst()
-                    .ifPresent(edge -> {
-                        RouteCardNode from = graph.nodes().stream().filter(node -> node.id().equals(edge.from())).findFirst().orElse(null);
-                        RouteCardNode to = graph.nodes().stream().filter(node -> node.id().equals(edge.to())).findFirst().orElse(null);
-                        if (from != null && to != null) {
-                            this.toast(from.label() + " -> " + to.label());
-                        }
-                    });
+                    .orElse(null);
+            if (edge == null) {
+                return;
+            }
+            RouteCardNode from = graph.nodes().stream().filter(node -> node.id().equals(edge.from())).findFirst().orElse(null);
+            RouteCardNode to = graph.nodes().stream().filter(node -> node.id().equals(edge.to())).findFirst().orElse(null);
+            // Card-only synthetic links (fold jumps, missing-path boundary links) have
+            // no main-map edge; everything else maps back to one and opens the same
+            // edge picker a main-map edge click would.
+            if (!RouteLineCardRenderer.isAbstractBoundaryLink(graph, edge)) {
+                Optional<MapEdge> mapEdge = this.mainMapEdgeForRouteCardEdge(graph, edge, from, to);
+                if (mapEdge.isPresent()) {
+                    RouteCardViewMode viewMode = card.routeLineState().map(RouteLineCardState::viewMode).orElse(RouteCardViewMode.PRACTICAL);
+                    this.openEdgePicker(mapEdge.get(), mapEdge.get().levelKey(), mouseX, mouseY, boundary, viewMode);
+                    return;
+                }
+            }
+            if (from != null && to != null) {
+                this.toast(RouteLineCardRenderer.routeCardNodeTooltipName(from) + " -> " + RouteLineCardRenderer.routeCardNodeTooltipName(to));
+            }
         }
+    }
+
+    /**
+     * Reverse-maps a route-card edge to the main-map edge it was derived from. Primary
+     * key is (dimension, routeSectionId) — section ids are shared by both builders —
+     * refined to an exact match on the backing path slice when several main-map edges
+     * carry the same section (fold-split sections). When the route card synthesized its
+     * own section id (missing section refs), the (line, layout, layoutIndex) slot is
+     * used as fallback key instead.
+     */
+    private Optional<MapEdge> mainMapEdgeForRouteCardEdge(RouteCardSemanticGraph graph, RouteCardEdge edge, @Nullable RouteCardNode from, @Nullable RouteCardNode to) {
+        ResourceKey<Level> levelKey = from != null ? from.levelKey() : to == null ? null : to.levelKey();
+        if (levelKey == null) {
+            return Optional.empty();
+        }
+        MapDimensionGraph map = FullRouteMapCache.graph(levelKey).orElse(null);
+        if (map == null) {
+            return Optional.empty();
+        }
+        MapEdge sectionMatch = null;
+        MapEdge layoutSlotMatch = null;
+        for (MapEdge candidate : map.edges()) {
+            for (MapEdgeOccurrence occurrence : candidate.occurrences()) {
+                boolean sameSection = occurrence.routeSectionId().equals(edge.routeSectionId());
+                boolean sameLayoutSlot = occurrence.routeLineId().equals(graph.routeLineId())
+                        && occurrence.routeLayoutId().equals(graph.routeLayoutId())
+                        && occurrence.layoutIndex() == edge.layoutIndex();
+                if (!sameSection && !sameLayoutSlot) {
+                    continue;
+                }
+                if (sameSection && occurrence.backingPathSlice().equals(edge.backingPathSlice())) {
+                    return Optional.of(candidate);
+                }
+                if (sameSection && sectionMatch == null) {
+                    sectionMatch = candidate;
+                }
+                if (sameLayoutSlot && layoutSlotMatch == null) {
+                    layoutSlotMatch = candidate;
+                }
+            }
+        }
+        return Optional.ofNullable(sectionMatch != null ? sectionMatch : layoutSlotMatch);
+    }
+
+    /**
+     * Portal boundaries only know their target dimension; the far station is recovered
+     * by walking across the abstract boundary link to the peer boundary and out to its
+     * station neighbor. Falls back to a plain dimension switch when the walk fails.
+     */
+    private void locateRouteCardPortalPeer(RouteCardSemanticGraph graph, RouteCardNode boundary) {
+        Identifier targetId = Identifier.tryParse(boundary.label());
+        if (targetId == null) {
+            return;
+        }
+        ResourceKey<Level> targetLevel = ResourceKey.create(Registries.DIMENSION, targetId);
+        RouteCardNode peerBoundary = null;
+        for (RouteCardEdge edge : graph.edges()) {
+            RouteCardNode other = edge.from().equals(boundary.id()) ? this.routeCardNode(graph, edge.to()) : edge.to().equals(boundary.id()) ? this.routeCardNode(graph, edge.from()) : null;
+            if (other != null && other.kind() == RouteCardNodeKind.PORTAL_BOUNDARY) {
+                peerBoundary = other;
+                break;
+            }
+        }
+        if (peerBoundary != null) {
+            for (RouteCardEdge edge : graph.edges()) {
+                RouteCardNode other = edge.from().equals(peerBoundary.id()) ? this.routeCardNode(graph, edge.to()) : edge.to().equals(peerBoundary.id()) ? this.routeCardNode(graph, edge.from()) : null;
+                if (other == null || other.id().equals(boundary.id()) || other.stationGroupId().isEmpty()) {
+                    continue;
+                }
+                Optional<StationGroup> station = ClientRouteDataCache.stationGroup(other.stationGroupId().get());
+                if (station.isPresent()) {
+                    this.locateStation(station.get());
+                    return;
+                }
+            }
+        }
+        this.switchDimension(targetLevel, false);
+    }
+
+    @Nullable
+    private RouteCardNode routeCardNode(RouteCardSemanticGraph graph, RouteCardNodeId id) {
+        return graph.nodes().stream().filter(node -> node.id().equals(id)).findFirst().orElse(null);
     }
 
     private void handleClusterCardHit(MapDimensionGraph graph, ClusterCardSemanticGraph semanticGraph, ClusterCardHit hit, SPSGui.Rect boundary, int mouseX, int mouseY) {
@@ -3401,25 +4241,77 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             return;
         }
         if (hit.kind() == ClusterCardHitKind.EDGE && hit.edgeId().isPresent()) {
-            semanticGraph.edge(hit.edgeId().get())
-                    .flatMap(ClusterCardEdge::mapEdge)
-                    .ifPresent(edge -> this.openEdgePicker(edge, graph.levelKey(), mouseX, mouseY, boundary, RouteCardViewMode.PRACTICAL));
+            ClusterCardEdge edge = semanticGraph.edge(hit.edgeId().get()).orElse(null);
+            if (edge == null) {
+                return;
+            }
+            if (edge.kind() == ClusterCardEdgeKind.FOLD_PEER_LINK) {
+                this.handleFoldPeerLinkClick(semanticGraph, edge);
+                return;
+            }
+            edge.mapEdge()
+                    .ifPresent(mapEdge -> this.openEdgePicker(mapEdge, graph.levelKey(), mouseX, mouseY, boundary, RouteCardViewMode.PRACTICAL));
         }
     }
 
-    private void locateRouteCardLayout(RouteCardSemanticGraph graph) {
-        graph.nodes().stream()
-                .filter(node -> node.stationGroupId().isPresent())
+    /** Clicking a fold-peer link behaves like clicking its member fold anchor: open the fold peek card. */
+    private void handleFoldPeerLinkClick(ClusterCardSemanticGraph semanticGraph, ClusterCardEdge edge) {
+        ClusterCardNode node = semanticGraph.node(edge.from()).or(() -> semanticGraph.node(edge.to())).orElse(null);
+        if (node == null) {
+            return;
+        }
+        node.mapNode().ifPresent(mapNode -> this.pushCard(MapCard.foldPeek(mapNode.id().primaryId(), mapNode.levelKey())));
+    }
+
+    /**
+     * Frames the whole route line on the main map: switches to the first stop's
+     * dimension and fits the viewport around every main-map node the line touches
+     * there. Degrades to the plain first-station locate when no main-map node of the
+     * line can be found.
+     */
+    private void locateRouteCardLayout(RouteLine line, RouteCardSemanticGraph graph) {
+        RouteCardNode anchor = graph.nodes().stream()
+                .filter(node -> node.kind() == RouteCardNodeKind.STATION)
                 .min(Comparator.comparingInt(RouteCardNode::layoutOccurrence))
-                .flatMap(node -> ClientRouteDataCache.stationGroup(node.stationGroupId().get()))
-                .ifPresent(this::locateStation);
+                .orElseGet(() -> graph.nodes().isEmpty() ? null : graph.nodes().getFirst());
+        if (anchor == null) {
+            return;
+        }
+        ResourceKey<Level> levelKey = anchor.levelKey();
+        MapDimensionGraph map = FullRouteMapCache.graph(levelKey).orElse(null);
+        VisualRouteMapGraph visual = FullRouteMapCache.visualGraph(levelKey).orElse(null);
+        Aabb2 bounds = Aabb2.empty();
+        if (map != null) {
+            for (MapNode node : map.nodes()) {
+                if (!node.routeLineIds().contains(line.id())) {
+                    continue;
+                }
+                Vec2 position = FullRouteMapRenderer.visualPosition(map, visual, node);
+                bounds = bounds.include(position.x(), position.y());
+            }
+        }
+        if (bounds.isEmpty()) {
+            graph.nodes().stream()
+                    .filter(node -> node.stationGroupId().isPresent())
+                    .min(Comparator.comparingInt(RouteCardNode::layoutOccurrence))
+                    .flatMap(node -> ClientRouteDataCache.stationGroup(node.stationGroupId().get()))
+                    .ifPresent(this::locateStation);
+            return;
+        }
+        double paddedWidth = Math.max(1.0D, bounds.maxX() - bounds.minX() + 96.0D);
+        double paddedHeight = Math.max(1.0D, bounds.maxY() - bounds.minY() + 96.0D);
+        double fitScale = Math.min(Math.max(1.0D, this.mapRect.width()) / paddedWidth, Math.max(1.0D, this.mapRect.height()) / paddedHeight);
+        // Cap the zoom so a short line does not end up closer than a plain node locate.
+        double zoom = Math.min(fitScale / FullRouteMapConfig.BASE_SCALE, Math.max(FullRouteMapConfig.CLUSTER_AUTO_EXPAND_ZOOM, FullRouteMapConfig.DEFAULT_ZOOM));
+        this.switchDimension(levelKey, false);
+        this.startViewportTween(levelKey, new ViewportState(levelKey, bounds.centerX(), bounds.centerY(), zoom), VIEWPORT_TWEEN_DURATION_MILLIS);
     }
 
     private void jumpToFoldPeer(PipeAnchorId peerId) {
         if (FullRouteMapCache.layoutMode().physical()) {
             this.physicalFoldNodeForAnchor(peerId).ifPresent(node -> {
                 this.switchDimension(node.levelKey(), false);
-                this.viewports.put(node.levelKey(), new ViewportState(node.levelKey(), node.worldX(), node.worldZ(), Math.max(FullRouteMapConfig.CLUSTER_AUTO_EXPAND_ZOOM, FullRouteMapConfig.DEFAULT_ZOOM)));
+                this.startViewportTween(node.levelKey(), new ViewportState(node.levelKey(), node.worldX(), node.worldZ(), Math.max(FullRouteMapConfig.CLUSTER_AUTO_EXPAND_ZOOM, FullRouteMapConfig.DEFAULT_ZOOM)), VIEWPORT_TWEEN_DURATION_MILLIS);
             });
             return;
         }
@@ -3549,7 +4441,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         MapNode from = graph.node(hint.from()).orElse(null);
         MapNode to = graph.node(hint.to()).orElse(null);
         if (from == null || to == null) {
-            FullMapTooltipCard.renderComponent(graphics, this.font, this.mapRect, mouseX, mouseY, Component.translatable("screen.superpipeslide.full_map.tooltip.transfer_missing"));
+            FullMapTooltipCard.renderComponent(graphics, this.font, this.mapRect, List.of(), mouseX, mouseY, null, Component.translatable("screen.superpipeslide.full_map.tooltip.transfer_missing"), this.tooltipFadeOpacity("transfer_missing"));
             return;
         }
         List<UUID> routes = new ArrayList<>();
@@ -3569,7 +4461,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 FullRouteMapConfig.MAP_TRANSFER_HINT);
     }
 
-    private void renderMissingCrossDimensionPathTooltip(GuiGraphicsExtractor graphics, UUID routeLineId, UUID routeLayoutId, ResourceKey<Level> targetLevelKey, int mouseX, int mouseY) {
+    private void renderMissingCrossDimensionPathTooltip(GuiGraphicsExtractor graphics, UUID routeLineId, UUID routeLayoutId, ResourceKey<Level> targetLevelKey, MissingCrossDimensionReason reason, int mouseX, int mouseY) {
         DisplayNameStack lineName = ClientRouteDataCache.routeLine(routeLineId).map(FullMapText::displayNameStack).orElse(DisplayNameStack.of("?"));
         String layoutName = ClientRouteDataCache.routeLayout(routeLayoutId).map(FullMapText::primaryName).orElse("");
         this.renderTooltipCard(
@@ -3580,7 +4472,8 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 Component.translatable("screen.superpipeslide.full_map.tooltip_card.missing_path").getString(),
                 List.of(
                         tooltipRow("screen.superpipeslide.layout", layoutName.isBlank() ? "-" : layoutName),
-                        tooltipRow("screen.superpipeslide.full_map.tooltip_field.target_dimension", dimensionLabel(targetLevelKey))),
+                        tooltipRow("screen.superpipeslide.full_map.tooltip_field.target_dimension", dimensionLabel(targetLevelKey)),
+                        tooltipRow("screen.superpipeslide.full_map.missing_hint.reason." + reason.name().toLowerCase(Locale.ROOT), "")),
                 routeChips(List.of(routeLineId)),
                 primaryRouteColor(List.of(routeLineId)));
     }
@@ -3594,7 +4487,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             List<FullMapTooltipCard.Row> rows,
             List<FullMapTooltipCard.RouteChip> chips,
             int accentColor) {
-        FullMapTooltipCard.render(graphics, this.font, this.mapRect, this.hoverOverlayAvoidRects, mouseX, mouseY, title, subtitle, rows, chips, accentColor);
+        this.tooltipPlacement = FullMapTooltipCard.render(graphics, this.font, this.mapRect, this.hoverOverlayAvoidRects, mouseX, mouseY, this.tooltipPlacement, DisplayNameStack.of(title), subtitle, rows, chips, accentColor, this.tooltipFadeOpacity(title + "\n" + subtitle));
     }
 
     private void renderTooltipCard(
@@ -3606,7 +4499,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             List<FullMapTooltipCard.Row> rows,
             List<FullMapTooltipCard.RouteChip> chips,
             int accentColor) {
-        FullMapTooltipCard.render(graphics, this.font, this.mapRect, this.hoverOverlayAvoidRects, mouseX, mouseY, title, subtitle, rows, chips, accentColor);
+        this.tooltipPlacement = FullMapTooltipCard.render(graphics, this.font, this.mapRect, this.hoverOverlayAvoidRects, mouseX, mouseY, this.tooltipPlacement, title, subtitle, rows, chips, accentColor, this.tooltipFadeOpacity((title == null ? "?" : title.flat()) + "\n" + subtitle));
     }
 
     private static FullMapTooltipCard.Row tooltipRow(String labelKey, String value) {
@@ -3676,48 +4569,218 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         return card.levelKey().isPresent() ? FullRouteMapCache.graph(card.levelKey().get()) : this.currentGraph();
     }
 
-    private ViewportState viewportFor(MapDimensionGraph graph) {
-        ViewportState viewport = this.viewports.computeIfAbsent(graph.levelKey(), key -> {
+    private ViewportState storedViewport(ResourceKey<Level> levelKey) {
+        return this.viewports.computeIfAbsent(levelKey, key -> {
+            ViewportState created;
             if (Minecraft.getInstance().player != null && Minecraft.getInstance().player.level().dimension().equals(key)) {
-                return new ViewportState(key, Minecraft.getInstance().player.getX(), Minecraft.getInstance().player.getZ(), FullRouteMapConfig.DEFAULT_ZOOM);
+                created = new ViewportState(key, Minecraft.getInstance().player.getX(), Minecraft.getInstance().player.getZ(), FullRouteMapConfig.DEFAULT_ZOOM);
+            } else {
+                Aabb2 bounds = FullRouteMapCache.displayBounds(key);
+                created = new ViewportState(key, bounds.centerX(), bounds.centerY(), FullRouteMapConfig.DEFAULT_ZOOM);
             }
-            Aabb2 bounds = FullRouteMapCache.displayBounds(key);
-            return new ViewportState(key, bounds.centerX(), bounds.centerY(), FullRouteMapConfig.DEFAULT_ZOOM);
+            // Keep the initial view inside the soft bounds so the first drag never snaps.
+            return this.clampToSoftBounds(key, created);
         });
+    }
+
+    private ViewportState displayViewport(MapDimensionGraph graph) {
+        ViewportState viewport = this.animatedViewport(graph.levelKey(), this.storedViewport(graph.levelKey()));
         return FullRouteMapCache.layoutMode() == FullRouteMapLayoutMode.SCHEMATIC ? viewport.withFlatCamera() : viewport;
     }
 
     private ViewportState viewportFor(PhysicalRouteMapGraph graph) {
-        return this.viewports.computeIfAbsent(graph.levelKey(), key -> {
+        ViewportState committed = this.viewports.computeIfAbsent(graph.levelKey(), key -> {
+            ViewportState created;
             if (Minecraft.getInstance().player != null && Minecraft.getInstance().player.level().dimension().equals(key)) {
-                return new ViewportState(key, Minecraft.getInstance().player.getX(), Minecraft.getInstance().player.getZ(), FullRouteMapConfig.DEFAULT_ZOOM);
+                created = new ViewportState(key, Minecraft.getInstance().player.getX(), Minecraft.getInstance().player.getZ(), FullRouteMapConfig.DEFAULT_ZOOM);
+            } else {
+                Aabb2 bounds = graph.worldBounds();
+                created = new ViewportState(key, bounds.centerX(), bounds.centerY(), FullRouteMapConfig.DEFAULT_ZOOM);
             }
-            Aabb2 bounds = graph.worldBounds();
-            return new ViewportState(key, bounds.centerX(), bounds.centerY(), FullRouteMapConfig.DEFAULT_ZOOM);
+            return this.clampToSoftBounds(key, created);
         });
+        return this.animatedViewport(graph.levelKey(), committed);
+    }
+
+    /**
+     * Returns the viewport that must be rendered and hit-tested right now: the interpolated
+     * value while a {@link ViewportTween} is running for this dimension, otherwise the
+     * committed stored value. Writes always stay based on {@link #storedViewport}.
+     */
+    private ViewportState animatedViewport(ResourceKey<Level> levelKey, ViewportState committed) {
+        ViewportTween tween = this.viewportTween;
+        if (tween == null || !tween.to().levelKey().equals(levelKey)) {
+            return committed;
+        }
+        long now = System.currentTimeMillis();
+        if (tween.finished(now)) {
+            this.viewportTween = null;
+            return committed;
+        }
+        return tween.at(now);
+    }
+
+    /**
+     * Commits {@code target} as the stored viewport and animates the displayed viewport from
+     * its current visual value toward it. Committing the target up-front keeps every further
+     * write (which is always based on the stored value) consistent with the final state.
+     */
+    private void startViewportTween(ResourceKey<Level> levelKey, ViewportState target, long durationMillis) {
+        this.stopMapInertia();
+        ViewportState from = this.animatedViewport(levelKey, this.storedViewport(levelKey));
+        this.viewports.put(levelKey, target);
+        if (durationMillis <= 0L || from.equals(target)) {
+            this.viewportTween = null;
+            return;
+        }
+        this.viewportTween = new ViewportTween(from, target, System.currentTimeMillis(), durationMillis);
+    }
+
+    /** Commits the in-flight tween's current interpolated value so manual input continues seamlessly. */
+    private void cancelViewportTween(ResourceKey<Level> levelKey) {
+        if (levelKey != null && this.viewportTween != null && this.viewportTween.to().levelKey().equals(levelKey)) {
+            this.viewports.put(levelKey, this.viewportTween.at(System.currentTimeMillis()));
+            this.viewportTween = null;
+        }
+    }
+
+    /**
+     * Hard-clamps the viewport center to the dimension's display bounds expanded by ~20% per
+     * axis (with a small minimum padding so single-node maps stay pannable).
+     */
+    private ViewportState clampToSoftBounds(ResourceKey<Level> levelKey, ViewportState viewport) {
+        Aabb2 bounds = FullRouteMapCache.displayBounds(levelKey);
+        if (bounds.isEmpty()) {
+            return viewport;
+        }
+        double padX = Math.max(MAP_SOFT_BOUNDS_MIN_PADDING_BLOCKS, (bounds.maxX() - bounds.minX()) * MAP_SOFT_BOUNDS_PADDING_RATIO);
+        double padZ = Math.max(MAP_SOFT_BOUNDS_MIN_PADDING_BLOCKS, (bounds.maxY() - bounds.minY()) * MAP_SOFT_BOUNDS_PADDING_RATIO);
+        double x = clamp(viewport.centerWorldX(), bounds.minX() - padX, bounds.maxX() + padX);
+        double z = clamp(viewport.centerWorldZ(), bounds.minY() - padZ, bounds.maxY() + padZ);
+        return x == viewport.centerWorldX() && z == viewport.centerWorldZ() ? viewport : viewport.withCenter(x, z);
+    }
+
+    private void stopMapInertia() {
+        this.mapInertiaActive = false;
+    }
+
+    /** Starts coasting after a map pan if the pointer's release velocity clears the pixel-speed threshold. */
+    private void startMapInertiaFromPan() {
+        if (this.activeDimension == null) {
+            return;
+        }
+        double pixelsPerBlock = Math.max(1.0E-6D, this.storedViewport(this.activeDimension).zoom() * FullRouteMapConfig.BASE_SCALE);
+        double speedPxPerFrame = Math.hypot(this.panVelocityX, this.panVelocityZ) * (1000.0D / 60.0D) * pixelsPerBlock;
+        if (speedPxPerFrame < MAP_INERTIA_MIN_SPEED_PX_PER_FRAME) {
+            return;
+        }
+        // Cap flicks so a fast throw cannot skip across the whole map.
+        double maxWorldPerMillis = MAP_INERTIA_MAX_SPEED_PX_PER_FRAME / ((1000.0D / 60.0D) * pixelsPerBlock);
+        double worldPerMillis = Math.hypot(this.panVelocityX, this.panVelocityZ);
+        double scale = worldPerMillis > maxWorldPerMillis ? maxWorldPerMillis / worldPerMillis : 1.0D;
+        this.mapInertiaVelocityX = this.panVelocityX * scale;
+        this.mapInertiaVelocityZ = this.panVelocityZ * scale;
+        this.mapInertiaActive = true;
+        this.mapInertiaStartedMillis = System.currentTimeMillis();
+        this.mapInertiaLastTickMillis = this.mapInertiaStartedMillis;
+    }
+
+    /** Per-frame viewport dynamics: retires finished tweens and integrates pan inertia. */
+    private void tickViewportDynamics() {
+        long now = System.currentTimeMillis();
+        if (this.viewportTween != null && this.viewportTween.finished(now)) {
+            this.viewportTween = null;
+        }
+        if (!this.mapInertiaActive || this.activeDimension == null) {
+            return;
+        }
+        if (now - this.mapInertiaStartedMillis > MAP_INERTIA_MAX_MILLIS) {
+            this.mapInertiaActive = false;
+            return;
+        }
+        double dtMillis = Math.max(1.0D, now - this.mapInertiaLastTickMillis);
+        this.mapInertiaLastTickMillis = now;
+        ResourceKey<Level> levelKey = this.activeDimension;
+        ViewportState stored = this.storedViewport(levelKey);
+        double nextX = stored.centerWorldX() + this.mapInertiaVelocityX * dtMillis;
+        double nextZ = stored.centerWorldZ() + this.mapInertiaVelocityZ * dtMillis;
+        ViewportState clamped = this.clampToSoftBounds(levelKey, stored.withCenter(nextX, nextZ));
+        this.viewports.put(levelKey, clamped);
+        double decay = Math.pow(MAP_INERTIA_DECAY_PER_FRAME, dtMillis / (1000.0D / 60.0D));
+        this.mapInertiaVelocityX *= decay;
+        this.mapInertiaVelocityZ *= decay;
+        boolean hitSoftBounds = clamped.centerWorldX() != nextX || clamped.centerWorldZ() != nextZ;
+        double speedPxPerFrame = Math.hypot(this.mapInertiaVelocityX, this.mapInertiaVelocityZ) * (1000.0D / 60.0D) * stored.zoom() * FullRouteMapConfig.BASE_SCALE;
+        if (hitSoftBounds || speedPxPerFrame < MAP_INERTIA_MIN_SPEED_PX_PER_FRAME) {
+            this.mapInertiaActive = false;
+        }
+    }
+
+    /**
+     * Zooms the map while keeping the world point under the given screen anchor fixed,
+     * animating through a short tween so repeated wheel ticks accumulate smoothly.
+     */
+    private void zoomMapViewport(double anchorScreenX, double anchorScreenY, double factor) {
+        if (this.activeDimension == null || this.currentGraph().isEmpty() || factor <= 0.0D || Math.abs(factor - 1.0D) < 1.0E-6D) {
+            return;
+        }
+        ResourceKey<Level> levelKey = this.activeDimension;
+        // Chain from the current target (the stored value) rather than the displayed value,
+        // so rapid wheel ticks accumulate multiplicatively instead of restarting mid-tween.
+        ViewportState stored = this.storedViewport(levelKey);
+        ViewportState displayStored = FullRouteMapCache.layoutMode() == FullRouteMapLayoutMode.SCHEMATIC ? stored.withFlatCamera() : stored;
+        Vec2 before = FullRouteMapRenderer.screenToWorld(anchorScreenX, anchorScreenY, displayStored, this.mapRect);
+        ViewportState zoomed = displayStored.withZoom(displayStored.zoom() * factor);
+        Vec2 after = FullRouteMapRenderer.screenToWorld(anchorScreenX, anchorScreenY, zoomed, this.mapRect);
+        ViewportState target = this.clampToSoftBounds(levelKey, zoomed.withCenter(zoomed.centerWorldX() + before.x() - after.x(), zoomed.centerWorldZ() + before.y() - after.y()));
+        this.startViewportTween(levelKey, target, VIEWPORT_SCROLL_TWEEN_DURATION_MILLIS);
     }
 
     private void switchDimension(ResourceKey<Level> dimension, boolean preserveCenter) {
         this.clearContextPicker();
         this.dimensionMenuOpen = false;
+        this.diagnosticsPanelOpen = false;
+        this.diagnosticsScroll = 0.0D;
+        if (!dimension.equals(this.activeDimension)) {
+            // A running tween or inertia glide only makes sense on its own dimension's map.
+            this.viewportTween = null;
+            this.stopMapInertia();
+        }
         this.activeDimension = dimension;
         this.currentGraph().ifPresent(graph -> {
             Aabb2 bounds = FullRouteMapCache.displayBounds(dimension);
-            this.viewports.putIfAbsent(dimension, new ViewportState(dimension, bounds.centerX(), bounds.centerY(), FullRouteMapConfig.DEFAULT_ZOOM));
+            this.viewports.putIfAbsent(dimension, this.clampToSoftBounds(dimension, new ViewportState(dimension, bounds.centerX(), bounds.centerY(), FullRouteMapConfig.DEFAULT_ZOOM)));
         });
     }
 
     private void resetViewport() {
+        this.resetViewport(false);
+    }
+
+    private void resetViewport(boolean animate) {
         this.currentGraph().ifPresent(graph -> {
             Aabb2 bounds = FullRouteMapCache.displayBounds(graph.levelKey());
-            this.viewports.put(graph.levelKey(), new ViewportState(graph.levelKey(), bounds.centerX(), bounds.centerY(), FullRouteMapConfig.DEFAULT_ZOOM));
+            ViewportState target = new ViewportState(graph.levelKey(), bounds.centerX(), bounds.centerY(), FullRouteMapConfig.DEFAULT_ZOOM);
+            if (animate) {
+                this.startViewportTween(graph.levelKey(), target, VIEWPORT_TWEEN_DURATION_MILLIS);
+            } else {
+                this.stopMapInertia();
+                this.viewportTween = null;
+                this.viewports.put(graph.levelKey(), target);
+            }
         });
     }
 
-    private void panByKey(int key) {
+    private void panByKey(int key, boolean shiftDown) {
         this.currentGraph().ifPresent(graph -> {
-            ViewportState viewport = this.viewportFor(graph);
-            double step = 100.0D / (viewport.zoom() * FullRouteMapConfig.BASE_SCALE);
+            this.stopMapInertia();
+            this.cancelViewportTween(graph.levelKey());
+            ViewportState viewport = this.storedViewport(graph.levelKey());
+            // Step by ~15% of the visible map width (Shift: 3x) so one press is a nudge, not a jump.
+            double step = Math.max(1, this.mapRect.width()) / (viewport.zoom() * FullRouteMapConfig.BASE_SCALE) * MAP_PAN_KEY_STEP_RATIO;
+            if (shiftDown) {
+                step *= MAP_PAN_KEY_SHIFT_MULTIPLIER;
+            }
             double x = viewport.centerWorldX();
             double z = viewport.centerWorldZ();
             if (key == GLFW.GLFW_KEY_LEFT) {
@@ -3729,7 +4792,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             } else if (key == GLFW.GLFW_KEY_DOWN) {
                 z += step;
             }
-            this.viewports.put(graph.levelKey(), viewport.withCenter(x, z));
+            this.viewports.put(graph.levelKey(), this.clampToSoftBounds(graph.levelKey(), viewport.withCenter(x, z)));
         });
     }
 
@@ -3812,23 +4875,61 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             return;
         }
         Vec2 before = RouteLineCardRenderer.screenToWorld(mouseX, mouseY, viewport, map);
-        double factor = scrollY > 0 ? 1.18D : 1.0D / 1.18D;
+        double factor = scrollY > 0 ? wheelZoomStep() : 1.0D / wheelZoomStep();
         RouteCardViewport zoomed = viewport.withZoom(viewport.zoom() * factor);
         Vec2 after = RouteLineCardRenderer.screenToWorld(mouseX, mouseY, zoomed, map);
         this.setRouteCardViewport(cardKey, zoomed.withCenter(zoomed.centerX() + before.x() - after.x(), zoomed.centerY() + before.y() - after.y()));
     }
 
     private void zoomClusterCardViewport(String cardKey, double mouseX, double mouseY, double scrollY) {
-        SPSGui.Rect map = this.clusterCardMapRegions.get(cardKey);
-        ClusterCardViewport viewport = this.clusterCardResolvedViewports.get(cardKey);
-        if (map == null || viewport == null || Math.abs(scrollY) < 0.001D) {
+        if (Math.abs(scrollY) < 0.001D) {
             return;
         }
-        Vec2 before = ClusterCardRenderer.screenToWorld(mouseX, mouseY, viewport, map);
-        double factor = scrollY > 0 ? 1.18D : 1.0D / 1.18D;
+        this.zoomClusterCardViewportByFactor(cardKey, mouseX, mouseY, scrollY > 0 ? wheelZoomStep() : 1.0D / wheelZoomStep());
+    }
+
+    private void zoomClusterCardViewportByFactor(String cardKey, double anchorX, double anchorY, double factor) {
+        SPSGui.Rect map = this.clusterCardMapRegions.get(cardKey);
+        ClusterCardViewport viewport = this.clusterCardResolvedViewports.get(cardKey);
+        if (map == null || viewport == null || factor <= 0.0D || Math.abs(factor - 1.0D) < 1.0E-6D) {
+            return;
+        }
+        Vec2 before = ClusterCardRenderer.screenToWorld(anchorX, anchorY, viewport, map);
         ClusterCardViewport zoomed = viewport.withZoom(viewport.zoom() * factor);
-        Vec2 after = ClusterCardRenderer.screenToWorld(mouseX, mouseY, zoomed, map);
+        Vec2 after = ClusterCardRenderer.screenToWorld(anchorX, anchorY, zoomed, map);
         this.setClusterCardViewport(cardKey, zoomed.withCenter(zoomed.centerX() + before.x() - after.x(), zoomed.centerY() + before.y() - after.y()));
+    }
+
+    private boolean zoomFocusedClusterCardByKey(boolean zoomIn) {
+        if (this.focusedClusterCardKey.isEmpty()) {
+            return false;
+        }
+        String cardKey = this.focusedClusterCardKey.get();
+        SPSGui.Rect map = this.clusterCardMapRegions.get(cardKey);
+        if (map == null || this.cardByKey(cardKey).filter(FullRouteMapScreen::isClusterFocusCard).isEmpty()) {
+            return false;
+        }
+        // Keyboard zoom anchors at the card map's center, mirroring the main-map keys.
+        this.zoomClusterCardViewportByFactor(
+                cardKey,
+                map.x() + map.width() * 0.5D,
+                map.y() + map.height() * 0.5D,
+                zoomIn ? MAP_KEY_ZOOM_STEP : 1.0D / MAP_KEY_ZOOM_STEP);
+        return true;
+    }
+
+    private boolean fitFocusedClusterCard() {
+        return this.focusedClusterCardKey.filter(this::fitClusterCard).isPresent();
+    }
+
+    /** Resets a cluster card's viewport to the auto-fit framing; false when the card is gone. */
+    private boolean fitClusterCard(String cardKey) {
+        MapCard card = this.cardByKey(cardKey).filter(FullRouteMapScreen::isClusterFocusCard).orElse(null);
+        if (card == null) {
+            return false;
+        }
+        this.updateClusterCardState(cardKey, this.clusterCardStateFor(card).resetViewport());
+        return true;
     }
 
     private void setRouteCardViewport(String cardKey, RouteCardViewport viewport) {
@@ -3876,7 +4977,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         Vec2 visual = FullRouteMapCache.graph(node.levelKey())
                 .map(graph -> FullRouteMapRenderer.visualPosition(graph, FullRouteMapCache.visualGraph(node.levelKey()).orElse(null), node))
                 .orElse(new Vec2(node.worldX(), node.worldZ()));
-        this.viewports.put(node.levelKey(), new ViewportState(node.levelKey(), visual.x(), visual.y(), zoom));
+        this.startViewportTween(node.levelKey(), new ViewportState(node.levelKey(), visual.x(), visual.y(), zoom), VIEWPORT_TWEEN_DURATION_MILLIS);
     }
 
     private void locateStation(StationGroup station) {
@@ -3884,7 +4985,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (FullRouteMapCache.layoutMode().physical()) {
             Optional<PhysicalStationFrame> frame = FullRouteMapCache.physicalGraph(station.levelKey()).flatMap(graph -> graph.stationFrame(station.id()));
             if (frame.isPresent()) {
-                this.viewports.put(station.levelKey(), new ViewportState(station.levelKey(), frame.get().centerX(), frame.get().centerZ(), Math.max(FullRouteMapConfig.CLUSTER_AUTO_EXPAND_ZOOM, FullRouteMapConfig.DEFAULT_ZOOM)));
+                this.startViewportTween(station.levelKey(), new ViewportState(station.levelKey(), frame.get().centerX(), frame.get().centerZ(), Math.max(FullRouteMapConfig.CLUSTER_AUTO_EXPAND_ZOOM, FullRouteMapConfig.DEFAULT_ZOOM)), VIEWPORT_TWEEN_DURATION_MILLIS);
                 return;
             }
         }
@@ -3896,7 +4997,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             this.locateNode(stationNode.get());
             return;
         }
-        this.viewports.put(station.levelKey(), new ViewportState(station.levelKey(), station.stationBlockPos().getX(), station.stationBlockPos().getZ(), Math.max(FullRouteMapConfig.CLUSTER_AUTO_EXPAND_ZOOM, FullRouteMapConfig.DEFAULT_ZOOM)));
+        this.startViewportTween(station.levelKey(), new ViewportState(station.levelKey(), station.stationBlockPos().getX(), station.stationBlockPos().getZ(), Math.max(FullRouteMapConfig.CLUSTER_AUTO_EXPAND_ZOOM, FullRouteMapConfig.DEFAULT_ZOOM)), VIEWPORT_TWEEN_DURATION_MILLIS);
     }
 
     private void locateFirstStation(RouteLayout layout) {
@@ -3911,8 +5012,23 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private List<SearchResult> searchResults() {
         String query = this.searchBox == null ? "" : this.searchBox.getValue().trim().toLowerCase(Locale.ROOT);
         if (query.isEmpty()) {
+            this.cachedSearchQuery = "";
+            this.cachedSearchResults = List.of();
             return List.of();
         }
+        long routeRevision = ClientRouteDataCache.revision();
+        if (!query.equals(this.cachedSearchQuery)
+                || this.cachedSearchRouteRevision != routeRevision
+                || !Objects.equals(this.cachedSearchDimension, this.activeDimension)) {
+            this.cachedSearchQuery = query;
+            this.cachedSearchRouteRevision = routeRevision;
+            this.cachedSearchDimension = this.activeDimension;
+            this.cachedSearchResults = this.computeSearchResults(query);
+        }
+        return this.cachedSearchResults;
+    }
+
+    private List<SearchResult> computeSearchResults(String query) {
         List<SearchResult> results = new ArrayList<>();
         for (RouteLine line : ClientRouteDataCache.routeLines()) {
             DisplayNameStack name = FullMapText.displayNameStack(line);
@@ -3936,10 +5052,6 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         this.searchBox.setFocused(false);
         this.searchExpanded = false;
         this.setFocused(null);
-        if (result.kind() == SearchKind.STATION) {
-            ClientRouteDataCache.stationGroup(result.id()).ifPresent(this::locateStation);
-            return;
-        }
         if (result.kind() == SearchKind.ROUTE_LINE) {
             this.switchDimension(result.levelKey(), false);
             this.pushCard(MapCard.routeLine(result.id(), Optional.empty(), result.levelKey()));
@@ -4104,6 +5216,64 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         this.contextPickerMaxScroll = 0.0D;
     }
 
+    /**
+     * Fires a deferred context-picker row click for a release that stayed under the
+     * click/drag threshold. Ignored when the picker was closed (or swapped) meanwhile.
+     */
+    private void dispatchContextPickerRow(ContextPicker picker, double releaseX, double releaseY) {
+        if (this.contextPicker.filter(picker::equals).isEmpty()) {
+            return;
+        }
+        for (int i = 0; i < Math.min(this.contextPickerRowBounds.size(), picker.rows().size()); i++) {
+            if (this.contextPickerRowBounds.get(i).contains(releaseX, releaseY)) {
+                picker.rows().get(i).action().run();
+                return;
+            }
+        }
+    }
+
+    private void registerScrollBar(FullMapScrollBar.Binding binding) {
+        this.scrollBarBindings.put(binding.id(), binding);
+    }
+
+    /**
+     * Thumb drags and track paging, checked ahead of all other click targets. Uses the
+     * previous frame's bindings, matching how the other per-frame region maps are read.
+     */
+    private boolean handleScrollBarMousePress(double mouseX, double mouseY) {
+        for (FullMapScrollBar.Binding binding : this.scrollBarBindings.values()) {
+            if (!binding.scrollable() || !binding.barSlotRect().contains(mouseX, mouseY)) {
+                continue;
+            }
+            if (binding.thumbRect().contains(mouseX, mouseY)) {
+                this.scrollBarDrag = FullMapScrollBar.Drag.thumb(binding, mouseY);
+            } else {
+                double direction = mouseY < binding.thumbY() ? -1.0D : 1.0D;
+                binding.write(binding.scroll() + direction * FullMapScrollBar.pageAmount(binding));
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Starts watching a press inside a row-drag-scrollable list (outside the bar slot
+     * itself). Returns non-null only when the list can actually scroll; the caller then
+     * defers the row's click action to release via {@link #pendingMapClick}.
+     */
+    @Nullable
+    private PendingRowScroll rowScrollPressAt(double mouseX, double mouseY) {
+        for (FullMapScrollBar.Binding binding : this.scrollBarBindings.values()) {
+            if (binding.scrollable()
+                    && binding.rowDragScroll()
+                    && binding.list().contains(mouseX, mouseY)
+                    && !binding.barSlotRect().contains(mouseX, mouseY)) {
+                return new PendingRowScroll(binding.id(), mouseX, mouseY, binding.scroll());
+            }
+        }
+        return null;
+    }
+
     private record ContextPicker(DisplayNameStack title, String subtitle, int anchorX, int anchorY, SPSGui.Rect boundary, List<ContextPickerAction> actions, List<ContextPickerRow> rows) {}
 
     private record ContextPickerAction(SPSGui.Icon icon, Component tooltip, Runnable action) {}
@@ -4112,9 +5282,65 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     private record NavigationStationDisplay(String label, boolean placeholder, boolean endpoint) {}
 
+    private record PendingMapClick(@Nullable PendingClickAction action, @Nullable Runnable doubleClickAction, double pressX, double pressY) {}
+
+    /** A press inside a row-drag-scrollable list that has not yet crossed the 6px click/drag threshold. */
+    private record PendingRowScroll(String bindingId, double pressX, double pressY, double startScroll) {}
+
+    /**
+     * A short ease-out animation between two committed viewport states. The target is written
+     * to the stored viewport as soon as the tween starts; this record only drives the value
+     * used for rendering and hit-testing until the duration elapses. Zoom interpolates
+     * exponentially (zoom feels multiplicative), center/pitch interpolate linearly, and
+     * bearing takes the shortest angular path.
+     */
+    private record ViewportTween(ViewportState from, ViewportState to, long startMillis, long durationMillis) {
+        private ViewportState at(long nowMillis) {
+            double t = this.durationMillis <= 0L ? 1.0D : (nowMillis - this.startMillis) / (double) this.durationMillis;
+            if (t >= 1.0D) {
+                return this.to;
+            }
+            if (t <= 0.0D) {
+                return this.from;
+            }
+            double eased = easeOutCubic(t);
+            double zoom = this.from.zoom() * Math.pow(this.to.zoom() / this.from.zoom(), eased);
+            double bearingDelta = (this.to.bearingDegrees() - this.from.bearingDegrees() + 540.0D) % 360.0D - 180.0D;
+            return new ViewportState(
+                    this.to.levelKey(),
+                    lerp(this.from.centerWorldX(), this.to.centerWorldX(), eased),
+                    lerp(this.from.centerWorldZ(), this.to.centerWorldZ(), eased),
+                    zoom,
+                    lerp(this.from.pitchDegrees(), this.to.pitchDegrees(), eased),
+                    this.from.bearingDegrees() + bearingDelta * eased);
+        }
+
+        private boolean finished(long nowMillis) {
+            return nowMillis - this.startMillis >= this.durationMillis;
+        }
+
+        private static double easeOutCubic(double t) {
+            double inverse = 1.0D - t;
+            return 1.0D - inverse * inverse * inverse;
+        }
+
+        private static double lerp(double a, double b, double t) {
+            return a + (b - a) * t;
+        }
+    }
+
+    @FunctionalInterface
+    private interface PendingClickAction {
+        void run(double releaseX, double releaseY);
+    }
+
     private record RouteCardGraphCacheKey(long routeRevision, long pipeRevision, UUID routeLineId, UUID routeLayoutId, RouteCardViewMode viewMode) {}
 
     private record RouteCardGraphBundle(RouteCardSemanticGraph stopListGraph, RouteCardSemanticGraph semanticGraph, RouteCardVisualGraph visualGraph) {}
+
+    private record ClusterCardGraphCacheKey(long routeRevision, long pipeRevision, NodeId clusterNodeId, ClusterCardProfile profile) {}
+
+    private record ClusterCardGraphBundle(ClusterCardSemanticGraph semanticGraph, ClusterCardVisualGraph visualGraph) {}
 
     private void bringCardToFront(String key) {
         for (int i = 0; i < this.cardStack.size(); i++) {
@@ -4146,7 +5372,26 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     private void toast(String message) {
         this.toast = message;
-        this.toastUntilMillis = System.currentTimeMillis() + 1800L;
+        this.toastUntilMillis = System.currentTimeMillis() + TOAST_DURATION_MILLIS;
+        this.toastAction = null;
+        this.toastActionLabel = "";
+    }
+
+    private void toast(String message, String actionLabel, Runnable action, long durationMillis) {
+        this.toast = message;
+        this.toastUntilMillis = System.currentTimeMillis() + durationMillis;
+        this.toastAction = action;
+        this.toastActionLabel = actionLabel;
+    }
+
+    private void runToastAction() {
+        Runnable action = this.toastAction;
+        this.toastAction = null;
+        this.toast = "";
+        this.toastUntilMillis = 0L;
+        if (action != null) {
+            action.run();
+        }
     }
 
     private static String dimensionLabel(ResourceKey<Level> dimension) {
@@ -4159,19 +5404,35 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         };
     }
 
-    private static int stationCountInDimension(ResourceKey<Level> dimension) {
-        return (int) ClientRouteDataCache.stationGroups().stream()
-                .filter(station -> station.levelKey().equals(dimension))
-                .count();
+    private int stationCountInDimension(ResourceKey<Level> dimension) {
+        return this.dimensionCounts(dimension)[0];
     }
 
-    private static int routeCountInDimension(ResourceKey<Level> dimension) {
+    private int routeCountInDimension(ResourceKey<Level> dimension) {
+        return this.dimensionCounts(dimension)[1];
+    }
+
+    private int[] dimensionCounts(ResourceKey<Level> dimension) {
+        long routeRevision = ClientRouteDataCache.revision();
+        long pipeRevision = ClientPipeNetworkCache.aggregateRevision();
+        if (this.cachedDimensionCountsRouteRevision != routeRevision || this.cachedDimensionCountsPipeRevision != pipeRevision) {
+            this.cachedDimensionCountsRouteRevision = routeRevision;
+            this.cachedDimensionCountsPipeRevision = pipeRevision;
+            this.cachedDimensionCounts.clear();
+        }
+        return this.cachedDimensionCounts.computeIfAbsent(dimension, FullRouteMapScreen::computeDimensionCounts);
+    }
+
+    private static int[] computeDimensionCounts(ResourceKey<Level> dimension) {
+        int stationCount = (int) ClientRouteDataCache.stationGroups().stream()
+                .filter(station -> station.levelKey().equals(dimension))
+                .count();
         Set<UUID> routeLineIds = new LinkedHashSet<>();
         FullRouteMapCache.graph(dimension).ifPresent(graph -> {
             graph.nodes().forEach(node -> routeLineIds.addAll(node.routeLineIds()));
             graph.edges().forEach(edge -> routeLineIds.addAll(edge.routeLineIds()));
         });
-        return routeLineIds.size();
+        return new int[] { stationCount, routeLineIds.size() };
     }
 
     private static String dimensionLabel(String dimensionId) {

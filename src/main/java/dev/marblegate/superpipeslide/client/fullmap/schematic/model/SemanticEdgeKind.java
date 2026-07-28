@@ -6,6 +6,5 @@ public enum SemanticEdgeKind {
     PARALLEL_CORRIDOR,
     LOOP_BACK,
     STATION_INTERNAL,
-    FOLD_ADJACENT,
-    TRANSFER_HINT
+    FOLD_ADJACENT
 }

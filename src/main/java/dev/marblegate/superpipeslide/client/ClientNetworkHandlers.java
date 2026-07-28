@@ -6,6 +6,7 @@ import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideNoticeController;
 import dev.marblegate.superpipeslide.client.core.sync.ClientDataResyncRequests;
+import dev.marblegate.superpipeslide.client.fullmap.cache.FullRouteMapCache;
 import dev.marblegate.superpipeslide.client.fullmap.screen.FullRouteMapScreen;
 import dev.marblegate.superpipeslide.client.gui.anchor.FoldAnchorEditorScreen;
 import dev.marblegate.superpipeslide.client.gui.base.RouteDataAwareScreen;
@@ -213,6 +214,7 @@ public final class ClientNetworkHandlers {
     }
 
     private static void handleOpenFullRouteMap(ClientboundOpenFullRouteMapPayload payload, IPayloadContext context) {
+        FullRouteMapCache.markOpened();
         Minecraft.getInstance().setScreen(new FullRouteMapScreen());
     }
 

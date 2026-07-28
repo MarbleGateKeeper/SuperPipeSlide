@@ -26,6 +26,7 @@ import dev.marblegate.superpipeslide.client.fullmap.ui.FullMapTheme;
 import dev.marblegate.superpipeslide.client.fullmap.ui.FullMapTooltipCard;
 import dev.marblegate.superpipeslide.client.fullmap.ui.FullMapUi;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
+import dev.marblegate.superpipeslide.common.core.geometry.PipeAnchorId;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -42,6 +43,11 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 
 public final class ClusterCardRenderer {
+    /** Card-level cap for ordinary cluster labels (the shared per-frame budget of 360 targets the full-screen main map, not a small card). */
+    private static final int MAX_CARD_LABELS = 32;
+    /** Penalty at which a cluster label is dropped instead of drawn over icons/labels (two blocked icons, or one icon plus several labels). */
+    private static final int LABEL_MAX_PENALTY = 220;
+
     public ClusterCardRenderResult render(
             GuiGraphicsExtractor graphics,
             Font font,
@@ -68,11 +74,12 @@ public final class ClusterCardRenderer {
         this.drawLabels(graphics, font, screenGraph, hover, viewport.zoom(), map, profile);
         graphics.disableScissor();
         this.drawViewportHints(graphics, map, visualGraph.bounds(), viewport);
+        this.drawFooterMeta(graphics, font, semanticGraph, map);
         if (active) {
             this.drawFitViewportButton(graphics, fitViewport, fitViewport.contains(mouseX, mouseY));
         }
         if (semanticGraph.nodes().isEmpty()) {
-            SPSGui.centeredText(graphics, font, Component.translatable("screen.superpipeslide.full_map.route_card.map_empty"), map.x() + map.width() / 2, map.y() + map.height() / 2 - 4, FullMapTheme.TEXT_MUTED);
+            SPSGui.centeredText(graphics, font, Component.translatable("screen.superpipeslide.full_map.cluster_card.map_empty"), map.x() + map.width() / 2, map.y() + map.height() / 2 - 4, FullMapTheme.TEXT_MUTED);
         }
         return new ClusterCardRenderResult(map, fitViewport, hover);
     }
@@ -109,7 +116,7 @@ public final class ClusterCardRenderer {
                     return new ClusterCardVisualEdge(edge.edge(), points, boundsFor(points).inflate(8.0D));
                 })
                 .toList();
-        return new ClusterCardVisualGraph(nodes, edges, screenBounds(graph.bounds(), viewport, map), graph.fallback());
+        return new ClusterCardVisualGraph(nodes, edges, screenBounds(graph.bounds(), viewport, map));
     }
 
     private static Vec2 worldToScreen(Vec2 point, ClusterCardViewport viewport, SPSGui.Rect map) {
@@ -142,9 +149,15 @@ public final class ClusterCardRenderer {
                 continue;
             }
             if (edge.kind() == ClusterCardEdgeKind.FOLD_PEER_LINK) {
-                if (highlightedFoldNodes.contains(edge.from()) || highlightedFoldNodes.contains(edge.to())) {
+                boolean highlighted = highlightedFoldNodes.contains(edge.from()) || highlightedFoldNodes.contains(edge.to())
+                        || hover.edgeId().filter(edge.id()::equals).isPresent();
+                if (highlighted) {
                     drawPolyline(graphics, visualEdge.points(), 7.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
                     drawPolyline(graphics, visualEdge.points(), 1.7D, FullRouteMapConfig.MAP_FOLD_MULTI_LINE);
+                } else {
+                    // Always-on whisper of the fold-peer link so the pairing stays
+                    // discoverable without hovering an endpoint first.
+                    drawPolyline(graphics, visualEdge.points(), 1.0D, SPSGui.withAlpha(FullRouteMapConfig.MAP_FOLD_MULTI_LINE, 0x33));
                 }
                 continue;
             }
@@ -206,7 +219,7 @@ public final class ClusterCardRenderer {
                     }
                 }
                 case EXTERNAL_PORT -> {
-                    drawCircle(graphics, center, radius, 0xFFFFFFFF, FullRouteMapConfig.MAP_LABEL_MUTED);
+                    drawCircle(graphics, center, radius, FullRouteMapConfig.MAP_PORT_FILL, FullRouteMapConfig.MAP_LABEL_MUTED);
                     drawClusterStripes(graphics, center, Math.max(5.0D, radius - 1.0D), node.routeLineIds());
                 }
             }
@@ -225,7 +238,7 @@ public final class ClusterCardRenderer {
         int rendered = 0;
         int maxLabels = profile == ClusterCardProfile.DEEP
                 ? Math.min(24, FullRouteMapConfig.MAX_LABELS_PER_FRAME)
-                : FullRouteMapConfig.MAX_LABELS_PER_FRAME;
+                : MAX_CARD_LABELS;
         for (ClusterCardVisualNode visualNode : graph.nodes().stream().sorted(Comparator.comparingInt(ClusterCardVisualNode::priority).reversed()).toList()) {
             if (rendered >= maxLabels) {
                 break;
@@ -272,20 +285,32 @@ public final class ClusterCardRenderer {
         if (!map.contains(mouseX, mouseY)) {
             return Optional.empty();
         }
+        // Nearest node wins (priority order only breaks exact ties), mirroring the
+        // best-distance edge pass below instead of taking the first in-range node.
+        ClusterCardVisualNode bestNode = null;
+        double bestScore = Double.POSITIVE_INFINITY;
         for (ClusterCardVisualNode visualNode : graph.nodes().stream().sorted(Comparator.comparingInt(ClusterCardVisualNode::priority).reversed()).toList()) {
-            ClusterCardNode node = visualNode.node();
-            if (nodeHitScore(node, visualNode.position(), mouseX, mouseY, zoom, profile) <= 1.0D) {
-                return Optional.of(ClusterCardHit.node(node.id()));
+            double score = nodeHitScore(visualNode.node(), visualNode.position(), mouseX, mouseY, zoom, profile);
+            if (score < bestScore && score <= 1.0D) {
+                bestScore = score;
+                bestNode = visualNode;
             }
+        }
+        if (bestNode != null) {
+            return Optional.of(ClusterCardHit.node(bestNode.node().id()));
         }
         ClusterCardVisualEdge best = null;
         double bestDistance = Double.POSITIVE_INFINITY;
         for (ClusterCardVisualEdge visualEdge : graph.edges()) {
-            if (visualEdge.edge().kind() == ClusterCardEdgeKind.FOLD_PEER_LINK || visualEdge.points().size() < 2) {
+            if (visualEdge.points().size() < 2) {
                 continue;
             }
             double distance = distanceToPolyline(new Vec2(mouseX, mouseY), visualEdge.points());
-            double threshold = Math.max(6.0D, routeBundleWidth(edgeLanes(routeLinesForIds(visualEdge.edge().routeLineIds())), FullRouteMapConfig.LINE_WIDTH_PX) * 0.5D + 5.0D);
+            // Fold-peer links are thin ambient hints: keep their pick radius tight so
+            // they never shadow the route edges they cross.
+            double threshold = visualEdge.edge().kind() == ClusterCardEdgeKind.FOLD_PEER_LINK
+                    ? 4.0D
+                    : Math.max(6.0D, routeBundleWidth(edgeLanes(routeLinesForIds(visualEdge.edge().routeLineIds())), FullRouteMapConfig.LINE_WIDTH_PX) * 0.5D + 5.0D);
             if (distance < bestDistance && distance <= threshold) {
                 bestDistance = distance;
                 best = visualEdge;
@@ -324,18 +349,24 @@ public final class ClusterCardRenderer {
         }
         if (hover.kind() == ClusterCardHitKind.EDGE && hover.edgeId().isPresent()) {
             graph.edge(hover.edgeId().get())
-                    .ifPresent(edge -> FullMapTooltipCard.render(
-                            graphics,
-                            font,
-                            boundary,
-                            avoidRects,
-                            mouseX,
-                            mouseY,
-                            edgeTitleStack(edge.routeLineIds()),
-                            Component.translatable("screen.superpipeslide.full_map.tooltip_card.edge_subtitle", edge.routeLineIds().size()).getString(),
-                            List.of(tooltipRow("screen.superpipeslide.full_map.tooltip_field.routes", Integer.toString(edge.routeLineIds().size()))),
-                            routeChips(edge.routeLineIds()),
-                            primaryRouteColor(edge.routeLineIds())));
+                    .ifPresent(edge -> {
+                        if (edge.kind() == ClusterCardEdgeKind.FOLD_PEER_LINK) {
+                            FullMapTooltipCard.renderComponent(graphics, font, boundary, avoidRects, mouseX, mouseY, Component.translatable("screen.superpipeslide.full_map.tooltip_card.fold_anchor"));
+                            return;
+                        }
+                        FullMapTooltipCard.render(
+                                graphics,
+                                font,
+                                boundary,
+                                avoidRects,
+                                mouseX,
+                                mouseY,
+                                edgeTitleStack(edge.routeLineIds()),
+                                Component.translatable("screen.superpipeslide.full_map.tooltip_card.edge_subtitle", edge.routeLineIds().size()).getString(),
+                                List.of(tooltipRow("screen.superpipeslide.full_map.tooltip_field.routes", Integer.toString(edge.routeLineIds().size()))),
+                                routeChips(edge.routeLineIds()),
+                                primaryRouteColor(edge.routeLineIds()));
+                    });
         }
     }
 
@@ -348,7 +379,7 @@ public final class ClusterCardRenderer {
         boolean right = screenBounds.maxX() > map.right();
         boolean up = screenBounds.minY() < map.y();
         boolean down = screenBounds.maxY() > map.bottom();
-        int fade = 0x44EEF2F7;
+        int fade = FullRouteMapConfig.MAP_VIEWPORT_HINT_FADE;
         if (left) {
             graphics.fill(map.x(), map.y(), map.x() + 8, map.bottom(), fade);
             drawChevron(graphics, map.x() + 4, map.y() + map.height() * 0.5D, -1, 0);
@@ -371,8 +402,27 @@ public final class ClusterCardRenderer {
         FullMapUi.iconButton(graphics, rect, hovered, false, false, SPSGui.Icon.FIT);
     }
 
+    /**
+     * Bottom-line cluster metadata (world center and span) inside the map area, so the
+     * card header meta can stay short enough to avoid truncation.
+     */
+    private void drawFooterMeta(GuiGraphicsExtractor graphics, Font font, ClusterCardSemanticGraph semanticGraph, SPSGui.Rect map) {
+        if (semanticGraph.nodes().isEmpty() || semanticGraph.worldBounds().isEmpty()) {
+            return;
+        }
+        Aabb2 world = semanticGraph.worldBounds();
+        int span = (int) Math.round(Math.max(world.maxX() - world.minX(), world.maxY() - world.minY()));
+        String footer = Component.translatable(
+                "screen.superpipeslide.full_map.cluster_card.footer_meta",
+                (int) Math.round(semanticGraph.cluster().worldX()),
+                (int) Math.round(semanticGraph.cluster().worldZ()),
+                span).getString();
+        int maxWidth = Math.max(24, map.width() - 48);
+        SPSGui.smallText(graphics, font, SPSGui.ellipsize(font, footer, Math.round(maxWidth / FullMapTheme.TYPE_TINY)), map.x() + 4, map.bottom() - 10, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_TINY);
+    }
+
     private static void drawChevron(GuiGraphicsExtractor graphics, double x, double y, int dx, int dy) {
-        int color = 0xAA4B5563;
+        int color = FullRouteMapConfig.MAP_VIEWPORT_HINT_CHEVRON;
         if (dx < 0) {
             SmoothGuiPrimitives.line(graphics, new Vec2(x + 3.0D, y - 5.0D), new Vec2(x - 2.0D, y), 1.25D, color);
             SmoothGuiPrimitives.line(graphics, new Vec2(x - 2.0D, y), new Vec2(x + 3.0D, y + 5.0D), 1.25D, color);
@@ -415,11 +465,16 @@ public final class ClusterCardRenderer {
 
     private Optional<SPSGui.Rect> chooseLabelBounds(ClusterCardNode node, Vec2 center, double zoom, SPSGui.Rect map, int width, int height, List<SPSGui.Rect> placed, List<LabelBlocker> blockers, ClusterCardProfile profile) {
         double radius = nodeRadius(node, zoom, profile);
+        double diagonal = Math.max((radius + 6.0D) * 0.72D, 8.0D);
         List<SPSGui.Rect> candidates = new ArrayList<>();
         addLabelCandidate(candidates, center.x() + radius + 6.0D, center.y() - height * 0.5D, width, height, map);
         addLabelCandidate(candidates, center.x() - radius - 6.0D - width, center.y() - height * 0.5D, width, height, map);
         addLabelCandidate(candidates, center.x() - width * 0.5D, center.y() - radius - height - 5.0D, width, height, map);
         addLabelCandidate(candidates, center.x() - width * 0.5D, center.y() + radius + 5.0D, width, height, map);
+        addLabelCandidate(candidates, center.x() + diagonal, center.y() - diagonal - height, width, height, map);
+        addLabelCandidate(candidates, center.x() + diagonal, center.y() + diagonal, width, height, map);
+        addLabelCandidate(candidates, center.x() - diagonal - width, center.y() - diagonal - height, width, height, map);
+        addLabelCandidate(candidates, center.x() - diagonal - width, center.y() + diagonal, width, height, map);
         SPSGui.Rect best = null;
         int bestPenalty = Integer.MAX_VALUE;
         for (SPSGui.Rect candidate : candidates) {
@@ -438,6 +493,12 @@ public final class ClusterCardRenderer {
                 bestPenalty = penalty;
                 best = candidate;
             }
+        }
+        // Give up when every candidate is hopelessly blocked (two blocked node icons,
+        // or a blocker plus a couple of placed labels): a badly overlapping label is
+        // worse than no label, and the caller skips the node on Optional.empty().
+        if (bestPenalty >= LABEL_MAX_PENALTY) {
+            return Optional.empty();
         }
         return Optional.ofNullable(best);
     }
@@ -525,11 +586,13 @@ public final class ClusterCardRenderer {
         double walked = 0.0D;
         Vec2 a = path.getFirst();
         Vec2 b = path.get(1);
+        double segmentStart = 0.0D;
         for (int i = 0; i + 1 < path.size(); i++) {
             double length = path.get(i).distanceTo(path.get(i + 1));
             if (walked + length >= half) {
                 a = path.get(i);
                 b = path.get(i + 1);
+                segmentStart = walked;
                 break;
             }
             walked += length;
@@ -539,7 +602,10 @@ public final class ClusterCardRenderer {
         double length = Math.max(1.0D, Math.hypot(dx, dy));
         double nx = -dy / length;
         double ny = dx / length;
-        Vec2 mid = new Vec2((a.x() + b.x()) * 0.5D, (a.y() + b.y()) * 0.5D);
+        // True arc-length midpoint: interpolate inside the segment that crosses half
+        // the polyline length instead of snapping to that segment's own midpoint.
+        double t = Math.max(0.0D, Math.min(1.0D, (half - segmentStart) / length));
+        Vec2 mid = new Vec2(a.x() + dx * t, a.y() + dy * t);
         int count = Math.min(lines.size(), 6);
         double start = -(count - 1) * 2.0D;
         for (int i = 0; i < count; i++) {
@@ -727,7 +793,12 @@ public final class ClusterCardRenderer {
                     .ifPresent(mapNode -> rows.add(tooltipRow("screen.superpipeslide.full_map.tooltip_field.stations", Integer.toString(mapNode.stationGroupIds().size()))));
             case MEMBER_FOLD_ANCHOR -> {
                 rows.add(tooltipRow("screen.superpipeslide.full_map.tooltip_field.dimension", dimensionLabel(node.levelKey())));
-                rows.add(tooltipRow("screen.superpipeslide.full_map.tooltip_field.peer_dimension", node.foldPeerId().map(peer -> dimensionLabel(peer.levelKey())).orElse("?")));
+                // Same-dimension fold pairs (e.g. SPACE folds) would print the same
+                // dimension twice; only add the peer row when it actually differs.
+                Optional<ResourceKey<Level>> peerLevel = node.foldPeerId().map(PipeAnchorId::levelKey);
+                if (peerLevel.filter(node.levelKey()::equals).isEmpty()) {
+                    rows.add(tooltipRow("screen.superpipeslide.full_map.tooltip_field.peer_dimension", peerLevel.map(ClusterCardRenderer::dimensionLabel).orElse("?")));
+                }
             }
             case MEMBER_STATION -> {
                 rows.add(tooltipRow("screen.superpipeslide.full_map.tooltip_field.dimension", dimensionLabel(node.levelKey())));

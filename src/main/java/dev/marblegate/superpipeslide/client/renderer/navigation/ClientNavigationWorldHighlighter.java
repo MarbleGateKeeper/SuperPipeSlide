@@ -4,6 +4,8 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.navigation.ClientNavigationController;
+import dev.marblegate.superpipeslide.client.core.navigation.ClientNavigationHudController;
+import dev.marblegate.superpipeslide.client.core.navigation.NavigationSemanticColors;
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import dev.marblegate.superpipeslide.client.renderer.SubmitTextRenderer;
 import dev.marblegate.superpipeslide.common.SuperPipeSlide;
@@ -23,7 +25,10 @@ import org.joml.Matrix4f;
 public final class ClientNavigationWorldHighlighter {
     private static final ContextKey<RenderData> RENDER_DATA = new ContextKey<>(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "navigation_world_highlight"));
     private static final Vec3 WORLD_UP = new Vec3(0.0D, 1.0D, 0.0D);
-    private static final double WORLD_MARKER_RANGE = 72.0D;
+    /** Marker is fully visible at this distance and fades out as the player gets closer. */
+    private static final double NEAR_FADE_END_BLOCKS = 8.0D;
+    /** Marker (and its label) is fully faded out at this distance to avoid blocking the view. */
+    private static final double NEAR_FADE_START_BLOCKS = 4.5D;
 
     private ClientNavigationWorldHighlighter() {}
 
@@ -34,8 +39,11 @@ public final class ClientNavigationWorldHighlighter {
             event.getRenderState().setRenderData(RENDER_DATA, RenderData.EMPTY);
             return;
         }
+        // Pure frustum rule: the world marker only owns targets projected inside the
+        // view frustum; off-screen targets at any distance belong to the HUD edge
+        // indicator (see ClientNavigationHudController#isWorldTargetOnScreen).
         Optional<ClientNavigationController.WorldTarget> target = ClientNavigationController.worldTarget(player)
-                .filter(value -> value.distance() <= WORLD_MARKER_RANGE);
+                .filter(value -> ClientNavigationHudController.isWorldTargetOnScreen(minecraft, value));
         event.getRenderState().setRenderData(RENDER_DATA, target.isPresent() ? new RenderData(target) : RenderData.EMPTY);
     }
 
@@ -61,15 +69,19 @@ public final class ClientNavigationWorldHighlighter {
     }
 
     private static void renderTarget(PoseStack.Pose pose, VertexConsumer buffer, ClientNavigationController.WorldTarget target, Vec3 camera, boolean photic) {
+        double nearFade = nearFade(camera.distanceTo(target.position()));
+        if (nearFade <= 0.01D) {
+            return;
+        }
         Vec3 normal = safeNormalize(camera.subtract(target.position()), new Vec3(0.0D, 0.0D, 1.0D));
         Vec3 right = safeNormalize(WORLD_UP.cross(normal), new Vec3(1.0D, 0.0D, 0.0D));
         Vec3 up = safeNormalize(normal.cross(right), WORLD_UP);
         double distanceToCamera = Math.max(4.0D, camera.distanceTo(target.position()));
         double markerScale = markerScale(distanceToCamera);
-        double distanceFade = Math.max(0.58D, Math.min(1.0D, 96.0D / Math.max(16.0D, distanceToCamera)));
+        double distanceFade = Math.max(0.58D, Math.min(1.0D, 96.0D / Math.max(16.0D, distanceToCamera))) * nearFade;
         long now = System.currentTimeMillis();
         double pulse = photic ? 0.0D : 0.5D + 0.5D * Math.sin(now / 230.0D);
-        int color = withAlpha(target.color(), (int) Math.round((photic ? 0x6A : 0x86 + pulse * 0x48) * distanceFade));
+        int color = withAlpha(markerColor(target), (int) Math.round((photic ? 0x6A : 0x86 + pulse * 0x48) * distanceFade));
         int core = withAlpha(0xFFFFFFFF, (int) Math.round((photic ? 0x96 : 0xD0) * distanceFade));
         double baseRadius = switch (target.kind()) {
             case SAME_STATION_TRANSFER -> 0.72D;
@@ -89,10 +101,16 @@ public final class ClientNavigationWorldHighlighter {
     }
 
     private static void renderTargetLabel(SubmitCustomGeometryEvent event, PoseStack poseStack, ClientNavigationController.WorldTarget target, Vec3 camera) {
+        double nearFade = nearFade(camera.distanceTo(target.position()));
+        if (nearFade <= 0.01D) {
+            return;
+        }
         Minecraft minecraft = Minecraft.getInstance();
         Font font = minecraft.font;
         String distance = target.distance() >= 999.0D ? "999m+" : Math.round(target.distance()) + "m";
-        Component label = Component.literal(target.name() + " / " + distance);
+        // The HUD info card already shows the station name; keep only the distance
+        // on the world label while both are on screen.
+        Component label = Component.literal(ClientNavigationHudController.isInfoCardVisible() ? distance : target.name() + " / " + distance);
         double distanceToCamera = Math.max(4.0D, camera.distanceTo(target.position()));
         double markerScale = markerScale(distanceToCamera);
         float halfTanFov = (float) Math.tan(Math.toRadians(minecraft.options.fov().get()) * 0.5D);
@@ -109,19 +127,34 @@ public final class ClientNavigationWorldHighlighter {
                 0.0F,
                 label.getVisualOrderText(),
                 false,
-                throughWallTarget(target) ? Font.DisplayMode.SEE_THROUGH : Font.DisplayMode.NORMAL,
+                // Every target kind reads through walls; distanceFade keeps far
+                // targets from over-saturating the view.
+                Font.DisplayMode.SEE_THROUGH,
                 LightCoordsUtil.FULL_BRIGHT,
-                0xFFFFFFFF,
-                0xAA101820,
+                withAlpha(0xFFFFFFFF, (int) Math.round(0xFF * nearFade)),
+                withAlpha(0xAA101820, (int) Math.round(0xAA * nearFade)),
                 0);
         poseStack.popPose();
     }
 
-    private static boolean throughWallTarget(ClientNavigationController.WorldTarget target) {
+    /**
+     * Hue source for a world marker: route-branded kinds (boarding, destination) keep
+     * the route color carried by the target; transfer and on-foot kinds use the
+     * canonical navigation palette so the marker matches the HUD edge indicator.
+     */
+    private static int markerColor(ClientNavigationController.WorldTarget target) {
         return switch (target.kind()) {
-            case BOARDING, SAME_STATION_TRANSFER, OUT_OF_STATION_TRANSFER, CROSS_DIMENSION_TRANSFER -> true;
-            case FINAL_WALK, CROSS_DIMENSION_FINAL_WALK, DESTINATION -> false;
+            case BOARDING, DESTINATION -> target.color();
+            case SAME_STATION_TRANSFER -> NavigationSemanticColors.SAME_STATION_TRANSFER;
+            case OUT_OF_STATION_TRANSFER -> NavigationSemanticColors.OUT_OF_STATION_TRANSFER;
+            case FINAL_WALK -> NavigationSemanticColors.FINAL_WALK;
+            case CROSS_DIMENSION_TRANSFER, CROSS_DIMENSION_FINAL_WALK -> NavigationSemanticColors.CROSS_DIMENSION_TRANSFER;
         };
+    }
+
+    /** Close-range fade-out: 0 at {@link #NEAR_FADE_START_BLOCKS}, 1 at {@link #NEAR_FADE_END_BLOCKS}. */
+    private static double nearFade(double distanceToCamera) {
+        return Math.max(0.0D, Math.min(1.0D, (distanceToCamera - NEAR_FADE_START_BLOCKS) / (NEAR_FADE_END_BLOCKS - NEAR_FADE_START_BLOCKS)));
     }
 
     private static double markerScale(double distanceToCamera) {

@@ -120,6 +120,11 @@ public record RouteSection(
         return direction < 0 ? this.reverseStepDecisions : this.forwardStepDecisions;
     }
 
+    /**
+     * Legacy leftover from the same batch as the forward/reverse split: always returns {@code 1}.
+     * The real one-way semantics live in {@code RouteLayout.bidirectional} and
+     * {@code PipeConnectionAttributes.directionLimit}; deleting this accessor is behavior-neutral.
+     */
     public int direction() {
         return 1;
     }

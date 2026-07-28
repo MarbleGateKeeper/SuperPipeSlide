@@ -1,10 +1,10 @@
 package dev.marblegate.superpipeslide.client.fullmap.builder;
 
-import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
 import dev.marblegate.superpipeslide.client.fullmap.diagnostic.DiagnosticType;
 import dev.marblegate.superpipeslide.client.fullmap.diagnostic.MapBuildDiagnostic;
 import dev.marblegate.superpipeslide.client.fullmap.diagnostic.MissingCrossDimensionPathHint;
+import dev.marblegate.superpipeslide.client.fullmap.diagnostic.MissingCrossDimensionReason;
 import dev.marblegate.superpipeslide.client.fullmap.model.FullRouteMapSourceSnapshot;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapCluster;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapDimensionGraph;
@@ -40,7 +40,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
+import java.util.function.BooleanSupplier;
+import java.util.stream.Collectors;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 
@@ -64,19 +68,32 @@ public final class FullRouteMapBuilder {
     private final Map<ResourceKey<Level>, Map<NodeId, MapCluster>> clustersByLevel = new LinkedHashMap<>();
     private final Map<ResourceKey<Level>, Map<EdgeKey, EdgeAccumulator>> edgesByLevel = new LinkedHashMap<>();
     private final Map<ResourceKey<Level>, List<MissingCrossDimensionPathHint>> missingCrossDimensionHintsByLevel = new LinkedHashMap<>();
+    // Polled between build phases and inside the hot loops so a superseded build can
+    // bail out early instead of burning builder-thread time on a stale snapshot.
+    private final BooleanSupplier cancellation;
 
-    public FullRouteMapBuilder(FullRouteMapSourceSnapshot source) {
+    public FullRouteMapBuilder(FullRouteMapSourceSnapshot source, BooleanSupplier cancellation) {
         this.source = source;
+        this.cancellation = cancellation;
     }
 
     public Map<ResourceKey<Level>, MapDimensionGraph> build() {
         this.indexSource();
         this.computeStationLineRefs();
+        this.checkCancelled();
         this.buildClusters();
+        this.checkCancelled();
         this.buildStationNodes();
         this.buildLayoutEdges();
+        this.checkCancelled();
         this.assignFoldClusterMembership();
         return this.finishGraphs();
+    }
+
+    private void checkCancelled() {
+        if (this.cancellation.getAsBoolean()) {
+            throw new CancellationException("Full route map build cancelled");
+        }
     }
 
     private void indexSource() {
@@ -133,8 +150,8 @@ public final class FullRouteMapBuilder {
                 continue;
             }
             component.sort(Comparator.comparing(StationGroup::id));
-            NodeId deepId = new NodeId(NodeKind.DEEP_CLUSTER, levelKey, stableUuid("deep_cluster:" + levelKey.identifier() + ":" + component.stream().map(station -> station.id().toString()).reduce("", (a, b) -> a + "|" + b)), 0);
-            MapCluster deepCluster = clusterFromStations(levelKey, deepId, component, component.stream().map(station -> new NodeId(NodeKind.STATION, levelKey, station.id(), 0)).toList());
+            NodeId deepId = new NodeId(NodeKind.DEEP_CLUSTER, levelKey, stableUuid("deep_cluster:" + levelKey.identifier() + ":" + component.stream().map(station -> station.id().toString()).reduce("", (a, b) -> a + "|" + b)));
+            MapCluster deepCluster = clusterFromStations(levelKey, deepId, component, component.stream().map(station -> new NodeId(NodeKind.STATION, levelKey, station.id())).toList());
             this.clustersByLevel.computeIfAbsent(levelKey, ignored -> new LinkedHashMap<>()).put(deepId, deepCluster);
             for (StationGroup station : component) {
                 this.clusterByStationId.put(station.id(), deepId);
@@ -154,6 +171,7 @@ public final class FullRouteMapBuilder {
         aggregates.forEach(aggregate -> aggregateById.put(aggregate.id(), aggregate));
         UnionFind aggregateUnion = new UnionFind(aggregates.stream().map(ClusterAggregate::id).toList());
         for (int i = 0; i < aggregates.size(); i++) {
+            this.checkCancelled();
             ClusterAggregate first = aggregates.get(i);
             for (int j = i + 1; j < aggregates.size(); j++) {
                 ClusterAggregate second = aggregates.get(j);
@@ -173,7 +191,7 @@ public final class FullRouteMapBuilder {
             component.sort(Comparator.comparing(ClusterAggregate::id));
             List<StationGroup> memberStations = component.stream().flatMap(aggregate -> aggregate.stations().stream()).sorted(Comparator.comparing(StationGroup::id)).toList();
             List<NodeId> memberNodeIds = component.stream().map(ClusterAggregate::nodeId).toList();
-            NodeId clusterId = new NodeId(NodeKind.CLUSTER, levelKey, stableUuid("cluster:" + levelKey.identifier() + ":" + component.stream().map(aggregate -> aggregate.id().toString()).reduce("", (a, b) -> a + "|" + b)), 0);
+            NodeId clusterId = new NodeId(NodeKind.CLUSTER, levelKey, stableUuid("cluster:" + levelKey.identifier() + ":" + component.stream().map(aggregate -> aggregate.id().toString()).reduce("", (a, b) -> a + "|" + b)));
             MapCluster cluster = clusterFromStations(levelKey, clusterId, memberStations, memberNodeIds);
             this.clustersByLevel.computeIfAbsent(levelKey, ignored -> new LinkedHashMap<>()).put(clusterId, cluster);
             for (ClusterAggregate aggregate : component) {
@@ -188,7 +206,7 @@ public final class FullRouteMapBuilder {
 
     private void buildStationNodes() {
         for (StationGroup station : this.source.stationGroups()) {
-            NodeId id = new NodeId(NodeKind.STATION, station.levelKey(), station.id(), 0);
+            NodeId id = new NodeId(NodeKind.STATION, station.levelKey(), station.id());
             this.stationNodeIds.put(station.id(), id);
             List<UUID> platformIds = this.platformIdsByStation.getOrDefault(station.id(), Set.of()).stream().sorted().toList();
             List<UUID> lineIds = this.routeLineIdsByStation.getOrDefault(station.id(), Set.of()).stream().sorted().toList();
@@ -234,8 +252,8 @@ public final class FullRouteMapBuilder {
 
     private NodeId ensureFoldNode(PipeAnchorId anchorId) {
         return this.foldNodeIds.computeIfAbsent(anchorId, id -> {
-            NodeId nodeId = new NodeId(NodeKind.FOLD_ANCHOR, id.levelKey(), stableUuid("fold:" + id.levelKey().identifier() + ":" + id.blockPos().asLong()), 0);
-            Optional<PipeAnchorId> peer = ClientPipeNetworkCache.globalFoldCounterpart(id);
+            NodeId nodeId = new NodeId(NodeKind.FOLD_ANCHOR, id.levelKey(), stableUuid("fold:" + id.levelKey().identifier() + ":" + id.blockPos().asLong()));
+            Optional<PipeAnchorId> peer = this.source.foldCounterpart(id);
             this.foldAnchorIdsByNode.put(nodeId, id);
             MapNode node = new MapNode(
                     nodeId,
@@ -257,14 +275,14 @@ public final class FullRouteMapBuilder {
     }
 
     private String foldAnchorLabel(PipeAnchorId anchorId) {
-        Optional<String> ownName = ClientPipeNetworkCache.foldAnchorAt(anchorId)
+        Optional<String> ownName = this.source.foldAnchorAt(anchorId)
                 .map(FoldAnchorNode::displayName)
                 .filter(name -> !name.isBlank());
         if (ownName.isPresent()) {
             return ownName.get();
         }
-        return ClientPipeNetworkCache.globalFoldCounterpart(anchorId)
-                .flatMap(ClientPipeNetworkCache::foldAnchorAt)
+        return this.source.foldCounterpart(anchorId)
+                .flatMap(this.source::foldAnchorAt)
                 .map(FoldAnchorNode::displayName)
                 .filter(name -> !name.isBlank())
                 .orElse(anchorId.blockPos().toShortString());
@@ -272,6 +290,7 @@ public final class FullRouteMapBuilder {
 
     private void buildLayoutEdges() {
         for (RouteLayout layout : this.source.routeLayouts()) {
+            this.checkCancelled();
             RouteLine line = this.lineById.get(layout.routeLineId());
             if (line == null) {
                 this.diagnostic(null, DiagnosticType.MISSING_ROUTE_LINE, "Layout " + layout.id() + " references missing route line " + layout.routeLineId());
@@ -376,13 +395,14 @@ public final class FullRouteMapBuilder {
         NodeId currentNode = fromNode;
         List<PipeConnectionRef> slice = new ArrayList<>();
         for (int i = 0; i < pathRefs.size(); i++) {
+            this.checkCancelled();
             PipeConnectionRef ref = pathRefs.get(i);
             slice.add(ref);
             if (i + 1 >= pathRefs.size()) {
                 continue;
             }
-            PipeConnection currentConnection = ClientPipeNetworkCache.connection(ref).orElse(null);
-            PipeConnection nextConnection = ClientPipeNetworkCache.connection(pathRefs.get(i + 1)).orElse(null);
+            PipeConnection currentConnection = this.source.connection(ref).orElse(null);
+            PipeConnection nextConnection = this.source.connection(pathRefs.get(i + 1)).orElse(null);
             if (currentConnection == null || nextConnection == null) {
                 this.diagnostic(ref.levelKey(), DiagnosticType.MISSING_PIPE_CONNECTION, "Route section " + sectionId + " references missing pipe connection");
                 continue;
@@ -415,10 +435,10 @@ public final class FullRouteMapBuilder {
         }
         for (PipeAnchorId currentAnchor : currentAnchors) {
             for (PipeAnchorId nextAnchor : nextAnchors) {
-                if (ClientPipeNetworkCache.globalFoldCounterpart(currentAnchor).filter(nextAnchor::equals).isPresent()) {
+                if (this.source.foldCounterpart(currentAnchor).filter(nextAnchor::equals).isPresent()) {
                     return Optional.of(new FoldTransition(currentAnchor, nextAnchor));
                 }
-                if (ClientPipeNetworkCache.globalFoldCounterpart(nextAnchor).filter(currentAnchor::equals).isPresent()) {
+                if (this.source.foldCounterpart(nextAnchor).filter(currentAnchor::equals).isPresent()) {
                     return Optional.of(new FoldTransition(currentAnchor, nextAnchor));
                 }
             }
@@ -453,13 +473,29 @@ public final class FullRouteMapBuilder {
                 layoutIndex,
                 targetStation.levelKey(),
                 direction.x(),
-                direction.y());
+                direction.y(),
+                MissingCrossDimensionReason.MISSING_PATH_DATA);
         this.missingCrossDimensionHintsByLevel.computeIfAbsent(fromStation.levelKey(), ignored -> new ArrayList<>()).add(hint);
     }
 
     private static Vec2 missingCrossDimensionDirection(StationGroup fromStation, StationGroup targetStation, UUID sectionId) {
-        double dx = targetStation.stationBlockPos().getX() - fromStation.stationBlockPos().getX();
-        double dz = targetStation.stationBlockPos().getZ() - fromStation.stationBlockPos().getZ();
+        // Raw world coordinates are not comparable across dimensions: the nether
+        // compresses the horizontal plane 8:1 against the overworld, so a naive
+        // coordinate delta makes the arrow deviate by a large, systematic angle.
+        // Express the target in the source dimension's scale before taking the
+        // direction. Other dimension pairs have no canonical scale factor, so their
+        // raw offset stays as an approximation.
+        double targetX = targetStation.stationBlockPos().getX();
+        double targetZ = targetStation.stationBlockPos().getZ();
+        if (fromStation.levelKey().equals(Level.OVERWORLD) && targetStation.levelKey().equals(Level.NETHER)) {
+            targetX *= 8.0D;
+            targetZ *= 8.0D;
+        } else if (fromStation.levelKey().equals(Level.NETHER) && targetStation.levelKey().equals(Level.OVERWORLD)) {
+            targetX /= 8.0D;
+            targetZ /= 8.0D;
+        }
+        double dx = targetX - fromStation.stationBlockPos().getX();
+        double dz = targetZ - fromStation.stationBlockPos().getZ();
         double length = Math.hypot(dx, dz);
         if (length >= 0.001D) {
             return new Vec2(dx / length, dz / length);
@@ -498,7 +534,7 @@ public final class FullRouteMapBuilder {
                 this.replaceFoldCluster(entry.getValue(), spatialOwner.get());
                 continue;
             }
-            Optional<PipeAnchorId> peer = ClientPipeNetworkCache.globalFoldCounterpart(anchorId);
+            Optional<PipeAnchorId> peer = this.source.foldCounterpart(anchorId);
             if (peer.isEmpty()) {
                 continue;
             }
@@ -590,6 +626,7 @@ public final class FullRouteMapBuilder {
         dimensions.addAll(this.missingCrossDimensionHintsByLevel.keySet());
         Map<ResourceKey<Level>, MapDimensionGraph> graphs = new LinkedHashMap<>();
         for (ResourceKey<Level> levelKey : dimensions.stream().sorted(Comparator.comparing(level -> level.identifier().toString())).toList()) {
+            this.checkCancelled();
             Map<NodeId, MapNode> nodeMap = this.nodesByLevel.getOrDefault(levelKey, Map.of());
             List<MapEdge> edges = this.edgesByLevel.getOrDefault(levelKey, Map.of()).values().stream()
                     .map(accumulator -> accumulator.toEdge(nodeMap))
@@ -659,9 +696,13 @@ public final class FullRouteMapBuilder {
 
     private void diagnostic(ResourceKey<Level> levelKey, DiagnosticType type, String message) {
         if (levelKey == null) {
-            this.source.stationGroups().stream().findFirst().map(StationGroup::levelKey).ifPresentOrElse(
-                    key -> this.diagnostic(key, type, message),
-                    () -> this.diagnosticsByLevel.computeIfAbsent(Level.OVERWORLD, ignored -> new ArrayList<>()).add(new MapBuildDiagnostic(type, message)));
+            // Global diagnostic: broadcast to every dimension that owns stations (falling
+            // back to the overworld when there are none) so no dimension silently loses it.
+            Set<ResourceKey<Level>> targets = this.source.stationGroups().stream().map(StationGroup::levelKey).collect(Collectors.toCollection(LinkedHashSet::new));
+            if (targets.isEmpty()) {
+                targets = Set.of(Level.OVERWORLD);
+            }
+            targets.forEach(key -> this.diagnosticsByLevel.computeIfAbsent(key, ignored -> new ArrayList<>()).add(new MapBuildDiagnostic(type, message)));
             return;
         }
         this.diagnosticsByLevel.computeIfAbsent(levelKey, ignored -> new ArrayList<>()).add(new MapBuildDiagnostic(type, message));
@@ -721,13 +762,13 @@ public final class FullRouteMapBuilder {
     private static String clusterName(List<StationGroup> stations, List<UUID> routeLineIds) {
         List<String> names = stations.stream().map(StationGroup::primaryName).filter(name -> !name.isBlank()).toList();
         if (names.isEmpty()) {
-            return "Cluster";
+            return Component.translatable("screen.superpipeslide.full_map.cluster_fallback_name").getString();
         }
         String prefix = commonPrefix(names).trim();
         if (prefix.length() >= 2) {
             return prefix;
         }
-        return names.getFirst() + " +" + (stations.size() - 1);
+        return Component.translatable("screen.superpipeslide.full_map.cluster_more", names.getFirst(), names.size() - 1).getString();
     }
 
     private static String commonPrefix(List<String> values) {
@@ -765,7 +806,7 @@ public final class FullRouteMapBuilder {
         }
 
         static ClusterAggregate station(StationGroup station) {
-            return new ClusterAggregate(station.id(), new NodeId(NodeKind.STATION, station.levelKey(), station.id(), 0), false, station.stationBlockPos().getX(), station.stationBlockPos().getZ(), List.of(station));
+            return new ClusterAggregate(station.id(), new NodeId(NodeKind.STATION, station.levelKey(), station.id()), false, station.stationBlockPos().getX(), station.stationBlockPos().getZ(), List.of(station));
         }
     }
 

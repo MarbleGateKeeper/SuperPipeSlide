@@ -1,11 +1,13 @@
 package dev.marblegate.superpipeslide.client.fullmap.routecard.render;
 
+import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapLayoutMode;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.client.fullmap.render.FullRouteMapRenderer;
 import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
+import dev.marblegate.superpipeslide.client.fullmap.routecard.RouteCardGeometry;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.hit.LayoutChipHit;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.hit.RouteLineCardHit;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.hit.RouteLineCardHitKind;
@@ -32,8 +34,10 @@ import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
+import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -48,6 +52,43 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 
 public final class RouteLineCardRenderer {
+    /** How much worse the remembered label slot may get before it is abandoned for the current optimum. */
+    private static final double LABEL_HYSTERESIS_FACTOR = 1.5D;
+    /** Cards whose label slot memory is retained; older cards fall out of this small LRU. */
+    private static final int LABEL_MEMORY_MAX_CARDS = 8;
+    /** Palette used to tell simultaneous fold pairs apart on their always-on dotted links. */
+    private static final int[] FOLD_PAIR_PALETTE = {
+            0xFF7E57C2, 0xFF26A69A, 0xFFEF6C00, 0xFF5C6BC0,
+            0xFFEC407A, 0xFF8D6E63, 0xFF9E9D24, 0xFF0288D1
+    };
+
+    /** Last chosen label candidate slot per node, keyed per card so panning no longer reshuffles labels every frame. */
+    private final Map<String, Map<RouteCardNodeId, Integer>> labelSlotMemory = new LinkedHashMap<>(16, 0.75F, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Map<RouteCardNodeId, Integer>> eldest) {
+            return this.size() > LABEL_MEMORY_MAX_CARDS;
+        }
+    };
+    /** Last chosen candidate slot per dimension chip, keyed per card (segment id). */
+    private final Map<String, Map<String, Integer>> dimensionChipSlotMemory = new LinkedHashMap<>(16, 0.75F, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Map<String, Integer>> eldest) {
+            return this.size() > LABEL_MEMORY_MAX_CARDS;
+        }
+    };
+    /** Precomputed first-touch edge color per node, keyed by semantic graph identity (immutable per revision). */
+    private final Map<RouteCardSemanticGraph, Map<RouteCardNodeId, Integer>> foldColorCache = new LinkedHashMap<>(16, 0.75F, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<RouteCardSemanticGraph, Map<RouteCardNodeId, Integer>> eldest) {
+            return this.size() > LABEL_MEMORY_MAX_CARDS;
+        }
+    };
+    /** Memo of the last world-to-screen graph transform; hit only while viewport and map rect stay unchanged. */
+    private RouteCardVisualGraph lastScreenGraphSource;
+    private RouteCardViewport lastScreenGraphViewport;
+    private SPSGui.Rect lastScreenGraphMap;
+    private RouteCardVisualGraph lastScreenGraph;
+
     public RouteLineCardRenderResult render(
             GuiGraphicsExtractor graphics,
             Font font,
@@ -84,10 +125,10 @@ public final class RouteLineCardRenderer {
         SPSGui.Rect stopList = new SPSGui.Rect(content.x(), content.y(), stopListWidth, content.height());
         SPSGui.Rect map = new SPSGui.Rect(stopList.right() + 6, content.y(), Math.max(56, content.right() - stopList.right() - 6), content.height());
         SPSGui.Rect fitViewport = new SPSGui.Rect(map.right() - 20, map.bottom() - 20, FullMapTheme.ICON_BUTTON_SMALL, FullMapTheme.ICON_BUTTON_SMALL);
-        SPSGui.Rect viewModeStrip = this.viewModeStripBounds(map, viewMode);
+        SPSGui.Rect viewModeStrip = viewModeStripBounds(map);
         boolean overMapControl = active && (viewModeStrip.contains(mouseX, mouseY) || fitViewport.contains(mouseX, mouseY));
 
-        RouteCardVisualGraph screenGraph = screenGraph(visualGraph, viewport, map);
+        RouteCardVisualGraph screenGraph = this.screenGraphCached(visualGraph, viewport, map);
         RouteLineCardHit mapHover = active && !overMapControl && map.contains(mouseX, mouseY)
                 ? this.hitTest(screenGraph, map, mouseX, mouseY, viewport.zoom()).orElse(RouteLineCardHit.none())
                 : RouteLineCardHit.none();
@@ -102,15 +143,19 @@ public final class RouteLineCardRenderer {
         }
         this.drawEdges(graphics, screenGraph, hover);
         this.drawNodes(graphics, font, semanticGraph, screenGraph, hover, viewport.zoom());
-        List<SPSGui.Rect> labelRects = this.drawLabels(graphics, font, screenGraph, viewport.zoom(), map);
-        Optional<Component> dimensionTooltip = this.drawSegmentDimensionMarks(graphics, font, screenGraph, map, viewport.zoom(), mouseX, mouseY, labelRects);
+        String cardMemoryKey = line.id() + ":" + selectedLayout.id() + ":" + viewMode.name();
+        List<SPSGui.Rect> labelRects = this.drawLabels(graphics, font, screenGraph, viewport.zoom(), map, this.labelSlotMemory.computeIfAbsent(cardMemoryKey, key -> new HashMap<>()));
+        Optional<Component> dimensionTooltip = this.drawSegmentDimensionMarks(graphics, font, screenGraph, map, viewport.zoom(), mouseX, mouseY, labelRects, this.dimensionChipSlotMemory.computeIfAbsent(cardMemoryKey, key -> new HashMap<>()));
         graphics.disableScissor();
         this.drawViewportHints(graphics, map, visualGraph.bounds(), viewport);
         this.drawFitViewportButton(graphics, fitViewport, active && fitViewport.contains(mouseX, mouseY));
         if (semanticGraph.nodes().isEmpty()) {
             SPSGui.centeredText(graphics, font, Component.translatable("screen.superpipeslide.full_map.route_card.map_empty"), map.x() + map.width() / 2, map.y() + map.height() / 2 - 4, FullMapTheme.TEXT_MUTED);
         }
-        List<ViewModeChipHit> viewModeChips = this.renderViewModeStrip(graphics, map, viewMode, active, mouseX, mouseY);
+        List<ViewModeChipHit> viewModeChips = this.renderViewModeStrip(graphics, font, map, viewMode, active, mouseX, mouseY);
+        Optional<Component> tooltipOverride = active && legendBounds(map).contains(mouseX, mouseY)
+                ? Optional.of(legendTooltip())
+                : dimensionTooltip;
 
         int summaryY = bounds.bottom() - 18;
         String summary = Component.translatable(
@@ -130,8 +175,8 @@ public final class RouteLineCardRenderer {
         }
 
         FullMapUi.iconButton(graphics, locateFirst, active && locateFirst.contains(mouseX, mouseY), false, false, SPSGui.Icon.LOCATE);
-        FullMapUi.iconButton(graphics, locateLayout, active && locateLayout.contains(mouseX, mouseY), false, false, SPSGui.Icon.FIT);
-        return new RouteLineCardRenderResult(strip, stripResult.maxScroll(), stripResult.chips(), viewModeChips, viewModeStrip, stopList, map, fitViewport, locateFirst, locateLayout, stopResult.maxScroll(), hover, active ? dimensionTooltip : Optional.empty());
+        FullMapUi.iconButton(graphics, locateLayout, active && locateLayout.contains(mouseX, mouseY), false, false, SPSGui.Icon.MAP);
+        return new RouteLineCardRenderResult(strip, stripResult.maxScroll(), stripResult.chips(), viewModeChips, viewModeStrip, stopList, map, fitViewport, locateFirst, locateLayout, stopResult.maxScroll(), hover, active ? tooltipOverride : Optional.empty());
     }
 
     public static RouteCardViewport fitViewport(Aabb2 bounds, SPSGui.Rect map) {
@@ -169,6 +214,18 @@ public final class RouteLineCardRenderer {
     private static int stopListWidth(SPSGui.Rect bounds) {
         int preferred = Math.max(100, Math.min(122, (int) Math.round(bounds.width() * 0.24D)));
         return Math.min(preferred, Math.max(92, bounds.width() - 180));
+    }
+
+    private RouteCardVisualGraph screenGraphCached(RouteCardVisualGraph graph, RouteCardViewport viewport, SPSGui.Rect map) {
+        if (graph == this.lastScreenGraphSource && viewport.equals(this.lastScreenGraphViewport) && map.equals(this.lastScreenGraphMap)) {
+            return this.lastScreenGraph;
+        }
+        RouteCardVisualGraph transformed = screenGraph(graph, viewport, map);
+        this.lastScreenGraphSource = graph;
+        this.lastScreenGraphViewport = viewport;
+        this.lastScreenGraphMap = map;
+        this.lastScreenGraph = transformed;
+        return transformed;
     }
 
     private static RouteCardVisualGraph screenGraph(RouteCardVisualGraph graph, RouteCardViewport viewport, SPSGui.Rect map) {
@@ -221,7 +278,7 @@ public final class RouteLineCardRenderer {
         boolean right = screenBounds.maxX() > map.right();
         boolean up = screenBounds.minY() < map.y();
         boolean down = screenBounds.maxY() > map.bottom();
-        int fade = 0x44EEF2F7;
+        int fade = FullRouteMapConfig.MAP_VIEWPORT_HINT_FADE;
         if (left) {
             graphics.fill(map.x(), map.y(), map.x() + 8, map.bottom(), fade);
             drawChevron(graphics, map.x() + 4, map.y() + map.height() * 0.5D, -1, 0);
@@ -241,7 +298,7 @@ public final class RouteLineCardRenderer {
     }
 
     private static void drawChevron(GuiGraphicsExtractor graphics, double x, double y, int dx, int dy) {
-        int color = 0xAA4B5563;
+        int color = FullRouteMapConfig.MAP_VIEWPORT_HINT_CHEVRON;
         if (dx < 0) {
             SmoothGuiPrimitives.line(graphics, new Vec2(x + 3.0D, y - 5.0D), new Vec2(x - 2.0D, y), 1.25D, color);
             SmoothGuiPrimitives.line(graphics, new Vec2(x - 2.0D, y), new Vec2(x + 3.0D, y + 5.0D), 1.25D, color);
@@ -288,12 +345,12 @@ public final class RouteLineCardRenderer {
         return new LayoutStripRenderResult(chips, maxScroll);
     }
 
-    private List<ViewModeChipHit> renderViewModeStrip(GuiGraphicsExtractor graphics, SPSGui.Rect map, RouteCardViewMode selectedMode, boolean active, int mouseX, int mouseY) {
+    private List<ViewModeChipHit> renderViewModeStrip(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect map, RouteCardViewMode selectedMode, boolean active, int mouseX, int mouseY) {
         List<ViewModeChipHit> chips = new ArrayList<>();
         RouteCardViewMode[] modes = RouteCardViewMode.values();
         int size = FullMapTheme.ICON_BUTTON;
         int gap = 2;
-        SPSGui.Rect panel = this.viewModeStripBounds(map, selectedMode);
+        SPSGui.Rect panel = viewModeStripBounds(map);
         int x = panel.x() + 3;
         int y = panel.y() + 3;
         FullMapUi.toolbarPanel(graphics, panel);
@@ -305,18 +362,42 @@ public final class RouteLineCardRenderer {
             chips.add(new ViewModeChipHit(mode, chip));
             x += size + gap;
         }
+        // Legend "?" chip at the end of the strip; hover text is surfaced through the
+        // render result's tooltip override channel.
+        SPSGui.Rect legend = legendBounds(map);
+        boolean legendHovered = active && legend.contains(mouseX, mouseY);
+        graphics.fill(legend.x(), legend.y(), legend.right(), legend.bottom(), legendHovered ? FullMapTheme.SURFACE_CONTROL_HOVER : FullMapTheme.SURFACE_CONTROL);
+        graphics.outline(legend.x(), legend.y(), legend.width(), legend.height(), FullMapTheme.BORDER);
+        SPSGui.centeredText(graphics, font, Component.literal("?"), legend.x() + legend.width() / 2, legend.y() + (legend.height() - 8) / 2, legendHovered ? SPSGui.INFO : FullMapTheme.TEXT_SECONDARY);
         return chips;
     }
 
-    private SPSGui.Rect viewModeStripBounds(SPSGui.Rect map, RouteCardViewMode selectedMode) {
+    private static SPSGui.Rect viewModeStripBounds(SPSGui.Rect map) {
         RouteCardViewMode[] modes = RouteCardViewMode.values();
         int size = FullMapTheme.ICON_BUTTON;
         int gap = 2;
-        int panelWidth = modes.length * size + (modes.length - 1) * gap + 6;
+        // One extra chip slot after the view modes hosts the map legend button.
+        int panelWidth = (modes.length + 1) * size + modes.length * gap + 6;
         int margin = 6;
         int x = map.x() + margin;
         int y = map.bottom() - margin - size - 6;
         return new SPSGui.Rect(x, y, panelWidth, size + 6);
+    }
+
+    private static SPSGui.Rect legendBounds(SPSGui.Rect map) {
+        SPSGui.Rect panel = viewModeStripBounds(map);
+        int size = FullMapTheme.ICON_BUTTON;
+        return new SPSGui.Rect(panel.right() - 3 - size, panel.y() + 3, size, size);
+    }
+
+    private static Component legendTooltip() {
+        return Component.literal(String.join("\n",
+                Component.translatable("screen.superpipeslide.full_map.route_card.legend.station").getString(),
+                Component.translatable("screen.superpipeslide.full_map.route_card.legend.transfer").getString(),
+                Component.translatable("screen.superpipeslide.full_map.route_card.legend.fold_boundary").getString(),
+                Component.translatable("screen.superpipeslide.full_map.route_card.legend.portal_boundary").getString(),
+                Component.translatable("screen.superpipeslide.full_map.route_card.legend.missing_path").getString(),
+                Component.translatable("screen.superpipeslide.full_map.route_card.legend.edges").getString()));
     }
 
     private static SPSGui.Icon viewModeGlyph(RouteCardViewMode mode) {
@@ -367,6 +448,14 @@ public final class RouteLineCardRenderer {
         int railX = area.x() + 13;
         int indexX = area.x() + 23;
         int nameX = area.x() + 35;
+        // Layout indexes of stop-to-stop gaps whose section is interrupted; the rail
+        // segment between those rows is drawn as a dashed warning link.
+        Set<Integer> interruptedGaps = new HashSet<>();
+        for (RouteCardEdge edge : semanticGraph.edges()) {
+            if (edge.status() != RouteSectionStatus.VALID) {
+                interruptedGaps.add(edge.layoutIndex());
+            }
+        }
         graphics.enableScissor(area.x(), area.y(), area.right(), area.bottom());
         for (int i = 0; i < stops.size(); i++) {
             RouteCardNode stop = stops.get(i);
@@ -390,14 +479,14 @@ public final class RouteLineCardRenderer {
                 continue;
             }
             if (i > 0) {
-                drawColorLanePath(graphics, List.of(new Vec2(railX, y - 9.0D), new Vec2(railX, y + 4.0D)), Math.max(2.0D, FullRouteMapConfig.LINE_WIDTH_PX - 0.5D), line.themeColors());
+                drawStopRailLink(graphics, railX, y - 9.0D, y + 4.0D, line, interruptedGaps.contains(stops.get(i - 1).layoutOccurrence()));
             }
             if (i + 1 < stops.size()) {
-                drawColorLanePath(graphics, List.of(new Vec2(railX, y + 14.0D), new Vec2(railX, y + rowHeight + 4.0D)), Math.max(2.0D, FullRouteMapConfig.LINE_WIDTH_PX - 0.5D), line.themeColors());
+                drawStopRailLink(graphics, railX, y + 14.0D, y + rowHeight + 4.0D, line, interruptedGaps.contains(stops.get(i).layoutOccurrence()));
             } else if (selectedLayout.loop() && stops.size() > 1) {
                 double endY = area.bottom() - 1.0D;
                 if (endY > y + 14.0D) {
-                    drawColorLanePath(graphics, List.of(new Vec2(railX, y + 14.0D), new Vec2(railX, endY)), Math.max(2.0D, FullRouteMapConfig.LINE_WIDTH_PX - 0.5D), line.themeColors());
+                    drawStopRailLink(graphics, railX, y + 14.0D, endY, line, interruptedGaps.contains(stops.get(i).layoutOccurrence()));
                 }
             }
         }
@@ -410,6 +499,11 @@ public final class RouteLineCardRenderer {
             SPSGui.Rect row = new SPSGui.Rect(area.x() + 4, y - 2, area.width() - 8, rowHeight - 2);
             if (active && row.contains(mouseX, mouseY)) {
                 hover = RouteLineCardHit.node(stop);
+            }
+            if (stop.routeLineIds().size() >= 2) {
+                // Transfer stop: interchange-style double ring around the rail dot.
+                SmoothGuiPrimitives.circle(graphics, new Vec2(railX, y + 9.0D), 6.9D, FullRouteMapConfig.MAP_CARD_NODE_OUTLINE);
+                SmoothGuiPrimitives.circle(graphics, new Vec2(railX, y + 9.0D), 5.9D, FullRouteMapConfig.MAP_NODE_FILL);
             }
             SmoothGuiPrimitives.circle(graphics, new Vec2(railX, y + 9.0D), 5.2D, FullRouteMapConfig.MAP_CARD_NODE_OUTLINE);
             SmoothGuiPrimitives.circle(graphics, new Vec2(railX, y + 9.0D), 4.0D, FullRouteMapConfig.MAP_NODE_FILL);
@@ -439,6 +533,20 @@ public final class RouteLineCardRenderer {
         return new StopListRenderResult(hover, maxScroll);
     }
 
+    /**
+     * One rail segment between two stop rows. Interrupted sections (any non-VALID
+     * status on the gap's edges) are drawn as a dashed warning link; healthy gaps keep
+     * the line's theme lanes.
+     */
+    private static void drawStopRailLink(GuiGraphicsExtractor graphics, int railX, double fromY, double toY, RouteLine line, boolean interrupted) {
+        double width = Math.max(2.0D, FullRouteMapConfig.LINE_WIDTH_PX - 0.5D);
+        if (interrupted) {
+            drawDashedLine(graphics, new Vec2(railX, fromY), new Vec2(railX, toY), width, FullMapTheme.WARNING, 3.0D, 2.5D);
+            return;
+        }
+        drawColorLanePath(graphics, List.of(new Vec2(railX, fromY), new Vec2(railX, toY)), width, line.themeColors());
+    }
+
     private void drawStopListDimensionBadge(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect rect, String label, int color) {
         int boxY = rect.y() - 1;
         graphics.fill(rect.x(), boxY, rect.right(), boxY + rect.height(), SPSGui.withAlpha(color, 0x22));
@@ -454,12 +562,16 @@ public final class RouteLineCardRenderer {
                 continue;
             }
             RouteCardEdge edge = visualEdge.edge();
-            boolean foldBoundaryLink = isAbstractFoldBoundaryLink(visualGraph, visualEdge);
-            boolean missingBoundaryLink = isAbstractMissingPathBoundaryLink(visualGraph, visualEdge);
-            boolean missingPathBoundary = isMissingPathBoundaryEdge(visualGraph, visualEdge.edge());
+            boolean foldBoundaryLink = edge.abstractFoldLink();
+            boolean missingBoundaryLink = edge.abstractMissingLink();
+            boolean missingPathBoundary = edge.missingPathEdge();
             boolean hovered = edgeHoveredByRouteCardHit(visualGraph, edge, hover);
             double width = FullRouteMapConfig.LINE_WIDTH_PX + 1.0D;
             if (foldBoundaryLink) {
+                // Always-on dotted trace tinted per fold pair (hashed from the local
+                // anchor position) so several cross-segment pairs stay distinguishable
+                // without hovering; the focus halo still wins on hover.
+                drawDashedPolyline(graphics, visualEdge.points(), 1.3D, SPSGui.withAlpha(foldPairColor(visualGraph, edge), 0x30), 1.2D, 3.2D);
                 if (hovered) {
                     drawPolyline(graphics, visualEdge.points(), width + 4.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
                     drawPolyline(graphics, visualEdge.points(), width, FullRouteMapConfig.MAP_FOCUS_RING);
@@ -508,7 +620,8 @@ public final class RouteLineCardRenderer {
             double zoom,
             int mouseX,
             int mouseY,
-            List<SPSGui.Rect> labelRects) {
+            List<SPSGui.Rect> labelRects,
+            Map<String, Integer> slotMemory) {
         Optional<Component> tooltip = Optional.empty();
         Map<RouteCardNodeId, RouteCardVisualNode> nodeById = new LinkedHashMap<>();
         for (RouteCardVisualNode node : visualGraph.nodes()) {
@@ -530,7 +643,7 @@ public final class RouteLineCardRenderer {
             int width = Math.max(24, Math.min(92, (int) Math.ceil(font.width(label) * scale) + 10));
             int height = 10;
             RouteCardVisualNode anchor = dimensionChipAnchor(visualSegment, nodeById).orElse(null);
-            SPSGui.Rect chip = chooseDimensionChipBounds(visualSegment, anchor, visualGraph.edges(), map, width, height, zoom, blockers, placed);
+            SPSGui.Rect chip = chooseDimensionChipBounds(visualSegment, anchor, visualGraph.edges(), map, width, height, zoom, blockers, placed, slotMemory);
             placed.add(chip);
             int color = dimensionColor(levelKey);
             SmoothGuiPrimitives.capsule(graphics, new Vec2(chip.x() + width * 0.5D, chip.y() + height * 0.5D), width, height, color);
@@ -579,22 +692,22 @@ public final class RouteLineCardRenderer {
             double radiusX = Math.max(12.0D, (bounds.maxX() - bounds.minX()) * 0.5D);
             double radiusY = Math.max(12.0D, (bounds.maxY() - bounds.minY()) * 0.5D);
             drawDashedEllipse(graphics, new Vec2(bounds.centerX(), bounds.centerY()), radiusX, radiusY, 1.15D, 0xAA1B2633, 7.0D, 5.0D);
-            String label = nodes.stream()
-                    .map(RouteCardVisualNode::node)
-                    .filter(node -> node.layoutOccurrence() >= 0)
-                    .min(Comparator.comparingInt(RouteCardNode::layoutOccurrence))
-                    .map(RouteCardNode::label)
+            // The frame title is the station's own name; the previous hack (first
+            // platform label truncated at the first space) broke on multi-word names.
+            String label = ClientRouteDataCache.stationGroup(entry.getKey())
+                    .map(StationGroup::primaryName)
                     .orElse("");
-            int cut = label.indexOf(' ');
-            if (cut > 0) {
-                label = label.substring(0, cut);
-            }
             if (!label.isBlank() && zoom >= 0.65D) {
                 SPSGui.smallText(graphics, font, SPSGui.ellipsize(font, label, 76), (int) Math.round(bounds.minX() + 4), (int) Math.round(bounds.minY() + 3), FullRouteMapConfig.MAP_CARD_LABEL, 0.58F);
             }
         }
     }
 
+    /**
+     * Picks a dimension chip slot with the same hysteresis rule as node labels: the
+     * previously chosen candidate (keyed by segment id per card) stays unless its
+     * penalty grows beyond {@link #LABEL_HYSTERESIS_FACTOR} times the current optimum.
+     */
     private static SPSGui.Rect chooseDimensionChipBounds(
             RouteCardVisualSegment segment,
             RouteCardVisualNode anchor,
@@ -604,29 +717,37 @@ public final class RouteLineCardRenderer {
             int height,
             double zoom,
             List<SPSGui.Rect> blockers,
-            List<SPSGui.Rect> placed) {
+            List<SPSGui.Rect> placed,
+            Map<String, Integer> slotMemory) {
         Aabb2 bounds = segment.bounds();
         List<SPSGui.Rect> candidates = dimensionChipCandidates(anchor, bounds, map, width, height, zoom);
-        SPSGui.Rect best = candidates.getFirst();
+        int bestSlot = 0;
         double bestPenalty = Double.POSITIVE_INFINITY;
-        for (SPSGui.Rect candidate : candidates) {
-            double penalty = dimensionChipPenalty(candidate, anchor, edges, blockers, placed);
+        for (int i = 0; i < candidates.size(); i++) {
+            double penalty = dimensionChipPenalty(candidates.get(i), anchor, edges, blockers, placed);
             if (penalty < bestPenalty) {
                 bestPenalty = penalty;
-                best = candidate;
-                if (penalty <= 0.001D) {
-                    break;
-                }
+                bestSlot = i;
             }
         }
-        return best;
+        int chosen = bestSlot;
+        String memoryKey = segment.segment().id();
+        Integer remembered = slotMemory.get(memoryKey);
+        if (remembered != null && remembered >= 0 && remembered < candidates.size()) {
+            double rememberedPenalty = dimensionChipPenalty(candidates.get(remembered), anchor, edges, blockers, placed);
+            if (rememberedPenalty <= Math.max(1.0D, bestPenalty * LABEL_HYSTERESIS_FACTOR)) {
+                chosen = remembered;
+            }
+        }
+        slotMemory.put(memoryKey, chosen);
+        return candidates.get(chosen);
     }
 
     private static List<SPSGui.Rect> dimensionChipCandidates(RouteCardVisualNode anchor, Aabb2 bounds, SPSGui.Rect map, int width, int height, double zoom) {
         List<SPSGui.Rect> candidates = new ArrayList<>();
         if (anchor != null) {
             Vec2 p = anchor.position();
-            double radius = nodeCollisionRadius(anchor.node(), zoom);
+            double radius = nodeRadius(anchor.node(), zoom);
             double near = radius + 6.0D;
             double diagonal = Math.max(near * 0.72D, 8.0D);
             addChipCandidate(candidates, p.x() + diagonal, p.y() - diagonal - height, width, height, map);
@@ -660,7 +781,7 @@ public final class RouteLineCardRenderer {
             }
         }
         for (RouteCardVisualEdge edge : edges) {
-            if (isAbstractFoldBoundaryLink(edge)) {
+            if (edge.edge().abstractFoldLink()) {
                 continue;
             }
             double distance = distanceRectToPolyline(candidate, edge.points());
@@ -725,12 +846,12 @@ public final class RouteLineCardRenderer {
                 }
                 case PORTAL_BOUNDARY -> drawPortalBoundary(graphics, position, radius, foldColor(semanticGraph, node));
                 case FOLD_BOUNDARY -> drawDiamond(graphics, position, radius, FullRouteMapConfig.MAP_FOLD_FILL, foldColor(semanticGraph, node));
-                case MISSING_PATH_BOUNDARY -> {}
+                case MISSING_PATH_BOUNDARY -> drawMissingPathBoundary(graphics, position, radius);
             }
         }
     }
 
-    private List<SPSGui.Rect> drawLabels(GuiGraphicsExtractor graphics, Font font, RouteCardVisualGraph visualGraph, double zoom, SPSGui.Rect map) {
+    private List<SPSGui.Rect> drawLabels(GuiGraphicsExtractor graphics, Font font, RouteCardVisualGraph visualGraph, double zoom, SPSGui.Rect map, Map<RouteCardNodeId, Integer> slotMemory) {
         if (zoom < 0.45D) {
             return List.of();
         }
@@ -754,7 +875,7 @@ public final class RouteLineCardRenderer {
             float secondaryScale = Math.max(0.48F, scale * 0.78F);
             int width = Math.max(1, FullMapUi.nameStackWidth(font, name, scale, secondaryScale));
             int height = Math.max(7, FullMapUi.nameStackHeight(name, scale, secondaryScale, 0));
-            Optional<SPSGui.Rect> selected = chooseLabelBounds(node, visualNode.position(), zoom, map, width, height, placed, blockers);
+            Optional<SPSGui.Rect> selected = chooseLabelBounds(node, visualNode.position(), zoom, map, width, height, placed, blockers, slotMemory);
             if (selected.isEmpty()) {
                 continue;
             }
@@ -780,9 +901,6 @@ public final class RouteLineCardRenderer {
         }
         for (RouteCardVisualNode visualNode : visualGraph.nodes().stream().sorted(Comparator.comparingInt(RouteCardVisualNode::priority).reversed()).toList()) {
             RouteCardNode node = visualNode.node();
-            if (node.kind() == RouteCardNodeKind.MISSING_PATH_BOUNDARY) {
-                continue;
-            }
             double radius = nodeRadius(node, zoom);
             if (node.kind() == RouteCardNodeKind.FOLD_BOUNDARY && Math.abs(mouseX - visualNode.position().x()) + Math.abs(mouseY - visualNode.position().y()) <= radius + 2.0D) {
                 return Optional.of(RouteLineCardHit.node(node));
@@ -797,7 +915,7 @@ public final class RouteLineCardRenderer {
             if (edge.points().size() < 2) {
                 continue;
             }
-            if (isAbstractFoldBoundaryLink(visualGraph, edge) || isAbstractMissingPathBoundaryLink(visualGraph, edge)) {
+            if (edge.edge().abstractFoldLink() || edge.edge().abstractMissingLink()) {
                 continue;
             }
             double distance = distanceToPolyline(new Vec2(mouseX, mouseY), edge.points());
@@ -855,7 +973,7 @@ public final class RouteLineCardRenderer {
             RouteCardNode to = semanticGraph.nodes().stream().filter(value -> value.id().equals(edge.to())).findFirst().orElse(null);
             String fromLabel = from == null ? "?" : routeCardNodeTooltipName(from);
             String toLabel = to == null ? "?" : routeCardNodeTooltipName(to);
-            if (isMissingPathBoundaryEdge(semanticGraph, edge)) {
+            if (edge.missingPathEdge()) {
                 FullMapTooltipCard.renderComponent(graphics, font, boundary, avoidRects, mouseX, mouseY, Component.translatable("screen.superpipeslide.full_map.route_card.tooltip.missing_path_edge", fromLabel, toLabel));
             } else {
                 FullMapTooltipCard.renderComponent(graphics, font, boundary, avoidRects, mouseX, mouseY, Component.translatable("screen.superpipeslide.full_map.route_card.tooltip.edge", fromLabel, toLabel, statusLabel(edge.status())));
@@ -864,7 +982,7 @@ public final class RouteLineCardRenderer {
         }
     }
 
-    private static String routeCardNodeTooltipName(RouteCardNode node) {
+    public static String routeCardNodeTooltipName(RouteCardNode node) {
         return switch (node.kind()) {
             case STATION -> FullMapText.primaryName(node);
             case PORTAL_BOUNDARY -> Component.translatable("screen.superpipeslide.full_map.route_card.node.portal_boundary", dimensionLabel(node.label())).getString();
@@ -881,6 +999,10 @@ public final class RouteLineCardRenderer {
         FullMapUi.iconButton(graphics, rect, hovered, false, false, SPSGui.Icon.FIT);
     }
 
+    private static boolean isFoldLinkBoundary(RouteCardNode node) {
+        return node.kind() == RouteCardNodeKind.FOLD_BOUNDARY || node.kind() == RouteCardNodeKind.PORTAL_BOUNDARY;
+    }
+
     private static boolean foldPeerHighlighted(RouteCardSemanticGraph graph, RouteLineCardHit hover, RouteCardNode node) {
         if (hover.node().isEmpty() || !isFoldLinkBoundary(node)) {
             return false;
@@ -889,7 +1011,7 @@ public final class RouteLineCardRenderer {
         if (hoveredNodeId.equals(node.id())) {
             return false;
         }
-        return graph.edges().stream().anyMatch(edge -> isAbstractFoldBoundaryLink(graph, edge)
+        return graph.edges().stream().anyMatch(edge -> edge.abstractFoldLink()
                 && ((edge.from().equals(hoveredNodeId) && edge.to().equals(node.id()))
                         || (edge.to().equals(hoveredNodeId) && edge.from().equals(node.id()))));
     }
@@ -942,10 +1064,10 @@ public final class RouteLineCardRenderer {
         hover.edge()
                 .flatMap(edgeId -> graph.edges().stream().map(RouteCardVisualEdge::edge).filter(edge -> edge.id().equals(edgeId)).findFirst())
                 .ifPresent(edge -> {
-                    if (isAbstractMissingPathBoundaryLink(graph, edge)) {
+                    if (edge.abstractMissingLink()) {
                         result.add(edge.from());
                         result.add(edge.to());
-                    } else if (isMissingPathBoundaryEdge(graph, edge)) {
+                    } else if (edge.missingPathEdge()) {
                         missingBoundaryEndpoint(graph, edge).ifPresent(result::add);
                     }
                 });
@@ -956,7 +1078,7 @@ public final class RouteLineCardRenderer {
         do {
             changed = false;
             for (RouteCardEdge edge : graph.edges().stream().map(RouteCardVisualEdge::edge).toList()) {
-                if (!isAbstractMissingPathBoundaryLink(graph, edge)) {
+                if (!edge.abstractMissingLink()) {
                     continue;
                 }
                 if (result.contains(edge.from()) && result.add(edge.to())) {
@@ -970,13 +1092,42 @@ public final class RouteLineCardRenderer {
         return result;
     }
 
-    private static int foldColor(RouteCardSemanticGraph graph, RouteCardNode node) {
+    private int foldColor(RouteCardSemanticGraph graph, RouteCardNode node) {
+        return this.foldColorCache.computeIfAbsent(graph, RouteLineCardRenderer::computeFoldColors).getOrDefault(node.id(), FullRouteMapConfig.MAP_FOLD_MULTI_LINE);
+    }
+
+    /** First edge (in declaration order) touching each node wins, matching the old per-node scan. */
+    private static Map<RouteCardNodeId, Integer> computeFoldColors(RouteCardSemanticGraph graph) {
+        Map<RouteCardNodeId, Integer> colors = new HashMap<>();
         for (RouteCardEdge edge : graph.edges()) {
-            if (edge.from().equals(node.id()) || edge.to().equals(node.id())) {
-                return edge.themeColors().isEmpty() ? FullRouteMapConfig.MAP_FOLD_MULTI_LINE : edge.themeColors().getFirst();
-            }
+            int color = edge.themeColors().isEmpty() ? FullRouteMapConfig.MAP_FOLD_MULTI_LINE : edge.themeColors().getFirst();
+            colors.putIfAbsent(edge.from(), color);
+            colors.putIfAbsent(edge.to(), color);
         }
-        return FullRouteMapConfig.MAP_FOLD_MULTI_LINE;
+        return colors;
+    }
+
+    /**
+     * Stable per-pair color for an abstract fold link, hashed from the local (from)
+     * boundary's anchor position so both the dotted link and any future pair markers
+     * agree on the pairing without depending on layout order.
+     */
+    private static int foldPairColor(RouteCardVisualGraph graph, RouteCardEdge edge) {
+        RouteCardNode local = graph.nodes().stream()
+                .map(RouteCardVisualNode::node)
+                .filter(node -> node.id().equals(edge.from()))
+                .findFirst()
+                .orElse(null);
+        if (local == null) {
+            return FullRouteMapConfig.MAP_FOLD_MULTI_LINE;
+        }
+        int hash = 0x811C9DC5;
+        String seed = local.levelKey().identifier() + ":" + Math.round(local.worldX()) + ":" + Math.round(local.worldY()) + ":" + Math.round(local.worldZ());
+        for (int i = 0; i < seed.length(); i++) {
+            hash ^= seed.charAt(i);
+            hash *= 0x01000193;
+        }
+        return FOLD_PAIR_PALETTE[Math.floorMod(hash, FOLD_PAIR_PALETTE.length)];
     }
 
     private static boolean shouldConsiderLabel(RouteCardNode node, double zoom) {
@@ -1021,32 +1172,64 @@ public final class RouteLineCardRenderer {
     }
 
     private static SPSGui.Rect iconBounds(RouteCardNode node, Vec2 screen, double zoom) {
-        int radius = (int) Math.ceil(nodeCollisionRadius(node, zoom) + 3.0D);
+        int radius = (int) Math.ceil(nodeRadius(node, zoom) + 3.0D);
         return new SPSGui.Rect((int) Math.floor(screen.x() - radius), (int) Math.floor(screen.y() - radius), radius * 2, radius * 2);
     }
 
-    private static Optional<SPSGui.Rect> chooseLabelBounds(RouteCardNode node, Vec2 screen, double zoom, SPSGui.Rect map, int width, int height, List<SPSGui.Rect> placed, List<LabelBlocker> blockers) {
-        SPSGui.Rect fallback = null;
-        for (SPSGui.Rect candidate : labelCandidates(node, screen, zoom, map, width, height)) {
-            if (fallback == null) {
-                fallback = candidate;
+    /**
+     * Picks a label slot with hysteresis: the slot remembered from the previous frame
+     * (per card, per node) is re-evaluated first and is only abandoned when its penalty
+     * exceeds {@link #LABEL_HYSTERESIS_FACTOR} times the current optimum. This keeps
+     * labels from "swimming" between equally good slots while the viewport is dragged.
+     * Penalties mirror the cluster card: 110 per overlapped node icon, 45 per placed
+     * label.
+     */
+    private static Optional<SPSGui.Rect> chooseLabelBounds(RouteCardNode node, Vec2 screen, double zoom, SPSGui.Rect map, int width, int height, List<SPSGui.Rect> placed, List<LabelBlocker> blockers, Map<RouteCardNodeId, Integer> slotMemory) {
+        List<SPSGui.Rect> candidates = labelCandidates(node, screen, zoom, map, width, height);
+        int bestSlot = 0;
+        int bestPenalty = Integer.MAX_VALUE;
+        for (int i = 0; i < candidates.size(); i++) {
+            int penalty = labelPenalty(candidates.get(i), node, placed, blockers);
+            if (penalty < bestPenalty) {
+                bestPenalty = penalty;
+                bestSlot = i;
             }
-            if (placed.stream().anyMatch(existing -> rectsOverlap(existing, candidate))) {
-                continue;
+        }
+        int chosen = bestSlot;
+        Integer remembered = slotMemory.get(node.id());
+        if (remembered != null && remembered >= 0 && remembered < candidates.size()) {
+            int rememberedPenalty = labelPenalty(candidates.get(remembered), node, placed, blockers);
+            if (rememberedPenalty <= Math.max(1, (int) (bestPenalty * LABEL_HYSTERESIS_FACTOR))) {
+                chosen = remembered;
             }
-            if (blockers.stream().anyMatch(blocker -> !blocker.nodeId().equals(node.id()) && rectsOverlap(blocker.bounds(), candidate))) {
-                continue;
-            }
-            return Optional.of(candidate);
+        }
+        slotMemory.put(node.id(), chosen);
+        if (labelPenalty(candidates.get(chosen), node, placed, blockers) == 0) {
+            return Optional.of(candidates.get(chosen));
         }
         if (node.routeLineIds().size() >= 2 || node.kind() != RouteCardNodeKind.STATION) {
-            return Optional.ofNullable(fallback);
+            return Optional.of(candidates.getFirst());
         }
         return Optional.empty();
     }
 
+    private static int labelPenalty(SPSGui.Rect candidate, RouteCardNode node, List<SPSGui.Rect> placed, List<LabelBlocker> blockers) {
+        int penalty = 0;
+        for (SPSGui.Rect existing : placed) {
+            if (rectsOverlap(existing, candidate)) {
+                penalty += 45;
+            }
+        }
+        for (LabelBlocker blocker : blockers) {
+            if (!blocker.nodeId().equals(node.id()) && rectsOverlap(blocker.bounds(), candidate)) {
+                penalty += 110;
+            }
+        }
+        return penalty;
+    }
+
     private static List<SPSGui.Rect> labelCandidates(RouteCardNode node, Vec2 screen, double zoom, SPSGui.Rect map, int width, int height) {
-        double radius = nodeCollisionRadius(node, zoom);
+        double radius = nodeRadius(node, zoom);
         double gap = 5.0D + Math.max(0.0D, iconScale(zoom) * 2.0D);
         double near = radius + gap;
         double far = near + Math.max(7.0D, height * 0.8D);
@@ -1143,24 +1326,8 @@ public final class RouteLineCardRenderer {
     }
 
     private static double nodeRadius(RouteCardNode node, double zoom) {
-        double base = switch (node.kind()) {
-            case STATION -> 6.0D;
-            case PORTAL_BOUNDARY -> 5.2D;
-            case FOLD_BOUNDARY -> 6.0D;
-            case MISSING_PATH_BOUNDARY -> 3.5D;
-        };
         double min = node.kind() == RouteCardNodeKind.STATION ? 2.0D : 2.5D;
-        return Math.max(min, base * iconScale(zoom));
-    }
-
-    private static double nodeCollisionRadius(RouteCardNode node, double zoom) {
-        double radius = nodeRadius(node, zoom);
-        return switch (node.kind()) {
-            case STATION -> radius;
-            case PORTAL_BOUNDARY -> radius;
-            case FOLD_BOUNDARY -> radius;
-            case MISSING_PATH_BOUNDARY -> radius;
-        };
+        return Math.max(min, RouteCardGeometry.baseRadius(node.kind()) * iconScale(zoom));
     }
 
     private static double iconScale(double zoom) {
@@ -1181,7 +1348,10 @@ public final class RouteLineCardRenderer {
                 SmoothGuiPrimitives.circle(graphics, center, radius + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
                 SmoothGuiPrimitives.circle(graphics, center, radius + 2.0D, FullRouteMapConfig.MAP_FOCUS_RING);
             }
-            case MISSING_PATH_BOUNDARY -> {}
+            case MISSING_PATH_BOUNDARY -> {
+                drawPolyline(graphics, warningTrianglePoints(center, radius + 5.0D), 1.6D, FullRouteMapConfig.MAP_FOCUS_HALO);
+                drawPolyline(graphics, warningTrianglePoints(center, radius + 2.0D), 1.2D, FullRouteMapConfig.MAP_FOCUS_RING);
+            }
         }
     }
 
@@ -1202,6 +1372,27 @@ public final class RouteLineCardRenderer {
         SmoothGuiPrimitives.circle(graphics, center, inner, SPSGui.withAlpha(color, 0x44));
         SmoothGuiPrimitives.line(graphics, new Vec2(center.x() - inner, center.y()), new Vec2(center.x() + inner, center.y()), 1.1D, color);
         SmoothGuiPrimitives.line(graphics, new Vec2(center.x(), center.y() - inner), new Vec2(center.x(), center.y() + inner), 1.1D, color);
+    }
+
+    /**
+     * Warning glyph for a boundary where the route section path is missing: a small
+     * hollow amber triangle with an exclamation stroke, echoing the warning tint used
+     * for invalid sections on edges.
+     */
+    private static void drawMissingPathBoundary(GuiGraphicsExtractor graphics, Vec2 center, int radius) {
+        int color = SPSGui.WARNING;
+        drawPolyline(graphics, warningTrianglePoints(center, radius + 1.0D), 1.3D, color);
+        double inner = Math.max(1.6D, radius - 1.0D);
+        SmoothGuiPrimitives.line(graphics, new Vec2(center.x(), center.y() - inner * 0.48D), new Vec2(center.x(), center.y() + inner * 0.10D), 1.0D, color);
+        SmoothGuiPrimitives.circle(graphics, new Vec2(center.x(), center.y() + inner * 0.42D), 0.55D, color);
+    }
+
+    private static List<Vec2> warningTrianglePoints(Vec2 center, double radius) {
+        return List.of(
+                new Vec2(center.x(), center.y() - radius),
+                new Vec2(center.x() - radius * 0.9D, center.y() + radius * 0.62D),
+                new Vec2(center.x() + radius * 0.9D, center.y() + radius * 0.62D),
+                new Vec2(center.x(), center.y() - radius));
     }
 
     private static void drawColorLanePath(GuiGraphicsExtractor graphics, List<Vec2> points, double totalWidth, List<Integer> colors) {
@@ -1369,96 +1560,13 @@ public final class RouteLineCardRenderer {
         SmoothGuiPrimitives.polyline(graphics, points, width, color);
     }
 
-    private static boolean isAbstractFoldBoundaryLink(RouteCardVisualGraph graph, RouteCardVisualEdge visualEdge) {
-        return isAbstractFoldBoundaryLink(graph, visualEdge.edge());
-    }
-
-    private static boolean isAbstractFoldBoundaryLink(RouteCardVisualGraph graph, RouteCardEdge edge) {
-        if (edge.kind() != SemanticEdgeKind.FOLD_ADJACENT || !edge.backingPathSlice().isEmpty()) {
-            return false;
-        }
-        RouteCardNode from = graph.nodes().stream()
-                .map(RouteCardVisualNode::node)
-                .filter(node -> node.id().equals(edge.from()))
-                .findFirst()
-                .orElse(null);
-        RouteCardNode to = graph.nodes().stream()
-                .map(RouteCardVisualNode::node)
-                .filter(node -> node.id().equals(edge.to()))
-                .findFirst()
-                .orElse(null);
-        return from != null && to != null && isFoldLinkBoundary(from) && isFoldLinkBoundary(to);
-    }
-
-    private static boolean isAbstractFoldBoundaryLink(RouteCardSemanticGraph graph, RouteCardEdge edge) {
-        if (edge.kind() != SemanticEdgeKind.FOLD_ADJACENT || !edge.backingPathSlice().isEmpty()) {
-            return false;
-        }
-        RouteCardNode from = graph.nodes().stream()
-                .filter(node -> node.id().equals(edge.from()))
-                .findFirst()
-                .orElse(null);
-        RouteCardNode to = graph.nodes().stream()
-                .filter(node -> node.id().equals(edge.to()))
-                .findFirst()
-                .orElse(null);
-        return from != null && to != null && isFoldLinkBoundary(from) && isFoldLinkBoundary(to);
-    }
-
-    private static boolean isFoldLinkBoundary(RouteCardNode node) {
-        return node.kind() == RouteCardNodeKind.FOLD_BOUNDARY || node.kind() == RouteCardNodeKind.PORTAL_BOUNDARY;
-    }
-
-    private static boolean isAbstractMissingPathBoundaryLink(RouteCardVisualGraph graph, RouteCardVisualEdge visualEdge) {
-        return isAbstractMissingPathBoundaryLink(graph, visualEdge.edge());
-    }
-
-    private static boolean isAbstractMissingPathBoundaryLink(RouteCardVisualGraph graph, RouteCardEdge edge) {
-        if (edge.kind() != SemanticEdgeKind.FOLD_ADJACENT || !edge.backingPathSlice().isEmpty()) {
-            return false;
-        }
-        RouteCardNode from = graph.nodes().stream()
-                .map(RouteCardVisualNode::node)
-                .filter(node -> node.id().equals(edge.from()))
-                .findFirst()
-                .orElse(null);
-        RouteCardNode to = graph.nodes().stream()
-                .map(RouteCardVisualNode::node)
-                .filter(node -> node.id().equals(edge.to()))
-                .findFirst()
-                .orElse(null);
-        return from != null && to != null && from.kind() == RouteCardNodeKind.MISSING_PATH_BOUNDARY && to.kind() == RouteCardNodeKind.MISSING_PATH_BOUNDARY;
-    }
-
-    private static boolean isMissingPathBoundaryEdge(RouteCardVisualGraph graph, RouteCardEdge edge) {
-        RouteCardNode from = graph.nodes().stream()
-                .map(RouteCardVisualNode::node)
-                .filter(node -> node.id().equals(edge.from()))
-                .findFirst()
-                .orElse(null);
-        RouteCardNode to = graph.nodes().stream()
-                .map(RouteCardVisualNode::node)
-                .filter(node -> node.id().equals(edge.to()))
-                .findFirst()
-                .orElse(null);
-        return isMissingPathBoundaryEdge(from, to);
-    }
-
-    private static boolean isMissingPathBoundaryEdge(RouteCardSemanticGraph graph, RouteCardEdge edge) {
-        RouteCardNode from = graph.nodes().stream()
-                .filter(node -> node.id().equals(edge.from()))
-                .findFirst()
-                .orElse(null);
-        RouteCardNode to = graph.nodes().stream()
-                .filter(node -> node.id().equals(edge.to()))
-                .findFirst()
-                .orElse(null);
-        return isMissingPathBoundaryEdge(from, to);
-    }
-
-    private static boolean isMissingPathBoundaryEdge(RouteCardNode from, RouteCardNode to) {
-        return from != null && to != null && from.kind() != to.kind()
-                && (from.kind() == RouteCardNodeKind.MISSING_PATH_BOUNDARY || to.kind() == RouteCardNodeKind.MISSING_PATH_BOUNDARY);
+    /**
+     * True for the synthetic links that only exist inside the route card (fold jumps and
+     * missing-path boundary links): they have no counterpart edge on the main map, so
+     * clicks on them cannot be mapped back to a {@code MapEdge}.
+     */
+    public static boolean isAbstractBoundaryLink(RouteCardSemanticGraph graph, RouteCardEdge edge) {
+        return edge.abstractBoundaryLink();
     }
 
     private static Optional<RouteCardNodeId> missingBoundaryEndpoint(RouteCardVisualGraph graph, RouteCardEdge edge) {
@@ -1482,31 +1590,15 @@ public final class RouteLineCardRenderer {
     }
 
     private static double distanceToPolyline(Vec2 point, List<Vec2> points) {
-        double best = Double.POSITIVE_INFINITY;
-        for (int i = 0; i + 1 < points.size(); i++) {
-            best = Math.min(best, distanceToSegment(point, points.get(i), points.get(i + 1)));
-        }
-        return best;
+        return RouteCardGeometry.distanceToPolyline(point, points);
     }
 
     private static Aabb2 boundsFor(List<Vec2> points) {
-        Aabb2 bounds = Aabb2.empty();
-        for (Vec2 point : points) {
-            bounds = bounds.include(point.x(), point.y());
-        }
-        return bounds;
+        return RouteCardGeometry.boundsFor(points);
     }
 
     private static double distanceToSegment(Vec2 point, Vec2 a, Vec2 b) {
-        double dx = b.x() - a.x();
-        double dy = b.y() - a.y();
-        double len2 = dx * dx + dy * dy;
-        if (len2 <= 0.0001D) {
-            return point.distanceTo(a);
-        }
-        double t = ((point.x() - a.x()) * dx + (point.y() - a.y()) * dy) / len2;
-        double clamped = Math.max(0.0D, Math.min(1.0D, t));
-        return point.distanceTo(new Vec2(a.x() + dx * clamped, a.y() + dy * clamped));
+        return RouteCardGeometry.distanceToSegment(point, a, b);
     }
 
     private static SPSGui.Rect clipRect(SPSGui.Rect rect, SPSGui.Rect clip) {

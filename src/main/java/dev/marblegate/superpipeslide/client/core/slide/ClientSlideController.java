@@ -528,7 +528,7 @@ public final class ClientSlideController {
         PipeConnection bestConnection = null;
         SlideGeometry.Projection bestProjection = null;
         double bestDistance = Double.MAX_VALUE;
-        boolean navigationDeniedCapture = false;
+        boolean bestOffPlanCapture = false;
 
         for (PipeConnection connection : ClientPipeNetworkCache.connectionsNear(player.level().dimension(), feet, SEARCH_RADIUS)) {
             if (isCoolingDown(connection.id())) {
@@ -544,21 +544,23 @@ public final class ClientSlideController {
                 continue;
             }
             if (!ClientNavigationController.canCaptureConnection(connection)) {
-                navigationDeniedCapture = true;
                 continue;
             }
             if (projection.distance() < bestDistance) {
                 bestConnection = connection;
                 bestProjection = projection;
                 bestDistance = projection.distance();
+                bestOffPlanCapture = !ClientNavigationController.isPlannedBoardingConnection(connection);
             }
         }
 
         if (bestConnection == null || bestProjection == null) {
-            if (navigationDeniedCapture) {
-                ClientNavigationController.notifyWrongBoardingTarget(player);
-            }
             return;
+        }
+        if (bestOffPlanCapture) {
+            // Capture lock downgrade: off-plan connections may capture the player,
+            // but the overlay hint still points out the planned boarding platform.
+            ClientNavigationController.notifyWrongBoardingTarget(player);
         }
 
         PipeConnection capturedConnection = bestConnection;
@@ -568,12 +570,10 @@ public final class ClientSlideController {
         Optional<PlatformStop> platformStop = capturedConnection.platformStopId().flatMap(ClientRouteDataCache::platformStop);
         Optional<RouteCandidate> navigationCandidate = platformStop.flatMap(ClientNavigationController::boardingCandidate);
         Optional<ResolvedRouteCandidate> navigationBoarding = navigationCandidate.flatMap(candidate -> resolveNavigationBoardingCandidate(capturedConnection, candidate));
-        if (ClientNavigationController.isNavigating() && platformStop.isPresent()) {
-            if (navigationCandidate.isEmpty()) {
-                logRejectedNavigationBoarding(capturedConnection, null, "no-navigation-candidate");
-                ClientNavigationController.notifyBoardingRouteUnavailable(player);
-                return;
-            }
+        // Capture lock downgrade: the planned departure direction is only enforced
+        // when the player boards at the platform the plan expects; boarding anywhere
+        // else follows the normal station flow and navigation re-plans afterwards.
+        if (ClientNavigationController.isNavigating() && platformStop.isPresent() && navigationCandidate.isPresent()) {
             if (navigationBoarding.isEmpty()) {
                 ClientNavigationController.notifyBoardingRouteUnavailable(player);
                 return;
@@ -636,7 +636,7 @@ public final class ClientSlideController {
         recaptureHoldUntilGameTime = Long.MIN_VALUE;
         sendSlideMode(sessionId, true);
         if (platformStop.isPresent() && navigationCandidate.isPresent()) {
-            ClientNavigationController.onRouteBoarded(platformStop.get(), navigationCandidate.get(), sessionId);
+            ClientNavigationController.onRouteBoarded(platformStop.get(), navigationCandidate.get());
         }
         if (platformStop.isPresent() && stationDecision.action() == StationEntryDecision.Action.OPEN_LAYOUT_CHOICE) {
             active = active.withSpeed(0.0D);
@@ -1056,7 +1056,6 @@ public final class ClientSlideController {
         activeRouteConnectionIndex = 0;
         ClientNavigationController.StationNavigationAction navigationAction = ClientNavigationController.stationAction(platformStop.get().id());
         if (navigationAction == ClientNavigationController.StationNavigationAction.PASS_THROUGH) {
-            ClientNavigationController.onPassThroughStation(platformStop.get().id());
             sendPassStationNotice(state, platformStop.get(), layout.get(), false);
             Optional<RouteStep> next = nextStep(layout.get(), platformStop.get().id(), activeRouteDirection)
                     .filter(step -> step.section().statusForDirection(activeRouteDirection) == RouteSectionStatus.VALID);

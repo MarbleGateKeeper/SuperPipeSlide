@@ -20,10 +20,6 @@ public enum FullRouteMapLayoutMode {
         return this == PHYSICAL;
     }
 
-    public boolean schematic() {
-        return this != PHYSICAL;
-    }
-
     public FullRouteMapLayoutMode next() {
         FullRouteMapLayoutMode[] values = values();
         return values[(this.ordinal() + 1) % values.length];

@@ -25,6 +25,20 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+/**
+ * Translates a {@link MapDimensionGraph} into the solver-facing {@link SchematicInputGraph}.
+ *
+ * <p>Two shapes exist: the geographic-style build wraps map nodes/edges one-to-one and
+ * classifies semantic edge kinds (station-internal, fold-adjacent, shared track, parallel
+ * corridor), while the pure line-diagram build collapses every route section to a single
+ * edge per dimension and synthesizes portal nodes for each valid cross-dimension boundary.
+ * Everything here is deterministic (stable UUIDs, insertion order) so identical inputs
+ * produce identical solver runs; building is O(N + E) plus an O(E^2) parallel-corridor
+ * marking pass.
+ *
+ * <p>Threading: constructed and consumed on the map builder thread only, against an
+ * immutable source snapshot.
+ */
 public final class SchematicInputBuilder {
     private final MapDimensionGraph graph;
     private final SchematicLayoutConfig config;
@@ -112,6 +126,10 @@ public final class SchematicInputBuilder {
         }
         List<MapNode> uniqueStations = distinctNodes(stationEndpoints);
         List<MapEdgeOccurrence> occurrences = parts.stream().map(EdgePart::occurrence).distinct().toList();
+        // A route section spans exactly two adjacent stops by data model (see
+        // RouteNetworkSavedData.replaceLayoutStopsAndRebuildSections), so this branch
+        // normally sees exactly two stations and farthestStation is a trivial pick;
+        // the multi-station collapse is defensive code for a case the model forbids.
         if (uniqueStations.size() >= 2) {
             MapNode first = uniqueStations.getFirst();
             MapNode second = farthestStation(first, uniqueStations);
@@ -124,17 +142,30 @@ public final class SchematicInputBuilder {
         }
         if (uniqueStations.size() == 1 && !boundaryEndpoints.isEmpty()) {
             MapNode station = uniqueStations.getFirst();
-            MapNode boundary = boundaryEndpoints.getFirst();
-            if (boundary.foldPeerId().map(peer -> peer.levelKey().equals(this.graph.levelKey())).orElse(true)) {
-                return;
+            // A section may cross dimension boundaries several times (e.g. overworld ->
+            // nether -> overworld -> nether). Every boundary endpoint that really leads
+            // into another dimension gets its own portal representation; endpoints whose
+            // fold peer is missing or lies in this dimension are skipped instead of
+            // discarding the whole section the way a first-endpoint-only check would.
+            Set<NodeId> linkedPortals = new HashSet<>();
+            for (MapNode boundary : distinctNodes(boundaryEndpoints)) {
+                Optional<String> targetKey = boundary.foldPeerId()
+                        .filter(peer -> !peer.levelKey().equals(this.graph.levelKey()))
+                        .map(peer -> peer.levelKey().identifier().toString());
+                if (targetKey.isEmpty()) {
+                    continue;
+                }
+                NodeId portalId = this.portalNodeId(station, targetKey.get());
+                // Portal ids derive from (this dimension, station, target dimension), so
+                // several boundaries towards the same dimension share one stable portal;
+                // emit its edge (and the section occurrences) only once.
+                if (!linkedPortals.add(portalId)) {
+                    continue;
+                }
+                this.ensurePureStationNode(station, nodes);
+                this.upsertPortalNode(nodes, portalId, this.portalNode(portalId, station, boundary, targetKey.get(), key.routeLineId()), key.routeLineId());
+                this.addPureEdge(station.id(), portalId, SemanticEdgeKind.FOLD_ADJACENT, occurrences, accumulators, null);
             }
-            this.ensurePureStationNode(station, nodes);
-            String targetKey = boundary.foldPeerId()
-                    .map(peer -> peer.levelKey().identifier().toString())
-                    .orElseThrow();
-            NodeId portalId = this.portalNodeId(station, targetKey);
-            this.upsertPortalNode(nodes, portalId, this.portalNode(portalId, station, boundary, targetKey, key.routeLineId()), key.routeLineId());
-            this.addPureEdge(station.id(), portalId, SemanticEdgeKind.FOLD_ADJACENT, occurrences, accumulators, null);
         }
     }
 
@@ -188,7 +219,7 @@ public final class SchematicInputBuilder {
     }
 
     private NodeId portalNodeId(MapNode station, String targetKey) {
-        return new NodeId(NodeKind.FOLD_ANCHOR, this.graph.levelKey(), stableUuid("schematic-portal:" + this.graph.levelKey().identifier() + ":" + station.id() + ":" + targetKey), 0);
+        return new NodeId(NodeKind.FOLD_ANCHOR, this.graph.levelKey(), stableUuid("schematic-portal:" + this.graph.levelKey().identifier() + ":" + station.id() + ":" + targetKey));
     }
 
     private SchematicNode portalNode(NodeId portalId, MapNode station, MapNode boundary, String targetLabel, UUID routeLineId) {

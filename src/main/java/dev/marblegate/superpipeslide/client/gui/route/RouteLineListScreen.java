@@ -1,6 +1,7 @@
 package dev.marblegate.superpipeslide.client.gui.route;
 
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
+import dev.marblegate.superpipeslide.client.fullmap.cache.FullRouteMapCache;
 import dev.marblegate.superpipeslide.client.fullmap.screen.FullRouteMapScreen;
 import dev.marblegate.superpipeslide.client.gui.base.RouteDataAwareScreen;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
@@ -47,7 +48,10 @@ public class RouteLineListScreen extends RouteEditorScreenBase implements RouteD
         this.drawTitle(graphics, Component.translatable("screen.superpipeslide.route_editor"), false, hasLines ? List.of(SPSGui.IconButton.of(SPSGui.Icon.INFO), SPSGui.IconButton.of(SPSGui.Icon.PLUS)) : List.of(SPSGui.IconButton.of(SPSGui.Icon.INFO)), mouseX, mouseY);
         SPSGui.Rect content = this.editorContent();
         this.drawDocumentHeader(graphics, SPSGui.Icon.ROUTE_LINE, List.of(Component.translatable("screen.superpipeslide.route_editor")), null, RouteEditorGui.INK_MUTED, 17);
-        this.addClick(map, () -> this.minecraft.setScreen(new FullRouteMapScreen()), Component.translatable("screen.superpipeslide.action.open_full_map"));
+        this.addClick(map, () -> {
+            FullRouteMapCache.markOpened();
+            this.minecraft.setScreen(new FullRouteMapScreen());
+        }, Component.translatable("screen.superpipeslide.action.open_full_map"));
         if (hasLines && this.searchBox != null) {
             int searchWidth = Math.max(86, Math.min(128, content.width() / 2));
             this.searchBox.setX(content.right() - searchWidth);

@@ -1,6 +1,7 @@
 package dev.marblegate.superpipeslide.client.fullmap.navigation;
 
 import dev.marblegate.superpipeslide.client.core.navigation.ClientNavigationController;
+import dev.marblegate.superpipeslide.client.core.navigation.NavigationSemanticColors;
 import dev.marblegate.superpipeslide.client.fullmap.cache.FullRouteMapCache;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapLayoutMode;
@@ -40,10 +41,20 @@ public final class FullMapNavigationOverlayRenderer {
     private static final int ACTIVE_HALO = 0xC8FFFFFF;
     private static final int TRANSFER_OUTLINE = 0xEE17202B;
     private static final int MARKER_OUTER = 0xF517202B;
-    private static final int START = 0xFF38C86E;
-    private static final int TRANSFER_SAME = 0xFF30B76B;
-    private static final int TRANSFER_OUT = 0xFFFFB13B;
-    private static final int TRANSFER_CROSS = 0xFFC59BFF;
+    private static final int START = NavigationSemanticColors.DESTINATION;
+    private static final int TRANSFER_SAME = NavigationSemanticColors.SAME_STATION_TRANSFER;
+    private static final int TRANSFER_OUT = NavigationSemanticColors.OUT_OF_STATION_TRANSFER;
+    private static final int TRANSFER_CROSS = NavigationSemanticColors.CROSS_DIMENSION_TRANSFER;
+
+    /**
+     * Cache of the segment-to-edge matching produced by {@link SegmentMatcher}. The match
+     * depends only on the (immutable) plan and the graph data, never on the viewport:
+     * {@link FullRouteMapCache} hands out new graph instances whenever the route/pipe
+     * revision or the layout mode changes, so identity comparison of the graph instances
+     * pins the cache to exactly the data the match was computed against. Zoom and pan only
+     * re-run the per-frame projection of the matched edges.
+     */
+    private final MatchCache matchCache = new MatchCache();
 
     public void render(
             GuiGraphicsExtractor graphics,
@@ -59,7 +70,7 @@ public final class FullMapNavigationOverlayRenderer {
         List<ProjectedPiece> pieces = visualGraph == null
                 ? projectSemantic(graph, viewport, mapRect, plan, activeSegmentIndex)
                 : projectVisual(graph, visualGraph, viewport, mapRect, plan, activeSegmentIndex);
-        renderStrokes(graphics, pieces);
+        renderStrokes(graphics, pieces, viewport.zoom());
         renderTransferMarkers(graphics, graph, visualGraph, viewport, mapRect, plan);
         renderStationMarker(graphics, graph, visualGraph, viewport, mapRect, plan.destinationStationGroupId(), firstPlanColor(plan), MarkerKind.DESTINATION);
         renderStationMarker(graphics, graph, visualGraph, viewport, mapRect, plan.startStationGroupId(), START, MarkerKind.START);
@@ -75,84 +86,127 @@ public final class FullMapNavigationOverlayRenderer {
         if (graph == null || plan == null || plan.segments().isEmpty()) {
             return;
         }
-        renderStrokes(graphics, projectPhysical(graph, viewport, mapRect, plan, activeSegmentIndex));
+        renderStrokes(graphics, projectPhysical(graph, viewport, mapRect, plan, activeSegmentIndex), viewport.zoom());
         renderPhysicalTransferMarkers(graphics, graph, viewport, mapRect, plan);
         renderPhysicalStationMarker(graphics, graph, viewport, mapRect, plan.destinationStationGroupId(), firstPlanColor(plan), MarkerKind.DESTINATION);
         renderPhysicalStationMarker(graphics, graph, viewport, mapRect, plan.startStationGroupId(), START, MarkerKind.START);
     }
 
-    private static List<ProjectedPiece> projectVisual(
+    private List<ProjectedPiece> projectVisual(
             MapDimensionGraph graph,
             VisualRouteMapGraph visualGraph,
             ViewportState viewport,
             SPSGui.Rect mapRect,
             ClientNavigationController.NavigationPlan plan,
             int activeSegmentIndex) {
-        Map<String, MapEdge> rawEdges = graph.edges().stream().collect(HashMap::new, (map, edge) -> map.put(edge.id(), edge), HashMap::putAll);
+        MatchCache matches = this.visualMatchCache(plan, graph, visualGraph);
         boolean pureSchematic = FullRouteMapCache.layoutMode() == FullRouteMapLayoutMode.SCHEMATIC;
         List<ProjectedPiece> pieces = new ArrayList<>();
-        for (ClientNavigationController.NavigationSegment segment : plan.segments()) {
-            SegmentMatcher matcher = new SegmentMatcher(segment);
-            for (VisualEdgePath path : visualGraph.edgePaths()) {
-                if (!matcher.matches(path.occurrences())) {
+        for (MatchedTarget<?> match : matches.targets) {
+            ClientNavigationController.NavigationSegment segment = match.segment();
+            VisualEdgePath path = (VisualEdgePath) match.target();
+            List<Vec2> worldPath;
+            if (pureSchematic) {
+                worldPath = path.points();
+            } else {
+                MapEdge edge = matches.rawEdges.get(path.edgeId());
+                if (edge == null) {
                     continue;
                 }
-                List<Vec2> worldPath;
-                if (pureSchematic) {
-                    worldPath = path.points();
-                } else {
-                    MapEdge edge = rawEdges.get(path.edgeId());
-                    if (edge == null) {
-                        continue;
-                    }
-                    worldPath = FullRouteMapRenderer.visualWorldPathForEdge(graph, visualGraph, path, edge, viewport.zoom()).orElse(List.of());
-                }
-                List<Vec2> screenPath = toScreen(worldPath, viewport, mapRect);
-                screenPath = applyVisualLaneOffset(screenPath, path, segment);
-                addPiece(pieces, segment, matcher.sortKey(path.occurrences()), orientPath(screenPath, segment), activeSegmentIndex);
+                worldPath = FullRouteMapRenderer.visualWorldPathForEdge(graph, visualGraph, path, edge, viewport.zoom()).orElse(List.of());
             }
+            List<Vec2> screenPath = toScreen(worldPath, viewport, mapRect);
+            screenPath = applyVisualLaneOffset(screenPath, path, segment);
+            addPiece(pieces, segment, match.order(), orientPath(screenPath, segment), activeSegmentIndex);
         }
         return pieces;
     }
 
-    private static List<ProjectedPiece> projectSemantic(
+    private List<ProjectedPiece> projectSemantic(
             MapDimensionGraph graph,
             ViewportState viewport,
             SPSGui.Rect mapRect,
             ClientNavigationController.NavigationPlan plan,
             int activeSegmentIndex) {
+        MatchCache matches = this.visualMatchCache(plan, graph, null);
         List<ProjectedPiece> pieces = new ArrayList<>();
-        for (ClientNavigationController.NavigationSegment segment : plan.segments()) {
-            SegmentMatcher matcher = new SegmentMatcher(segment);
-            for (MapEdge edge : graph.edges()) {
-                if (!matcher.matches(edge.occurrences())) {
-                    continue;
-                }
-                Optional<List<Vec2>> screenPath = projectedSemanticScreenPath(graph, edge, viewport, mapRect);
-                screenPath.ifPresent(path -> addPiece(pieces, segment, matcher.sortKey(edge.occurrences()), orientPath(path, segment), activeSegmentIndex));
-            }
+        for (MatchedTarget<?> match : matches.targets) {
+            ClientNavigationController.NavigationSegment segment = match.segment();
+            MapEdge edge = (MapEdge) match.target();
+            Optional<List<Vec2>> screenPath = projectedSemanticScreenPath(graph, edge, viewport, mapRect);
+            screenPath.ifPresent(path -> addPiece(pieces, segment, match.order(), orientPath(path, segment), activeSegmentIndex));
         }
         return pieces;
     }
 
-    private static List<ProjectedPiece> projectPhysical(
+    private List<ProjectedPiece> projectPhysical(
             PhysicalRouteMapGraph graph,
             ViewportState viewport,
             SPSGui.Rect mapRect,
             ClientNavigationController.NavigationPlan plan,
             int activeSegmentIndex) {
+        MatchCache matches = this.physicalMatchCache(plan, graph);
         List<ProjectedPiece> pieces = new ArrayList<>();
+        for (MatchedTarget<?> match : matches.targets) {
+            ClientNavigationController.NavigationSegment segment = match.segment();
+            PhysicalMapEdge edge = (PhysicalMapEdge) match.target();
+            List<Vec2> path = toScreen(edge.points(), viewport, mapRect);
+            addPiece(pieces, segment, match.order(), orientPath(path, segment), activeSegmentIndex);
+        }
+        return pieces;
+    }
+
+    /**
+     * Returns the cached segment-to-edge matching for {@code render}, rebuilding it when
+     * the plan or the graph instances changed. {@code visualGraph == null} selects the
+     * semantic matching over {@link MapDimensionGraph#edges()}.
+     */
+    private MatchCache visualMatchCache(ClientNavigationController.NavigationPlan plan, MapDimensionGraph graph, @Nullable VisualRouteMapGraph visualGraph) {
+        if (this.matchCache.matches(plan.id(), graph, visualGraph)) {
+            return this.matchCache;
+        }
+        List<MatchedTarget<?>> targets = new ArrayList<>();
+        Map<String, MapEdge> rawEdges = Map.of();
+        if (visualGraph == null) {
+            for (ClientNavigationController.NavigationSegment segment : plan.segments()) {
+                SegmentMatcher matcher = new SegmentMatcher(segment);
+                for (MapEdge edge : graph.edges()) {
+                    if (matcher.matches(edge.occurrences())) {
+                        targets.add(new MatchedTarget<>(segment, matcher.sortKey(edge.occurrences()), edge));
+                    }
+                }
+            }
+        } else {
+            rawEdges = graph.edges().stream().collect(HashMap::new, (map, edge) -> map.put(edge.id(), edge), HashMap::putAll);
+            for (ClientNavigationController.NavigationSegment segment : plan.segments()) {
+                SegmentMatcher matcher = new SegmentMatcher(segment);
+                for (VisualEdgePath path : visualGraph.edgePaths()) {
+                    if (matcher.matches(path.occurrences())) {
+                        targets.add(new MatchedTarget<>(segment, matcher.sortKey(path.occurrences()), path));
+                    }
+                }
+            }
+        }
+        this.matchCache.fill(plan.id(), graph, visualGraph, targets, rawEdges);
+        return this.matchCache;
+    }
+
+    /** Returns the cached segment-to-edge matching for {@code renderPhysical}. */
+    private MatchCache physicalMatchCache(ClientNavigationController.NavigationPlan plan, PhysicalRouteMapGraph graph) {
+        if (this.matchCache.matches(plan.id(), graph, null)) {
+            return this.matchCache;
+        }
+        List<MatchedTarget<?>> targets = new ArrayList<>();
         for (ClientNavigationController.NavigationSegment segment : plan.segments()) {
             SegmentMatcher matcher = new SegmentMatcher(segment);
             for (PhysicalMapEdge edge : graph.edges()) {
-                if (!matcher.matches(edge)) {
-                    continue;
+                if (matcher.matches(edge)) {
+                    targets.add(new MatchedTarget<>(segment, matcher.sortKey(edge.metadata().routeSectionId(), edge.metadata().layoutIndex()), edge));
                 }
-                List<Vec2> path = toScreen(edge.points(), viewport, mapRect);
-                addPiece(pieces, segment, matcher.sortKey(edge.metadata().routeSectionId(), edge.metadata().layoutIndex()), orientPath(path, segment), activeSegmentIndex);
             }
         }
-        return pieces;
+        this.matchCache.fill(plan.id(), graph, null, targets, Map.of());
+        return this.matchCache;
     }
 
     private static Optional<List<Vec2>> projectedSemanticScreenPath(MapDimensionGraph graph, MapEdge edge, ViewportState viewport, SPSGui.Rect mapRect) {
@@ -186,14 +240,14 @@ public final class FullMapNavigationOverlayRenderer {
                 segment.index() == activeSegmentIndex ? NavigationPhase.ACTIVE : segment.index() < activeSegmentIndex ? NavigationPhase.COMPLETE : NavigationPhase.UPCOMING));
     }
 
-    private static void renderStrokes(GuiGraphicsExtractor graphics, List<ProjectedPiece> pieces) {
-        List<NavigationStroke> strokes = stitchPieces(pieces);
+    private static void renderStrokes(GuiGraphicsExtractor graphics, List<ProjectedPiece> pieces, double zoom) {
+        List<NavigationStroke> strokes = stitchPieces(pieces, zoom);
         strokes.stream()
                 .sorted(Comparator.comparingInt((NavigationStroke stroke) -> stroke.phase().drawOrder()).thenComparingInt(NavigationStroke::segmentIndex))
                 .forEach(stroke -> drawNavigationStroke(graphics, stroke));
     }
 
-    private static List<NavigationStroke> stitchPieces(List<ProjectedPiece> pieces) {
+    private static List<NavigationStroke> stitchPieces(List<ProjectedPiece> pieces, double zoom) {
         Map<StrokeKey, List<ProjectedPiece>> groups = new LinkedHashMap<>();
         pieces.stream()
                 .sorted(Comparator.comparingInt(ProjectedPiece::segmentIndex).thenComparingInt(ProjectedPiece::order).thenComparing(piece -> piece.path().getFirst().x()))
@@ -207,7 +261,7 @@ public final class FullMapNavigationOverlayRenderer {
                 boolean extended;
                 do {
                     extended = false;
-                    int index = nearestConnectable(path, pending);
+                    int index = nearestConnectable(path, pending, zoom);
                     if (index >= 0) {
                         ProjectedPiece next = pending.remove(index);
                         appendPath(path, orientedForAppend(path, next.path()));
@@ -221,10 +275,22 @@ public final class FullMapNavigationOverlayRenderer {
         return strokes;
     }
 
-    private static int nearestConnectable(List<Vec2> path, List<ProjectedPiece> pending) {
+    /**
+     * The connect tolerance lives in screen space, so it has to scale with zoom: with a
+     * fixed pixel budget, zooming out pushes the endpoints of genuinely adjacent pieces
+     * past the threshold, the stroke splits, and each piece caps its own shadow/halo,
+     * leaving visible seams at the joints. Dividing by the zoom keeps the tolerance
+     * roughly constant in world space; the 0.35 floor bounds it at extreme zoom-out so
+     * disjoint pieces are never bridged across the map. Stitching purely by order was
+     * rejected: within a {@link StrokeKey} group the order keys come from
+     * {@link SegmentMatcher#sortKey}, which repeats for repeated sections (loops,
+     * out-and-back routes) and never guarantees geometric adjacency, so blind stitching
+     * could draw straight connectors across the map.
+     */
+    private static int nearestConnectable(List<Vec2> path, List<ProjectedPiece> pending, double zoom) {
         Vec2 tail = path.getLast();
         int best = -1;
-        double bestDistance = 9.0D;
+        double bestDistance = 9.0D / Math.max(0.35D, zoom);
         for (int i = 0; i < pending.size(); i++) {
             List<Vec2> candidate = pending.get(i).path();
             double distance = Math.min(tail.distanceTo(candidate.getFirst()), tail.distanceTo(candidate.getLast()));
@@ -551,6 +617,39 @@ public final class FullMapNavigationOverlayRenderer {
             return List.of(0xFF47A6FF);
         }
         return colors.stream().limit(3).map(SPSGui::opaque).toList();
+    }
+
+    /**
+     * One matched (segment, edge) pair. {@code target} is a {@link VisualEdgePath}, a
+     * {@link MapEdge}, or a {@link PhysicalMapEdge} depending on the projection mode the
+     * owning {@link MatchCache} was filled for; the identity-pinned cache key guarantees
+     * the cast at the consumption site matches the mode.
+     */
+    private record MatchedTarget<T>(ClientNavigationController.NavigationSegment segment, int order, T target) {}
+
+    /**
+     * Single-slot cache of the viewport-independent matching. The graph references are
+     * compared by identity: {@link FullRouteMapCache} replaces the graph instances on any
+     * route/pipe revision or layout mode change, so a stale match can never be reused.
+     */
+    private static final class MatchCache {
+        private @Nullable UUID planId;
+        private @Nullable Object graph;
+        private @Nullable Object visualGraph;
+        private List<MatchedTarget<?>> targets = List.of();
+        private Map<String, MapEdge> rawEdges = Map.of();
+
+        private boolean matches(UUID planId, Object graph, @Nullable Object visualGraph) {
+            return planId.equals(this.planId) && this.graph == graph && this.visualGraph == visualGraph;
+        }
+
+        private void fill(UUID planId, Object graph, @Nullable Object visualGraph, List<MatchedTarget<?>> targets, Map<String, MapEdge> rawEdges) {
+            this.planId = planId;
+            this.graph = graph;
+            this.visualGraph = visualGraph;
+            this.targets = targets;
+            this.rawEdges = rawEdges;
+        }
     }
 
     private record ProjectedPiece(int segmentIndex, UUID routeLineId, UUID layoutId, int order, List<Vec2> path, List<Integer> colors, NavigationPhase phase) {

@@ -89,6 +89,10 @@ public final class Config {
             .comment("Maximum slide distance, in blocks, that can be consumed in one server tick before segment handoff checks.")
             .defineInRange("maxStepDistance", 6.0D, 0.05D, 16.0D);
 
+    public static final ModConfigSpec.IntValue NAVIGATION_STOP_DWELL_TICKS = BUILDER
+            .comment("Fixed dwell time, in ticks, added per station stop when estimating navigation route durations.")
+            .defineInRange("navigationStopDwellTicks", 40, 0, 200);
+
     public static final ModConfigSpec SPEC = BUILDER.build();
 
     private Config() {}

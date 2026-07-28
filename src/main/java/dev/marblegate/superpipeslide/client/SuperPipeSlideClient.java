@@ -22,6 +22,8 @@ import dev.marblegate.superpipeslide.client.core.slide.ClientSlideFeedbackContro
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideNoticeController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlidePoseController;
 import dev.marblegate.superpipeslide.client.core.sync.ClientDataResyncRequests;
+import dev.marblegate.superpipeslide.client.fullmap.cache.FullRouteMapCache;
+import dev.marblegate.superpipeslide.client.fullmap.cache.FullRouteMapSessionState;
 import dev.marblegate.superpipeslide.client.fullmap.screen.FullRouteMapScreen;
 import dev.marblegate.superpipeslide.client.renderer.ClientRenderCompatibility;
 import dev.marblegate.superpipeslide.client.renderer.anchor.ClientAnchorVisibilityRenderer;
@@ -77,7 +79,8 @@ import net.neoforged.neoforge.client.settings.KeyConflictContext;
 @Mod(value = SuperPipeSlide.MODID, dist = Dist.CLIENT)
 public class SuperPipeSlideClient {
     private static final KeyMapping.Category KEY_CATEGORY = new KeyMapping.Category(Identifier.fromNamespaceAndPath(SuperPipeSlide.MODID, "controls"));
-    private static final KeyMapping OPEN_FULL_ROUTE_MAP = new KeyMapping(
+    /** Public so {@link FullRouteMapScreen} can match it to toggle the screen closed again. */
+    public static final KeyMapping OPEN_FULL_ROUTE_MAP = new KeyMapping(
             "key.superpipeslide.full_route_map",
             KeyConflictContext.IN_GAME,
             InputConstants.Type.KEYSYM,
@@ -88,6 +91,12 @@ public class SuperPipeSlideClient {
             KeyConflictContext.IN_GAME,
             InputConstants.Type.KEYSYM,
             InputConstants.KEY_C,
+            KEY_CATEGORY);
+    /** Public so {@link ClientNavigationHudController} can render the bound key in its cancel hint. Unbound by default. */
+    public static final KeyMapping CANCEL_NAVIGATION = new KeyMapping(
+            "key.superpipeslide.cancel_navigation",
+            KeyConflictContext.IN_GAME,
+            InputConstants.UNKNOWN,
             KEY_CATEGORY);
 
     public SuperPipeSlideClient(IEventBus modEventBus, ModContainer container) {
@@ -112,6 +121,7 @@ public class SuperPipeSlideClient {
         event.registerCategory(KEY_CATEGORY);
         event.register(OPEN_FULL_ROUTE_MAP);
         event.register(TOGGLE_CINEMATIC_CAMERA);
+        event.register(CANCEL_NAVIGATION);
     }
 
     private static void registerRenderPipelines(RegisterRenderPipelinesEvent event) {
@@ -155,11 +165,13 @@ public class SuperPipeSlideClient {
                 ProjectionNetworkImageCache.clear();
                 ProjectionTextMeasureCache.clear();
                 ProjectionWorldTextRenderer.clear();
+                FullRouteMapSessionState.clear();
                 return;
             }
 
             while (OPEN_FULL_ROUTE_MAP.consumeClick()) {
                 if (minecraft.screen == null) {
+                    FullRouteMapCache.markOpened();
                     minecraft.setScreen(new FullRouteMapScreen());
                 }
             }
@@ -167,6 +179,11 @@ public class SuperPipeSlideClient {
                 boolean enabled = !ClientConfig.ENABLE_CINEMATIC_CAMERA.get();
                 ClientSafetyOptions.setCinematicCameraEnabled(enabled);
                 player.sendOverlayMessage(Component.translatable(enabled ? "message.superpipeslide.cinematic_camera.enabled" : "message.superpipeslide.cinematic_camera.disabled"));
+            }
+            while (CANCEL_NAVIGATION.consumeClick()) {
+                if (ClientNavigationController.isNavigating()) {
+                    ClientNavigationController.cancelNavigation();
+                }
             }
             ClientNavigationController.tick(minecraft, player);
             ClientSafetyOptions.tick();

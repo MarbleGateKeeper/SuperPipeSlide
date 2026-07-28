@@ -1,9 +1,12 @@
 package dev.marblegate.superpipeslide.client.core.route;
 
+import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
+import dev.marblegate.superpipeslide.client.core.navigation.NavigationSemanticColors;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideController;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
+import dev.marblegate.superpipeslide.config.ClientConfig;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -64,6 +67,12 @@ public final class ClientRouteHudController {
     private static boolean departureStretchHandoff;
     private static double departureStretchSegmentStart = Double.NaN;
     private static double departureStretchCarryAmount;
+    /** Tick-accumulated clock (50 ms per client tick) driving every HUD animation; freezes while the game is paused. */
+    private static long animationClockMs;
+    /** Render-time animation clock: {@link #animationClockMs} smoothed with the frame partial tick. */
+    private static double animationTimeMs;
+    /** Effective station spacing in pixels, compressed below {@link #STATION_SPACING} on narrow screens; refreshed every render. */
+    private static double stationSpacing = STATION_SPACING;
 
     private ClientRouteHudController() {}
 
@@ -83,6 +92,8 @@ public final class ClientRouteHudController {
         activeLapBoundarySegment = Integer.MIN_VALUE;
         displayedDwellSeconds = Double.NaN;
         previousStopPhase = ClientRouteHudSnapshot.StopPhase.MOVING;
+        animationClockMs = 0L;
+        animationTimeMs = 0.0D;
         clearDepartureStretchHandoff();
     }
 
@@ -91,8 +102,11 @@ public final class ClientRouteHudController {
     }
 
     public static void tick() {
+        // Drive every animation from accumulated tick time so all HUD motion
+        // freezes while the game is paused; the configured scale slows or freezes it.
+        animationClockMs += Math.round(50L * ClientConfig.HUD_ANIMATION_SCALE.get());
         Optional<ClientRouteHudSnapshot> snapshot = ClientSlideController.routeHudSnapshot();
-        long now = System.currentTimeMillis();
+        long now = animationClockMs;
         if (snapshot.isPresent()) {
             ClientRouteHudSnapshot next = snapshot.get();
             HudRouteKey nextKey = HudRouteKey.of(next);
@@ -191,7 +205,7 @@ public final class ClientRouteHudController {
 
     public static void render(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null || minecraft.level == null || minecraft.options.hideGui || currentSnapshot == null || visibleAlpha <= 0.018D) {
+        if (minecraft.player == null || minecraft.level == null || minecraft.options.hideGui || !ClientConfig.ENABLE_ROUTE_HUD.get() || currentSnapshot == null || visibleAlpha <= 0.018D) {
             return;
         }
         Font font = minecraft.font;
@@ -202,15 +216,22 @@ public final class ClientRouteHudController {
         }
 
         ClientRouteHudSnapshot snapshot = currentSnapshot;
+        // Smooth the tick clock with the frame partial tick; frozen while paused.
+        animationTimeMs = animationClockMs + deltaTracker.getGameTimeDeltaPartialTick(true) * 50.0D;
         int screenWidth = graphics.guiWidth();
-        double width = Math.max(MIN_WIDTH, Math.min(screenWidth - SCREEN_MARGIN * 2.0D, screenWidth * WIDTH_RATIO));
+        // Narrow screens trade margin for usable width: below the regular margin the
+        // bar may drop under MIN_WIDTH (floored at screenWidth - 12) and the station
+        // spacing is compressed by the same ratio.
+        double lowerBound = screenWidth < MIN_WIDTH + SCREEN_MARGIN * 2.0D ? screenWidth - 12.0D : MIN_WIDTH;
+        double width = Math.max(lowerBound, Math.min(screenWidth - SCREEN_MARGIN * 2.0D, screenWidth * WIDTH_RATIO));
+        stationSpacing = STATION_SPACING * Math.min(1.0D, width / MIN_WIDTH);
         double left = (screenWidth - width) * 0.5D;
         double right = left + width;
         double reveal = easeOutCubic(revealProgress);
         double offsetY = (1.0D - reveal) * -7.0D;
         double railY = TOP_MARGIN + RAIL_Y + offsetY;
         double playerAnchorX = left + width * PLAYER_ANCHOR_RATIO;
-        double playerRouteX = displayedPlayerTravelIndex * STATION_SPACING;
+        double playerRouteX = displayedPlayerTravelIndex * stationSpacing;
         double targetCameraX = playerRouteX - playerAnchorX;
         if (!Double.isFinite(cameraX)) {
             cameraX = targetCameraX;
@@ -224,7 +245,7 @@ public final class ClientRouteHudController {
         }
         double markerX = screenX(snapshot, displayedPlayerTravelIndex);
         double focusX = Double.isFinite(focusTravelIndex) ? screenX(snapshot, focusTravelIndex) : markerX;
-        boolean lapActive = activeLapBoundarySegment != Integer.MIN_VALUE && System.currentTimeMillis() - lapBoundaryEnteredAtMs <= 1500L;
+        boolean lapActive = activeLapBoundarySegment != Integer.MIN_VALUE && (long) animationTimeMs - lapBoundaryEnteredAtMs <= 1500L;
 
         drawRouteHeading(graphics, font, snapshot, left, TOP_MARGIN + offsetY, width, alpha);
         drawRails(graphics, snapshot, stations, markerX, railY, left, right, alpha);
@@ -259,9 +280,9 @@ public final class ClientRouteHudController {
             for (ClientRouteHudSnapshot.Station station : snapshot.stations()) {
                 stationByTravelIndex.put(Math.floorMod(station.travelIndex(), snapshot.stationCount()), station);
             }
-            double buffer = EDGE_FADE + STATION_SPACING + MAX_SEGMENT_STRETCH;
-            int minTravelIndex = (int) Math.floor((cameraX + left - buffer) / STATION_SPACING) - 1;
-            int maxTravelIndex = (int) Math.ceil((cameraX + right + buffer) / STATION_SPACING) + 1;
+            double buffer = EDGE_FADE + stationSpacing + MAX_SEGMENT_STRETCH;
+            int minTravelIndex = (int) Math.floor((cameraX + left - buffer) / stationSpacing) - 1;
+            int maxTravelIndex = (int) Math.ceil((cameraX + right + buffer) / stationSpacing) + 1;
             for (int travelIndex = minTravelIndex; travelIndex <= maxTravelIndex; travelIndex++) {
                 ClientRouteHudSnapshot.Station station = stationByTravelIndex.get(Math.floorMod(travelIndex, snapshot.stationCount()));
                 if (station != null) {
@@ -346,6 +367,11 @@ public final class ClientRouteHudController {
     }
 
     private static void drawMovementFlow(GuiGraphicsExtractor graphics, ClientRouteHudSnapshot snapshot, double markerX, double railY, double left, double right, double alpha) {
+        // Photosensitivity-safe mode drops the traveling flow dots and the departing
+        // sweep entirely so nothing on the rail moves or flashes over time.
+        if (ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return;
+        }
         if (snapshot.navigationStopContext().isPresent()) {
             return;
         }
@@ -366,7 +392,7 @@ public final class ClientRouteHudController {
         if (nextX <= markerX + 22.0D) {
             return;
         }
-        long now = System.currentTimeMillis();
+        long now = (long) animationTimeMs;
         double period = snapshot.status() == ClientRouteHudSnapshot.Status.APPROACHING ? 1650.0D : 1450.0D;
         double phase = (now % (long) period) / period;
         for (int i = 0; i < 4; i++) {
@@ -388,7 +414,7 @@ public final class ClientRouteHudController {
         if (nextX <= markerX + 24.0D) {
             return;
         }
-        long now = System.currentTimeMillis();
+        long now = (long) animationTimeMs;
         double phase = (now % 920L) / 920.0D;
         double t = easeInOutCubic(phase);
         double x = markerX + 8.0D + (nextX - markerX - 14.0D) * t;
@@ -403,8 +429,10 @@ public final class ClientRouteHudController {
     }
 
     private static void drawStations(GuiGraphicsExtractor graphics, List<StationDraw> stations, double markerX, double railY, double left, double right, ClientRouteHudSnapshot snapshot, double alpha) {
-        long now = System.currentTimeMillis();
-        double focusPulse = pulseSince(now, focusChangedAtMs, 760L);
+        long now = (long) animationTimeMs;
+        // The focus-change flash is a one-shot pulse; keep it at rest in
+        // photosensitivity-safe mode.
+        double focusPulse = ClientSafetyOptions.reducePhotosensitivityRisk() ? 0.0D : pulseSince(now, focusChangedAtMs, 760L);
         for (StationDraw draw : stations) {
             double fade = draw.fade();
             if (fade <= 0.02D) {
@@ -425,7 +453,7 @@ public final class ClientRouteHudController {
             }
             if (focus) {
                 int focusColor = snapshot.navigationStopContext()
-                        .map(context -> navigationStopColor(context, snapshot))
+                        .map(ClientRouteHudController::navigationStopColor)
                         .orElseGet(() -> firstRouteColor(snapshot.routeColors()));
                 SmoothGuiPrimitives.circle(graphics, new Vec2(draw.x(), railY), radius + 5.4D, color(focusColor, alpha * fade * (0.16D + focusPulse * 0.14D)));
                 SmoothGuiPrimitives.circle(graphics, new Vec2(draw.x(), railY), radius + 2.1D, color(focusColor, alpha * fade * 0.44D));
@@ -445,11 +473,11 @@ public final class ClientRouteHudController {
     }
 
     private static void drawProgressMarker(GuiGraphicsExtractor graphics, double x, double y, ClientRouteHudSnapshot snapshot, double alpha) {
-        long now = System.currentTimeMillis();
-        double breath = 0.5D + 0.5D * Math.sin(now / 190.0D);
+        long now = (long) animationTimeMs;
+        double breath = pulse(now, 190.0D);
         int routeColor = snapshot.status() == ClientRouteHudSnapshot.Status.BLOCKED ? WARNING : firstRouteColor(snapshot.routeColors());
         if (snapshot.navigationStopContext().isPresent()) {
-            routeColor = navigationStopColor(snapshot.navigationStopContext().get(), snapshot);
+            routeColor = navigationStopColor(snapshot.navigationStopContext().get());
         }
         if (snapshot.status() == ClientRouteHudSnapshot.Status.FOLD_TRANSIT) {
             SmoothGuiPrimitives.diamond(graphics, new Vec2(x, y), 8.2D + breath * 1.2D, color(routeColor, alpha * 0.24D));
@@ -599,7 +627,7 @@ public final class ClientRouteHudController {
 
     private static int statusColor(ClientRouteHudSnapshot snapshot) {
         if (snapshot.navigationStopContext().isPresent()) {
-            return navigationStopColor(snapshot.navigationStopContext().get(), snapshot);
+            return navigationStopColor(snapshot.navigationStopContext().get());
         }
         if (snapshot.stopPhase() != ClientRouteHudSnapshot.StopPhase.MOVING) {
             return firstRouteColor(snapshot.routeColors());
@@ -623,12 +651,13 @@ public final class ClientRouteHudController {
         }).getString();
     }
 
-    private static int navigationStopColor(ClientRouteHudSnapshot.NavigationStopContext context, ClientRouteHudSnapshot snapshot) {
+    private static int navigationStopColor(ClientRouteHudSnapshot.NavigationStopContext context) {
         return switch (context.kind()) {
-            case DESTINATION -> 0xFF65E0A3;
-            case SAME_STATION_TRANSFER -> firstRouteColor(snapshot.routeColors());
-            case OUT_OF_STATION_TRANSFER, FINAL_WALK -> 0xFFFFC45C;
-            case CROSS_DIMENSION_TRANSFER, CROSS_DIMENSION_FINAL_WALK -> 0xFFA7D4FF;
+            case DESTINATION -> NavigationSemanticColors.DESTINATION;
+            case SAME_STATION_TRANSFER -> NavigationSemanticColors.SAME_STATION_TRANSFER;
+            case OUT_OF_STATION_TRANSFER -> NavigationSemanticColors.OUT_OF_STATION_TRANSFER;
+            case FINAL_WALK -> NavigationSemanticColors.FINAL_WALK;
+            case CROSS_DIMENSION_TRANSFER, CROSS_DIMENSION_FINAL_WALK -> NavigationSemanticColors.CROSS_DIMENSION_TRANSFER;
         };
     }
 
@@ -675,8 +704,8 @@ public final class ClientRouteHudController {
             drawArcStroke(graphics, center, radius, startAngle, remaining * Math.PI * 2.0D, 1.65D, color(routeColor, alpha * 0.88D));
         }
         if (snapshot.stopPhase() == ClientRouteHudSnapshot.StopPhase.DEPARTING) {
-            long now = System.currentTimeMillis();
-            double pulse = 0.5D + 0.5D * Math.sin(now / 135.0D);
+            long now = (long) animationTimeMs;
+            double pulse = pulse(now, 135.0D);
             SmoothGuiPrimitives.circle(graphics, center, radius + 2.4D + pulse * 1.1D, color(routeColor, alpha * (0.09D + pulse * 0.08D)));
             if (remaining > 0.018D) {
                 double headAngle = startAngle;
@@ -688,9 +717,9 @@ public final class ClientRouteHudController {
     }
 
     private static void drawNavigationStopRing(GuiGraphicsExtractor graphics, Vec2 center, ClientRouteHudSnapshot snapshot, ClientRouteHudSnapshot.NavigationStopContext context, double alpha) {
-        long now = System.currentTimeMillis();
-        double breath = 0.5D + 0.5D * Math.sin(now / 210.0D);
-        int accent = navigationStopColor(context, snapshot);
+        long now = (long) animationTimeMs;
+        double breath = pulse(now, 210.0D);
+        int accent = navigationStopColor(context);
         double radius = switch (context.kind()) {
             case DESTINATION -> 10.1D;
             case SAME_STATION_TRANSFER -> 9.8D;
@@ -736,7 +765,7 @@ public final class ClientRouteHudController {
 
     private static void drawCrossDimensionTransferGlyph(GuiGraphicsExtractor graphics, Vec2 center, double radius, int accent, double alpha, long now) {
         double phase = (now % 1200L) / 1200.0D * Math.PI * 2.0D;
-        int violet = 0xFFC59BFF;
+        int violet = NavigationSemanticColors.CROSS_DIMENSION_TRANSFER;
         drawArcStroke(graphics, center, radius + 0.6D, phase, Math.PI * 0.72D, 2.0D, color(accent, alpha * 0.94D));
         drawArcStroke(graphics, center, radius + 0.6D, phase + Math.PI * 0.95D, Math.PI * 0.72D, 2.0D, color(violet, alpha * 0.82D));
         drawArcStroke(graphics, center, radius - 3.0D, -phase * 0.72D, Math.PI * 0.84D, 1.35D, color(0xFFFFFFFF, alpha * 0.58D));
@@ -880,7 +909,7 @@ public final class ClientRouteHudController {
     }
 
     private static double screenX(ClientRouteHudSnapshot snapshot, double travelIndex) {
-        return travelIndex * STATION_SPACING - cameraX + elasticOffset(snapshot, travelIndex);
+        return travelIndex * stationSpacing - cameraX + elasticOffset(snapshot, travelIndex);
     }
 
     private static double elasticOffset(ClientRouteHudSnapshot snapshot, double travelIndex) {
@@ -970,6 +999,15 @@ public final class ClientRouteHudController {
     private static int color(int color, double alphaScale) {
         int alpha = (int) Math.round(((color >>> 24) & 0xFF) * clamp(alphaScale));
         return (alpha << 24) | (color & 0x00FFFFFF);
+    }
+
+    private static double pulse(long nowMillis, double periodScale) {
+        // Photosensitivity-safe mode freezes every breathing highlight at its mid
+        // value so no HUD element oscillates over time.
+        if (ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return 0.5D;
+        }
+        return 0.5D + 0.5D * Math.sin(nowMillis / periodScale);
     }
 
     private static double pulseSince(long now, long startedAt, long durationMs) {

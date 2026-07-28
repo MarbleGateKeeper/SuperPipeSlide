@@ -9,13 +9,20 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 
 public final class FullMapUi {
+    /**
+     * Default halo color for name text: the map background, so the halo reads as a clean
+     * cutout over lines and grids.
+     */
+    public static final int NAME_TEXT_HALO = FullMapTheme.palette().mapBackground();
+
     private FullMapUi() {}
 
     public static void cardFrame(GuiGraphicsExtractor graphics, SPSGui.Rect bounds, boolean active) {
+        FullMapPalette palette = FullMapTheme.palette();
         graphics.fill(bounds.x() + 2, bounds.y() + 3, bounds.right() + 2, bounds.bottom() + 3, FullMapTheme.SHADOW);
-        graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), active ? FullMapTheme.SURFACE_CARD_ACTIVE : FullMapTheme.SURFACE_CARD_INACTIVE);
-        graphics.outline(bounds.x(), bounds.y(), bounds.width(), bounds.height(), active ? FullMapTheme.BORDER_ACTIVE : FullMapTheme.BORDER);
-        graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.y() + 2, 0xBFFFFFFF);
+        graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), active ? palette.surfaceCardActive() : palette.surfaceCardInactive());
+        graphics.outline(bounds.x(), bounds.y(), bounds.width(), bounds.height(), active ? palette.borderActive() : palette.border());
+        graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.y() + 2, FullMapTheme.INNER_HIGHLIGHT_STRONG);
     }
 
     public static void cardHeader(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect bounds, Component title, Component meta, boolean active) {
@@ -23,21 +30,22 @@ public final class FullMapUi {
     }
 
     public static void cardHeader(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect bounds, DisplayNameStack title, Component meta, boolean active) {
+        FullMapPalette palette = FullMapTheme.palette();
         boolean hasMeta = !meta.getString().isBlank();
         int headerHeight = cardHeaderHeight(title, meta);
         SPSGui.Rect header = new SPSGui.Rect(bounds.x() + 1, bounds.y() + 1, bounds.width() - 2, headerHeight - 1);
-        graphics.fill(header.x(), header.y(), header.right(), header.bottom(), active ? FullMapTheme.SURFACE_HEADER_ACTIVE : FullMapTheme.SURFACE_HEADER);
-        graphics.fill(bounds.x() + 1, bounds.y() + headerHeight, bounds.right() - 1, bounds.y() + headerHeight + 1, FullMapTheme.BORDER);
-        int titleWidth = Math.max(20, bounds.width() - 58);
-        int y = bounds.y() + 4;
-        drawNamePrimary(graphics, font, title, bounds.x() + 8, y, titleWidth, FullMapTheme.TEXT_PRIMARY, 1.0F);
-        y += 11;
+        graphics.fill(header.x(), header.y(), header.right(), header.bottom(), active ? palette.surfaceHeaderActive() : palette.surfaceHeader());
+        graphics.fill(bounds.x() + 1, bounds.y() + headerHeight, bounds.right() - 1, bounds.y() + headerHeight + 1, palette.border());
+        int titleWidth = Math.max(20, bounds.width() - FullMapTheme.CARD_HEADER_TITLE_RESERVE);
+        int y = bounds.y() + FullMapTheme.SPACE_SM;
+        drawNamePrimary(graphics, font, title, bounds.x() + FullMapTheme.CARD_PADDING, y, titleWidth, palette.textPrimary(), FullMapTheme.TYPE_TITLE);
+        y += FullMapTheme.CARD_HEADER_PRIMARY_ADVANCE;
         if (title.hasSecondary()) {
-            drawNameSecondary(graphics, font, title, bounds.x() + 8, y, titleWidth, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
-            y += 9;
+            drawNameSecondary(graphics, font, title, bounds.x() + FullMapTheme.CARD_PADDING, y, titleWidth, palette.textMuted(), FullMapTheme.TYPE_META);
+            y += FullMapTheme.CARD_HEADER_SECONDARY_ADVANCE;
         }
         if (hasMeta) {
-            SPSGui.smallText(graphics, font, SPSGui.ellipsize(font, meta.getString(), Math.round(titleWidth / FullMapTheme.TYPE_TINY)), bounds.x() + 8, y, FullMapTheme.TEXT_SECONDARY, FullMapTheme.TYPE_TINY);
+            SPSGui.smallText(graphics, font, SPSGui.ellipsize(font, meta.getString(), Math.round(titleWidth / FullMapTheme.TYPE_TINY)), bounds.x() + FullMapTheme.CARD_PADDING, y, palette.textSecondary(), FullMapTheme.TYPE_TINY);
         }
     }
 
@@ -76,45 +84,62 @@ public final class FullMapUi {
     }
 
     public static void drawNameStack(GuiGraphicsExtractor graphics, Font font, DisplayNameStack name, int x, int y, int maxWidth, int primaryColor, int secondaryColor, float primaryScale, float secondaryScale, int gap) {
+        drawNameStack(graphics, font, name, x, y, maxWidth, primaryColor, secondaryColor, primaryScale, secondaryScale, gap, 0);
+    }
+
+    /**
+     * Halo variant: pass {@link #NAME_TEXT_HALO} (or any opaque background color) to stamp a
+     * halo under both lines; alpha 0 disables the halo.
+     */
+    public static void drawNameStack(GuiGraphicsExtractor graphics, Font font, DisplayNameStack name, int x, int y, int maxWidth, int primaryColor, int secondaryColor, float primaryScale, float secondaryScale, int gap, int haloColor) {
         if (name == null) {
             return;
         }
-        drawNamePrimary(graphics, font, name, x, y, maxWidth, primaryColor, primaryScale);
+        drawNamePrimary(graphics, font, name, x, y, maxWidth, primaryColor, primaryScale, haloColor);
         if (name.hasSecondary()) {
             int secondaryY = y + Math.max(7, Math.round(9.0F * primaryScale)) + gap;
-            drawNameSecondary(graphics, font, name, x, secondaryY, maxWidth, secondaryColor, secondaryScale);
+            drawNameSecondary(graphics, font, name, x, secondaryY, maxWidth, secondaryColor, secondaryScale, haloColor);
         }
     }
 
     public static void drawNamePrimary(GuiGraphicsExtractor graphics, Font font, DisplayNameStack name, int x, int y, int maxWidth, int color, float scale) {
+        drawNamePrimary(graphics, font, name, x, y, maxWidth, color, scale, 0);
+    }
+
+    public static void drawNamePrimary(GuiGraphicsExtractor graphics, Font font, DisplayNameStack name, int x, int y, int maxWidth, int color, float scale, int haloColor) {
         String text = SPSGui.ellipsize(font, name.primary(), Math.max(1, Math.round(maxWidth / scale)));
         if (scale >= 0.995F) {
-            SPSGui.text(graphics, font, text, x, y, color);
+            SPSGui.text(graphics, font, text, x, y, color, haloColor);
         } else {
-            SPSGui.smallText(graphics, font, text, x, y, color, scale);
+            SPSGui.smallText(graphics, font, text, x, y, color, scale, haloColor);
         }
     }
 
     public static void drawNameSecondary(GuiGraphicsExtractor graphics, Font font, DisplayNameStack name, int x, int y, int maxWidth, int color, float scale) {
+        drawNameSecondary(graphics, font, name, x, y, maxWidth, color, scale, 0);
+    }
+
+    public static void drawNameSecondary(GuiGraphicsExtractor graphics, Font font, DisplayNameStack name, int x, int y, int maxWidth, int color, float scale, int haloColor) {
         if (!name.hasSecondary()) {
             return;
         }
-        SPSGui.smallText(graphics, font, SPSGui.ellipsize(font, name.secondary(), Math.max(1, Math.round(maxWidth / scale))), x, y, color, scale);
+        SPSGui.smallText(graphics, font, SPSGui.ellipsize(font, name.secondary(), Math.max(1, Math.round(maxWidth / scale))), x, y, color, scale, haloColor);
     }
 
+    /**
+     * Full-map styled icon button; delegates to {@link SPSGui#drawIconButton} with the
+     * palette's hover/selection color rules.
+     */
     public static void iconButton(GuiGraphicsExtractor graphics, SPSGui.Rect rect, boolean hovered, boolean selected, boolean disabled, SPSGui.Icon icon) {
-        int bg = disabled ? FullMapTheme.SURFACE_CONTROL_DISABLED : selected ? FullMapTheme.SURFACE_CONTROL_SELECTED : hovered ? FullMapTheme.SURFACE_CONTROL_HOVER : FullMapTheme.SURFACE_CONTROL;
-        int border = disabled ? FullMapTheme.BORDER_MUTED : selected ? FullMapTheme.BORDER_SELECTED : FullMapTheme.BORDER;
-        int color = disabled ? FullMapTheme.TEXT_DISABLED : selected || hovered ? SPSGui.INFO : FullMapTheme.TEXT_SECONDARY;
-        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), bg);
-        graphics.outline(rect.x(), rect.y(), rect.width(), rect.height(), border);
-        SPSGui.icon(graphics, rect, icon, color);
+        FullMapPalette palette = FullMapTheme.palette();
+        SPSGui.drawIconButton(graphics, rect, icon, disabled, hovered, selected, palette.textSecondary(), SPSGui.INFO, palette.surfaceControlHover(), palette.surfaceControlSelected(), palette.borderSelected());
     }
 
     public static void toolbarPanel(GuiGraphicsExtractor graphics, SPSGui.Rect panel) {
-        graphics.fill(panel.x(), panel.y(), panel.right(), panel.bottom(), FullMapTheme.SURFACE_TOOLBAR);
-        graphics.outline(panel.x(), panel.y(), panel.width(), panel.height(), FullMapTheme.BORDER);
-        graphics.fill(panel.x() + 1, panel.y() + 1, panel.right() - 1, panel.y() + 2, 0x77FFFFFF);
+        FullMapPalette palette = FullMapTheme.palette();
+        graphics.fill(panel.x(), panel.y(), panel.right(), panel.bottom(), palette.surfaceToolbar());
+        graphics.outline(panel.x(), panel.y(), panel.width(), panel.height(), palette.border());
+        graphics.fill(panel.x() + 1, panel.y() + 1, panel.right() - 1, panel.y() + 2, FullMapTheme.INNER_HIGHLIGHT_EXTRA_SOFT);
     }
 
     public static void dimensionChip(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect rect, String label, int color, boolean muted) {
@@ -122,15 +147,15 @@ public final class FullMapUi {
         Vec2 center = new Vec2(rect.x() + rect.width() * 0.5D, rect.y() + rect.height() * 0.5D);
         SmoothGuiPrimitives.capsule(graphics, center, rect.width(), rect.height(), SPSGui.withAlpha(color, muted ? 0x55 : 0x88));
         SmoothGuiPrimitives.capsule(graphics, center, Math.max(1, rect.width() - 2), Math.max(1, rect.height() - 2), fill);
-        SPSGui.smallText(graphics, font, SPSGui.ellipsize(font, label, Math.round((rect.width() - 7) / FullMapTheme.TYPE_TINY)), rect.x() + 4, rect.y() + Math.max(1, (rect.height() - 7) / 2), FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_TINY);
+        SPSGui.smallText(graphics, font, SPSGui.ellipsize(font, label, Math.round((rect.width() - 7) / FullMapTheme.TYPE_TINY)), rect.x() + 4, rect.y() + Math.max(1, (rect.height() - 7) / 2), FullMapTheme.palette().textMuted(), FullMapTheme.TYPE_TINY);
     }
 
     public static void routeChip(GuiGraphicsExtractor graphics, Font font, SPSGui.Rect chip, String label, List<Integer> colors, boolean hovered, boolean selected, int seed) {
-        graphics.fill(chip.x(), chip.y(), chip.right(), chip.bottom(), selected ? FullMapTheme.SURFACE_CONTROL_SELECTED : hovered ? FullMapTheme.SURFACE_CONTROL_HOVER : FullMapTheme.SURFACE_CONTROL);
-        graphics.outline(chip.x(), chip.y(), chip.width(), chip.height(), selected ? FullMapTheme.BORDER_SELECTED : FullMapTheme.BORDER);
+        FullMapPalette palette = FullMapTheme.palette();
+        graphics.fill(chip.x(), chip.y(), chip.right(), chip.bottom(), selected ? palette.surfaceControlSelected() : hovered ? palette.surfaceControlHover() : palette.surfaceControl());
+        graphics.outline(chip.x(), chip.y(), chip.width(), chip.height(), selected ? palette.borderSelected() : palette.border());
         drawThemeBands(graphics, chip, colors);
-        String text = SPSGui.scrollingText(font, label, Math.max(8, Math.round((chip.width() - 13) / FullMapTheme.TYPE_META)), seed);
-        SPSGui.smallText(graphics, font, text, chip.x() + 8, chip.y() + Math.max(2, (chip.height() - 8) / 2), selected ? SPSGui.INFO : FullMapTheme.TEXT_SECONDARY, FullMapTheme.TYPE_META);
+        SPSGui.smallScrollingText(graphics, font, label, chip.x() + 8, chip.y() + Math.max(2, (chip.height() - 8) / 2), selected ? SPSGui.INFO : palette.textSecondary(), FullMapTheme.TYPE_META, Math.max(8, chip.width() - 13), seed);
     }
 
     public static void drawThemeBands(GuiGraphicsExtractor graphics, SPSGui.Rect chip, List<Integer> colors) {

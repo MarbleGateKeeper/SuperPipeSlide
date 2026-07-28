@@ -3,6 +3,7 @@ package dev.marblegate.superpipeslide.client.fullmap.cluster.model;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapCluster;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.resources.ResourceKey;
@@ -16,12 +17,14 @@ public record ClusterCardSemanticGraph(
         List<ClusterCardEdge> edges,
         List<UUID> routeLineIds,
         int externalEdgeCount,
-        Aabb2 worldBounds) {
+        Aabb2 worldBounds,
+        Map<String, String> edgeByPortId) {
     public ClusterCardSemanticGraph {
         profile = profile == null ? ClusterCardProfile.ORDINARY : profile;
         nodes = List.copyOf(nodes);
         edges = List.copyOf(edges);
         routeLineIds = routeLineIds.stream().distinct().sorted().toList();
+        edgeByPortId = Map.copyOf(edgeByPortId);
     }
 
     public Optional<ClusterCardNode> node(String id) {

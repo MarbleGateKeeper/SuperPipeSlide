@@ -7,31 +7,17 @@ import dev.marblegate.superpipeslide.client.core.route.RouteCandidate;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideNoticeController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideState;
-import dev.marblegate.superpipeslide.client.fullmap.model.search.SearchResult;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
-import dev.marblegate.superpipeslide.common.core.geometry.SlideGeometry;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
-import dev.marblegate.superpipeslide.common.core.route.model.line.RouteLine;
 import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
-import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSection;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
-import dev.marblegate.superpipeslide.common.core.route.model.station.StationTransferLink;
 import dev.marblegate.superpipeslide.common.core.route.service.RouteLayoutNavigator;
 import dev.marblegate.superpipeslide.network.slide.ClientboundSlideNoticePayload;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
-import java.util.PriorityQueue;
-import java.util.Set;
 import java.util.UUID;
 import javax.annotation.Nullable;
 import net.minecraft.client.Minecraft;
@@ -43,12 +29,9 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 public final class ClientNavigationController {
-    private static final double WALK_TICKS_PER_BLOCK = 8.0D;
-    private static final double SAME_STATION_TRANSFER_PENALTY_TICKS = 6.0D * 20.0D;
-    private static final double BOARDING_PENALTY_TICKS = 4.0D * 20.0D;
-    private static final double ESTIMATED_RIDE_SPEED = 0.30D;
+    private static final double APPROACHING_ANNOUNCE_RANGE = 32.0D;
     private static final double BOARDING_NEAR_RANGE = 18.0D;
-    private static final double BOARDING_LOCAL_RANGE = 24.0D;
+    static final double BOARDING_LOCAL_RANGE = 24.0D;
     private static final double BOARDING_HARD_RANGE = 8.0D;
     private static final double DESTINATION_ARRIVAL_RANGE = BOARDING_HARD_RANGE;
     private static final double EARLY_TRANSFER_PATH_RANGE = 36.0D;
@@ -57,14 +40,10 @@ public final class ClientNavigationController {
     private static final long WRONG_BOARDING_MESSAGE_COOLDOWN_TICKS = 20L * 3L;
     private static final long GENERIC_ARRIVAL_SUPPRESSION_TICKS = 80L;
     private static final long ARRIVAL_HUD_DISMISS_MILLIS = 4500L;
+    private static final long ROUTE_FAILED_HUD_DISMISS_MILLIS = 7000L;
+    private static final int RIDING_LIVENESS_GRACE_TICKS = 20;
     @Nullable
     private static NavigationSession session;
-    @Nullable
-    private static NavigationGraph cachedGraph;
-    @Nullable
-    private static ReachabilityCache cachedReachability;
-    private static long cachedRouteRevision = Long.MIN_VALUE;
-    private static long cachedPipeRevision = Long.MIN_VALUE;
     private static long lastWrongBoardingMessageTick = Long.MIN_VALUE;
     private static long lastBoardingRouteUnavailableMessageTick = Long.MIN_VALUE;
     @Nullable
@@ -76,10 +55,7 @@ public final class ClientNavigationController {
     public static void clear() {
         session = null;
         ClientSlideController.clearRouteHudNavigationStopRetention();
-        cachedGraph = null;
-        cachedReachability = null;
-        cachedRouteRevision = Long.MIN_VALUE;
-        cachedPipeRevision = Long.MIN_VALUE;
+        NavigationPlanner.clearCache();
         lastWrongBoardingMessageTick = Long.MIN_VALUE;
         lastBoardingRouteUnavailableMessageTick = Long.MIN_VALUE;
         suppressedArrivalPlatformStopId = null;
@@ -103,12 +79,12 @@ public final class ClientNavigationController {
     }
 
     public static Optional<NavigationPlan> previewPlan(LocalPlayer player, UUID destinationStationGroupId) {
-        return buildPlan(player, destinationStationGroupId);
+        return NavigationPlanner.buildPlan(player, destinationStationGroupId);
     }
 
     public static Optional<NavigationPlan> startNavigation(LocalPlayer player, UUID destinationStationGroupId) {
         ClientSlideController.clearRouteHudNavigationStopRetention();
-        Optional<NavigationPlan> plan = buildPlan(player, destinationStationGroupId);
+        Optional<NavigationPlan> plan = NavigationPlanner.buildPlan(player, destinationStationGroupId);
         if (plan.isEmpty()) {
             sendNotice(ClientboundSlideNoticePayload.Kind.WARNING, List.of(0xFFFFB13B),
                     Component.translatable("navigation.superpipeslide.failed"),
@@ -131,6 +107,7 @@ public final class ClientNavigationController {
             return plan;
         }
         session = new NavigationSession(navigationPlan, NavigationPhase.WALK_TO_BOARDING_STATION);
+        session.walkStartDistance = navigationPlan.initialWalkDistance();
         sendNotice(ClientboundSlideNoticePayload.Kind.STANDARD, navigationPlan.primaryColors(),
                 Component.translatable("navigation.superpipeslide.started", stationName(navigationPlan.destinationStationGroupId())),
                 List.of(line(Component.translatable("navigation.superpipeslide.started.body", stationName(navigationPlan.startStationGroupId())))));
@@ -177,63 +154,121 @@ public final class ClientNavigationController {
     }
 
     public static List<DestinationSearchResult> searchDestinations(LocalPlayer player, String query, int limit) {
-        String normalized = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
-        Vec3 playerPosition = player.position();
-        ResourceKey<Level> playerLevel = player.level().dimension();
-        Set<UUID> reachableStations = reachableStationGroups(player);
-        return ClientRouteDataCache.stationGroups().stream()
-                .map(station -> destinationResult(playerLevel, playerPosition, station, normalized, reachableStations.contains(station.id())))
-                .filter(result -> normalized.isBlank() || result.matchScore() > 0)
-                .sorted(Comparator
-                        .comparingInt((DestinationSearchResult result) -> result.reachable() ? 0 : 1)
-                        .thenComparing(Comparator.comparingInt(DestinationSearchResult::matchScore).reversed())
-                        .thenComparingDouble(DestinationSearchResult::distanceBlocks)
-                        .thenComparing(result -> result.primaryName().toLowerCase(Locale.ROOT)))
-                .limit(limit)
-                .toList();
+        return NavigationPlanner.searchDestinations(player, query, limit);
     }
 
     public static void tick(Minecraft minecraft, LocalPlayer player) {
         if (session == null) {
             return;
         }
+        if (handleDimensionChange(player)) {
+            return;
+        }
         boolean routeDataStale = ClientRouteDataCache.revision() != session.plan.routeRevision()
                 || ClientPipeNetworkCache.aggregateRevision() != session.plan.pipeRevision();
-        if (routeDataStale) {
-            if (session.isRiding()) {
-                session.rebuildAfterRide = true;
-            } else {
-                rebuildCurrentRoute(player, false);
-            }
+        if (routeDataStale && !session.isRiding()) {
+            // Mid-ride rebuilds stay deferred: the stale condition persists until the
+            // player detaches, and a later tick takes this same branch once they are no
+            // longer riding, so no separate after-ride flag is needed.
+            rebuildCurrentRoute(player);
         }
         if (session == null || session.phase == NavigationPhase.ROUTE_FAILED || session.phase == NavigationPhase.ARRIVED) {
-            if (session != null && session.phase == NavigationPhase.ARRIVED && shouldDismissArrivalHud()) {
+            if (session != null && shouldDismissTerminalHud()) {
                 session = null;
             }
             return;
         }
         if (session.isRiding()) {
-            updateRidingApproach(player);
-            return;
-        }
-        if (session.rebuildAfterRide) {
-            rebuildCurrentRoute(player, false);
-            if (session == null || session.phase == NavigationPhase.ROUTE_FAILED || session.phase == NavigationPhase.ARRIVED) {
-                return;
+            if (!reconcileRidingLiveness(player)) {
+                updateRidingApproach(player);
             }
+            return;
         }
         updateBoardingProximity(player);
     }
 
-    private static boolean shouldDismissArrivalHud() {
+    /**
+     * Tracks the player's dimension across ticks. A dimension change is only expected
+     * while walking a cross-dimension transfer whose target level is the dimension the
+     * player just entered; any other change means the player left the planned route
+     * (e.g. walked through a portal mid-navigation), so the session is restarted from
+     * the player's position in the new dimension. Returns true when the tick must stop.
+     */
+    private static boolean handleDimensionChange(LocalPlayer player) {
+        ResourceKey<Level> current = player.level().dimension();
+        ResourceKey<Level> previous = session.lastSeenDimension;
+        session.lastSeenDimension = current;
+        if (previous == null || previous.equals(current)) {
+            return false;
+        }
+        if (session.phase == NavigationPhase.ARRIVED || session.phase == NavigationPhase.ROUTE_FAILED) {
+            return false;
+        }
+        if (session.phase == NavigationPhase.TRANSFER_WALK || session.phase == NavigationPhase.TRANSFER_PROXIMITY) {
+            Optional<TransferInstruction> transfer = previousSegmentTransferInstruction();
+            if (transfer.isPresent() && transfer.get().toLevelKey().equals(current)) {
+                return false;
+            }
+        }
+        restartFromCurrentPosition(player);
+        return true;
+    }
+
+    /**
+     * Soft-lock reconciliation: some detach paths (death, flight, spectator mode,
+     * mounting, certain fold teleports) drop the slide session without an
+     * onSlideDetached callback, which would strand navigation in a riding phase
+     * forever - canBoard() stays false and the ride can never complete. When no
+     * slide or pipe transfer has been active for a short grace
+     * period while the session still believes it is riding, the ride is treated as
+     * lost and navigation restarts from the player's current position. Returns true
+     * when a restart was triggered.
+     */
+    private static boolean reconcileRidingLiveness(LocalPlayer player) {
+        if (ClientSlideController.isSlidingOrTransferring()) {
+            session.ridingLivenessGraceTicks = 0;
+            return false;
+        }
+        if (++session.ridingLivenessGraceTicks < RIDING_LIVENESS_GRACE_TICKS) {
+            return false;
+        }
+        session.ridingLivenessGraceTicks = 0;
+        restartFromCurrentPosition(player);
+        return true;
+    }
+
+    private static boolean shouldDismissTerminalHud() {
         if (session == null || session.completedAtMs <= 0L || ClientSlideController.isSliding()) {
             return false;
         }
-        return System.currentTimeMillis() - session.completedAtMs > ARRIVAL_HUD_DISMISS_MILLIS;
+        long dismissMillis = session.phase == NavigationPhase.ROUTE_FAILED
+                ? ROUTE_FAILED_HUD_DISMISS_MILLIS
+                : ARRIVAL_HUD_DISMISS_MILLIS;
+        return System.currentTimeMillis() - session.completedAtMs > dismissMillis;
     }
 
+    /**
+     * Capture gate consulted by the slide controller. The navigation capture lock
+     * was downgraded: every connection stays capturable while navigating, off-plan
+     * captures only surface the wrong-boarding overlay hint
+     * (see {@link #isPlannedBoardingConnection}), and the session re-plans from the
+     * player's position once the slide ends (see {@link #onSlideDetached}).
+     */
     public static boolean canCaptureConnection(PipeConnection connection) {
+        return true;
+    }
+
+    /**
+     * Whether the connection belongs to the platform stop the current plan expects
+     * the player to board next. Off-plan connections are still capturable; this
+     * only drives the wrong-boarding overlay hint. Returns true when there is no
+     * active plan to contradict (including the guidance-only final walk phase).
+     */
+    public static boolean isPlannedBoardingConnection(PipeConnection connection) {
         if (!isNavigating()) {
+            return true;
+        }
+        if (session != null && session.phase == NavigationPhase.FINAL_WALK_APPROACH) {
             return true;
         }
         Optional<UUID> target = currentBoardingPlatformStopId();
@@ -272,7 +307,7 @@ public final class ClientNavigationController {
                 .map(step -> new RouteCandidate(segment.layoutId(), segment.routeDirection(), platformStop.id(), step.nextPlatformStopId(), step.section().id()));
     }
 
-    public static void onRouteBoarded(PlatformStop platformStop, RouteCandidate candidate, UUID slideSessionId) {
+    public static void onRouteBoarded(PlatformStop platformStop, RouteCandidate candidate) {
         if (session == null || !session.canBoard(platformStop.id())) {
             return;
         }
@@ -281,8 +316,8 @@ public final class ClientNavigationController {
             return;
         }
         session.phase = NavigationPhase.RIDING_SEGMENT;
-        session.slideSessionId = slideSessionId;
         session.enteredCurrentBoardingRange = false;
+        session.ridingLivenessGraceTicks = 0;
         session.lastRouteHudStopContext = null;
         sendNotice(ClientboundSlideNoticePayload.Kind.ENTER_ROUTE, segment.colors(),
                 Component.translatable("navigation.superpipeslide.boarded", segment.lineName()),
@@ -320,13 +355,6 @@ public final class ClientNavigationController {
         return action != StationNavigationAction.PASS_THROUGH;
     }
 
-    public static void onPassThroughStation(UUID platformStopId) {
-        if (session == null || !session.isRiding()) {
-            return;
-        }
-        session.lastPassedPlatformStopId = platformStopId;
-    }
-
     public static void onSegmentStopReached(UUID platformStopId) {
         if (session == null || !session.isRiding()) {
             return;
@@ -347,6 +375,7 @@ public final class ClientNavigationController {
         session.phase = NavigationPhase.TRANSFER_WALK;
         session.segmentIndex++;
         session.enteredCurrentBoardingRange = false;
+        session.walkStartDistance = Double.NaN;
         NavigationSegment next = session.currentSegment();
         segment.transferInstruction().ifPresentOrElse(
                 instruction -> sendTransferNotice(instruction, next, false),
@@ -354,11 +383,19 @@ public final class ClientNavigationController {
     }
 
     public static void onSlideDetached(LocalPlayer player, ClientSlideState state, PipeConnection connection, DetachReason reason) {
-        if (session == null || !session.isRiding()) {
+        if (session == null) {
+            return;
+        }
+        if (!session.isRiding()) {
+            // Capture lock downgrade: off-plan pipe captures are allowed, so a slide
+            // can end far from the planned boarding platform. Re-plan from wherever
+            // the player ended up instead of dragging guidance back to the old start.
+            if (session.phase != NavigationPhase.ARRIVED && session.phase != NavigationPhase.ROUTE_FAILED) {
+                restartFromCurrentPosition(player);
+            }
             return;
         }
         NavigationSegment segment = session.currentSegment();
-        session.slideSessionId = null;
         if (segment.finalWalkInstruction().isPresent() && nearSegmentAlighting(player, state, connection, segment)) {
             completeFinalWalkSegment(segment, true);
             return;
@@ -372,7 +409,7 @@ public final class ClientNavigationController {
         session.phase = NavigationPhase.TRANSFER_WALK;
         session.segmentIndex++;
         session.enteredCurrentBoardingRange = false;
-        session.earlyTransferWarningShown = true;
+        session.walkStartDistance = Double.NaN;
         NavigationSegment next = session.currentSegment();
         segment.transferInstruction().ifPresentOrElse(
                 instruction -> sendTransferNotice(instruction, next, true),
@@ -384,9 +421,10 @@ public final class ClientNavigationController {
             return;
         }
         UUID destination = session.plan.destinationStationGroupId();
-        Optional<NavigationPlan> rebuilt = buildPlan(player, destination);
+        Optional<NavigationPlan> rebuilt = NavigationPlanner.buildPlan(player, destination);
         if (rebuilt.isEmpty()) {
             session.phase = NavigationPhase.ROUTE_FAILED;
+            session.completedAtMs = System.currentTimeMillis();
             sendNotice(ClientboundSlideNoticePayload.Kind.WARNING, List.of(0xFFFF5E4D),
                     Component.translatable("navigation.superpipeslide.failed"),
                     List.of(line(Component.translatable("navigation.superpipeslide.failed.body"))));
@@ -396,6 +434,7 @@ public final class ClientNavigationController {
         if (plan.segments().isEmpty()) {
             if (!isPhysicallyAtDestination(player, plan.destinationStationGroupId())) {
                 session.phase = NavigationPhase.ROUTE_FAILED;
+                session.completedAtMs = System.currentTimeMillis();
                 sendNotice(ClientboundSlideNoticePayload.Kind.WARNING, List.of(0xFFFF5E4D),
                         Component.translatable("navigation.superpipeslide.failed"),
                         List.of(line(Component.translatable("navigation.superpipeslide.failed.body"))));
@@ -409,6 +448,7 @@ public final class ClientNavigationController {
             return;
         }
         session = new NavigationSession(plan, NavigationPhase.WALK_TO_BOARDING_STATION);
+        session.walkStartDistance = plan.initialWalkDistance();
     }
 
     public static Optional<NavigationHudSnapshot> hudSnapshot(LocalPlayer player) {
@@ -447,12 +487,14 @@ public final class ClientNavigationController {
             case APPROACHING_TRANSFER -> approachingTransferHudText(segment);
             case APPROACHING_DESTINATION -> Component.translatable("navigation.superpipeslide.hud.approaching_destination", stationName(session.plan.destinationStationGroupId()).getString()).getString();
             case RIDING_SEGMENT -> ridingHudText(segment);
+            case FINAL_WALK_APPROACH -> Component.translatable("navigation.superpipeslide.hud.final_walk", stationName(session.plan.destinationStationGroupId()).getString()).getString();
             default -> "";
         };
         int completedTransfers = Math.max(0, session.segmentIndex);
         int remainingTransfers = Math.max(0, session.plan.transferCount() - completedTransfers);
-        double progress = navigationHudProgress(segment);
-        String detail = Component.translatable("navigation.superpipeslide.hud.detail", remainingTransfers, secondsText(session.plan.estimatedTicks())).getString();
+        double progress = navigationHudProgress(player, segment);
+        int remainingTicks = (int) Math.round(remainingEstimatedTicks(player, segment));
+        String detail = Component.translatable("navigation.superpipeslide.hud.detail", remainingTransfers, secondsText(remainingTicks)).getString();
         return Optional.of(new NavigationHudSnapshot(
                 session.phase,
                 stationName(session.plan.destinationStationGroupId()).getString(),
@@ -464,7 +506,7 @@ public final class ClientNavigationController {
                 target));
     }
 
-    private static double navigationHudProgress(NavigationSegment segment) {
+    private static double navigationHudProgress(LocalPlayer player, NavigationSegment segment) {
         if (session == null) {
             return 0.0D;
         }
@@ -472,27 +514,96 @@ public final class ClientNavigationController {
         if (segmentCount <= 0) {
             return 1.0D;
         }
-        double segmentProgress = session.isRiding() ? ridingSegmentProgress(segment) : 0.0D;
+        double segmentProgress = session.isRiding() ? ridingSegmentProgress(segment) : walkingPhaseProgress(player);
         return Mth.clamp((session.segmentIndex + segmentProgress) / segmentCount, 0.0D, 1.0D);
     }
 
+    /**
+     * Walking-phase completion of the current leg: 1 minus the ratio between the
+     * remaining distance to the current world target and the distance recorded when
+     * the walk started. The first leg reuses the plan's initialWalkDistance; later
+     * legs (transfers, final walk) record the first observed distance instead.
+     */
+    private static double walkingPhaseProgress(LocalPlayer player) {
+        if (session == null) {
+            return 0.0D;
+        }
+        Optional<TargetInfo> target = currentWorldTarget(player);
+        if (target.isEmpty()) {
+            return 0.0D;
+        }
+        if (Double.isNaN(session.walkStartDistance) || session.walkStartDistance <= 1.0E-3D) {
+            session.walkStartDistance = target.get().distance();
+            return 0.0D;
+        }
+        return Mth.clamp(1.0D - target.get().distance() / session.walkStartDistance, 0.0D, 1.0D);
+    }
+
+    /**
+     * Remaining route time estimate in ticks: untouched segments at full cost plus
+     * the current segment scaled by how much of it is left, so the HUD countdown
+     * shrinks as the player progresses instead of always showing the plan total.
+     */
+    private static double remainingEstimatedTicks(LocalPlayer player, NavigationSegment segment) {
+        if (session == null) {
+            return 0.0D;
+        }
+        List<NavigationSegment> segments = session.plan.segments();
+        double remaining = 0.0D;
+        for (int i = session.segmentIndex + 1; i < segments.size(); i++) {
+            remaining += segments.get(i).estimatedTicks();
+        }
+        if (session.phase == NavigationPhase.FINAL_WALK_APPROACH) {
+            // All rides are over; only the on-foot leg to the destination remains.
+            return remaining + currentWorldTarget(player).map(target -> target.distance() * NavigationPlanner.WALK_TICKS_PER_BLOCK).orElse(0.0D);
+        }
+        if (session.isRiding()) {
+            return remaining + segment.estimatedTicks() * (1.0D - ridingSegmentProgress(segment));
+        }
+        // Walking phases: the current ride has not started, so the full segment
+        // remains, plus the remaining walk to its boarding platform.
+        remaining += segment.estimatedTicks();
+        Optional<TargetInfo> target = currentWorldTarget(player);
+        if (target.isPresent()) {
+            remaining += target.get().distance() * NavigationPlanner.WALK_TICKS_PER_BLOCK;
+        }
+        return remaining;
+    }
+
     private static double ridingSegmentProgress(NavigationSegment segment) {
+        if (session == null) {
+            return 0.0D;
+        }
+        Double computed = computeRidingSegmentProgress(segment);
+        if (computed == null) {
+            // The slide HUD snapshot is temporarily unavailable or mid-handoff: keep
+            // the last valid progress of this segment instead of jumping to a
+            // synthetic constant.
+            return session.lastRidingProgressSegmentIndex == session.segmentIndex ? session.lastRidingSegmentProgress : 0.0D;
+        }
+        session.lastRidingSegmentProgress = computed;
+        session.lastRidingProgressSegmentIndex = session.segmentIndex;
+        return computed;
+    }
+
+    @Nullable
+    private static Double computeRidingSegmentProgress(NavigationSegment segment) {
         Optional<ClientRouteHudSnapshot> snapshot = ClientSlideController.routeHudSnapshot();
         if (snapshot.isEmpty()) {
-            return 0.38D;
+            return null;
         }
         ClientRouteHudSnapshot hud = snapshot.get();
         if (!segment.layoutId().equals(hud.routeLayoutId()) || segment.routeDirection() != hud.routeDirection()) {
-            return 0.38D;
+            return null;
         }
         List<UUID> sequence = segment.stationSequence();
         int targetIndex = lastIndexOf(sequence, segment.alightingPlatformStopId());
         if (targetIndex <= 0) {
-            return 0.38D;
+            return null;
         }
         int currentIndex = nearestTravelIndex(sequence, hud.currentPlatformStopId(), targetIndex);
         if (currentIndex < 0) {
-            return 0.38D;
+            return null;
         }
         double progress = (currentIndex + hud.sectionProgress()) / targetIndex;
         if (hud.currentPlatformStopId().equals(segment.alightingPlatformStopId())) {
@@ -529,12 +640,12 @@ public final class ClientNavigationController {
                 target.kind()));
     }
 
-    private static void rebuildCurrentRoute(LocalPlayer player, boolean userRequested) {
+    private static void rebuildCurrentRoute(LocalPlayer player) {
         if (session == null) {
             return;
         }
         UUID destination = session.plan.destinationStationGroupId();
-        Optional<NavigationPlan> rebuilt = buildPlan(player, destination);
+        Optional<NavigationPlan> rebuilt = NavigationPlanner.buildPlan(player, destination);
         if (rebuilt.isPresent()) {
             NavigationPlan plan = rebuilt.get();
             if (plan.segments().isEmpty()) {
@@ -546,29 +657,74 @@ public final class ClientNavigationController {
                             List.of(line(Component.translatable("navigation.superpipeslide.arrived.body"))));
                     return;
                 }
-                session.phase = NavigationPhase.ROUTE_FAILED;
-                if (userRequested) {
-                    sendNotice(ClientboundSlideNoticePayload.Kind.WARNING, List.of(0xFFFF5E4D),
-                            Component.translatable("navigation.superpipeslide.failed"),
-                            List.of(line(Component.translatable("navigation.superpipeslide.failed.body"))));
-                }
+                failRouteInvalidated();
+                return;
+            }
+            if (plansEquivalent(session.plan, plan)) {
+                // The data revision bump did not change the route's shape: keep the
+                // session's progress and quietly adopt the rebuilt plan (fresh
+                // revisions and cost estimates) instead of resetting and notifying.
+                session.plan = plan;
                 return;
             }
             session = new NavigationSession(plan, NavigationPhase.WALK_TO_BOARDING_STATION);
+            session.walkStartDistance = plan.initialWalkDistance();
             sendNotice(ClientboundSlideNoticePayload.Kind.STANDARD, plan.primaryColors(),
                     Component.translatable("navigation.superpipeslide.route_updated"),
                     List.of(line(Component.translatable("navigation.superpipeslide.route_updated.body"))));
             return;
         }
-        session.phase = NavigationPhase.ROUTE_FAILED;
-        if (userRequested) {
-            sendNotice(ClientboundSlideNoticePayload.Kind.WARNING, List.of(0xFFFF5E4D),
-                    Component.translatable("navigation.superpipeslide.failed"),
-                    List.of(line(Component.translatable("navigation.superpipeslide.failed.body"))));
+        failRouteInvalidated();
+    }
+
+    /**
+     * Two plans are equivalent when they head to the same destination through the
+     * same segment sequence (see NavigationSegment.contentEquals). Cost estimates,
+     * walk distances and embedded data revisions are deliberately ignored so that
+     * irrelevant data bumps do not reset an in-progress session.
+     */
+    private static boolean plansEquivalent(NavigationPlan current, NavigationPlan rebuilt) {
+        if (!current.destinationStationGroupId().equals(rebuilt.destinationStationGroupId())) {
+            return false;
         }
+        List<NavigationSegment> currentSegments = current.segments();
+        List<NavigationSegment> rebuiltSegments = rebuilt.segments();
+        if (currentSegments.size() != rebuiltSegments.size()) {
+            return false;
+        }
+        for (int i = 0; i < currentSegments.size(); i++) {
+            if (!currentSegments.get(i).contentEquals(rebuiltSegments.get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Fails the session after an automatic route rebuild. These rebuild failures used
+     * to be silent because the notification was gated on a user-requested flag that
+     * was never set, so a warning notice is now sent unconditionally.
+     */
+    private static void failRouteInvalidated() {
+        session.phase = NavigationPhase.ROUTE_FAILED;
+        session.completedAtMs = System.currentTimeMillis();
+        sendNotice(ClientboundSlideNoticePayload.Kind.WARNING, List.of(0xFFFF5E4D),
+                Component.translatable("navigation.superpipeslide.route_invalidated"),
+                List.of());
     }
 
     private static void updateBoardingProximity(LocalPlayer player) {
+        // Reaching the destination station on foot completes navigation from any
+        // walking phase; stationArrivalDistance already filters other dimensions out.
+        if (stationArrivalDistance(player, session.plan.destinationStationGroupId()) <= DESTINATION_ARRIVAL_RANGE) {
+            completeArrivalOnFoot();
+            return;
+        }
+        if (session.phase == NavigationPhase.FINAL_WALK_APPROACH) {
+            // Guidance-only phase: the world target points at the destination station
+            // and no boarding proximity is tracked.
+            return;
+        }
         Optional<TargetInfo> target = currentWorldTarget(player);
         if (target.isEmpty()) {
             return;
@@ -587,13 +743,22 @@ public final class ClientNavigationController {
         session.phase = targetPhase;
     }
 
+    /** Marks the session arrived and sends the standard arrival notice for an on-foot arrival. */
+    private static void completeArrivalOnFoot() {
+        session.phase = NavigationPhase.ARRIVED;
+        session.completedAtMs = System.currentTimeMillis();
+        sendNotice(ClientboundSlideNoticePayload.Kind.ARRIVAL, session.plan.primaryColors(),
+                Component.translatable("navigation.superpipeslide.arrived", stationName(session.plan.destinationStationGroupId())),
+                List.of(line(Component.translatable("navigation.superpipeslide.arrived.body"))));
+    }
+
     private static void updateRidingApproach(LocalPlayer player) {
         NavigationSegment segment = session.currentSegment();
         Optional<TargetInfo> alighting = targetInfo(player, segment.alightingPlatformStopId(), segment.colors(), ridingTargetKind(segment));
         if (alighting.isEmpty()) {
             return;
         }
-        if (alighting.get().distance() <= 32.0D) {
+        if (alighting.get().distance() <= APPROACHING_ANNOUNCE_RANGE) {
             session.phase = segment.finalWalkInstruction().isPresent()
                     ? NavigationPhase.APPROACHING_TRANSFER
                     : (segment.finalSegment() ? NavigationPhase.APPROACHING_DESTINATION : NavigationPhase.APPROACHING_TRANSFER);
@@ -626,6 +791,9 @@ public final class ClientNavigationController {
         if (session.isRiding()) {
             return targetInfo(player, segment.alightingPlatformStopId(), segment.colors(), ridingTargetKind(segment));
         }
+        if (session.phase == NavigationPhase.FINAL_WALK_APPROACH) {
+            return finalWalkDestinationTarget(player);
+        }
         TargetKind kind = TargetKind.BOARDING;
         if (session.phase == NavigationPhase.TRANSFER_WALK || session.phase == NavigationPhase.TRANSFER_PROXIMITY) {
             Optional<TransferInstruction> transfer = previousSegmentTransferInstruction();
@@ -637,12 +805,38 @@ public final class ClientNavigationController {
         return targetInfo(player, segment.boardingPlatformStopId(), segment.colors(), kind);
     }
 
+    /**
+     * World target for the on-foot final leg: the destination station's center. Empty
+     * when the destination is missing or in another dimension, so no marker is drawn.
+     */
+    private static Optional<TargetInfo> finalWalkDestinationTarget(LocalPlayer player) {
+        UUID destinationStationGroupId = session.plan.destinationStationGroupId();
+        Optional<StationGroup> station = ClientRouteDataCache.stationGroup(destinationStationGroupId);
+        if (station.isEmpty() || !station.get().levelKey().equals(player.level().dimension())) {
+            return Optional.empty();
+        }
+        Vec3 position = Vec3.atCenterOf(station.get().stationBlockPos());
+        return Optional.of(new TargetInfo(
+                destinationStationGroupId,
+                stationName(destinationStationGroupId).getString(),
+                position,
+                position.distanceTo(player.position()),
+                session.plan.primaryColors(),
+                TargetKind.FINAL_WALK));
+    }
+
     private static Optional<TargetInfo> targetInfo(LocalPlayer player, UUID platformStopId, List<Integer> colors, TargetKind kind) {
         Optional<PlatformStop> platformStop = ClientRouteDataCache.platformStop(platformStopId);
         if (platformStop.isEmpty()) {
             return Optional.empty();
         }
-        Vec3 position = platformTargetPosition(platformStop.get(), player.position());
+        // Never target a platform stop in another dimension: its coordinates would
+        // render as a ghost marker inside the player's current world.
+        Optional<StationGroup> station = ClientRouteDataCache.stationGroup(platformStop.get().stationGroupId());
+        if (station.isEmpty() || !station.get().levelKey().equals(player.level().dimension())) {
+            return Optional.empty();
+        }
+        Vec3 position = NavigationPlanner.platformTargetPosition(platformStop.get(), player.position());
         return Optional.of(new TargetInfo(
                 platformStopId,
                 stationName(platformStopId).getString(),
@@ -663,517 +857,7 @@ public final class ClientNavigationController {
         return remaining <= EARLY_TRANSFER_PATH_RANGE && target.map(value -> value.distance() <= EARLY_TRANSFER_WORLD_RANGE * 1.6D).orElse(false);
     }
 
-    private static Optional<NavigationPlan> buildPlan(LocalPlayer player, UUID destinationStationGroupId) {
-        NavigationGraph graph = graph();
-        List<PlatformStop> destinationStops = ClientRouteDataCache.platformStopsInStation(destinationStationGroupId);
-        Set<UUID> destinationStopIds = new HashSet<>();
-        destinationStops.forEach(stop -> destinationStopIds.add(stop.id()));
-        AccessDistances accessDistances = new AccessDistances(player.position());
-        boolean allowDestinationAsStart = isPhysicallyAtDestination(player, destinationStationGroupId);
-
-        List<PlatformStop> preferredStarts = preferredStartCandidates(player, destinationStationGroupId, accessDistances, allowDestinationAsStart);
-        CandidatePlan best = bestCandidatePlan(graph, preferredStarts, destinationStopIds, destinationStationGroupId, accessDistances);
-        if (best == null) {
-            best = bestCandidatePlan(graph, fallbackStartCandidates(player, destinationStationGroupId, accessDistances, allowDestinationAsStart), destinationStopIds, destinationStationGroupId, accessDistances);
-        }
-        if (best == null) {
-            return Optional.empty();
-        }
-
-        List<NavigationSegment> segments = compressSegments(best.search().edges());
-        if (segments.isEmpty() && !allowDestinationAsStart) {
-            return Optional.empty();
-        }
-        UUID boardingPlatformStopId = segments.isEmpty() ? best.start().id() : segments.getFirst().boardingPlatformStopId();
-        StationGroup startStation = ClientRouteDataCache.platformStop(boardingPlatformStopId)
-                .flatMap(stop -> ClientRouteDataCache.stationGroup(stop.stationGroupId()))
-                .orElse(null);
-        if (startStation == null) {
-            return Optional.empty();
-        }
-        int estimatedTicks = (int) Math.round(best.cost());
-        int sameStationTransferCount = 0;
-        int outOfStationTransferCount = 0;
-        int crossDimensionTransferCount = 0;
-        boolean finalWalk = false;
-        boolean crossDimensionFinalWalk = false;
-        for (NavigationSegment segment : segments) {
-            if (segment.transferInstruction().isPresent()) {
-                switch (segment.transferInstruction().get().kind()) {
-                    case SAME_STATION -> sameStationTransferCount++;
-                    case OUT_OF_STATION -> outOfStationTransferCount++;
-                    case CROSS_DIMENSION_OUT_OF_STATION -> crossDimensionTransferCount++;
-                }
-            }
-            if (segment.finalWalkInstruction().isPresent()) {
-                finalWalk = true;
-                crossDimensionFinalWalk = segment.finalWalkInstruction().get().kind() == TransferKind.CROSS_DIMENSION_OUT_OF_STATION;
-            }
-        }
-        int transferCount = sameStationTransferCount + outOfStationTransferCount + crossDimensionTransferCount;
-        List<Integer> primaryColors = segments.isEmpty() ? List.of(0xFF47A6FF) : segments.getFirst().colors();
-        return Optional.of(new NavigationPlan(
-                UUID.randomUUID(),
-                ClientRouteDataCache.revision(),
-                ClientPipeNetworkCache.aggregateRevision(),
-                startStation.id(),
-                destinationStationGroupId,
-                best.start().id(),
-                segments,
-                estimatedTicks,
-                transferCount,
-                sameStationTransferCount,
-                outOfStationTransferCount,
-                crossDimensionTransferCount,
-                finalWalk,
-                crossDimensionFinalWalk,
-                best.walkDistance(),
-                primaryColors));
-    }
-
-    @Nullable
-    private static CandidatePlan bestCandidatePlan(NavigationGraph graph, List<PlatformStop> candidates, Set<UUID> destinationStopIds, UUID destinationStationGroupId, AccessDistances accessDistances) {
-        if (candidates.isEmpty()) {
-            return null;
-        }
-        SearchResult search = solve(graph, candidates, destinationStopIds, destinationStationGroupId, accessDistances);
-        if (search.start().isEmpty()) {
-            return null;
-        }
-        double walk = accessDistances.platformDistance(search.start().get());
-        return new CandidatePlan(search.start().get(), search, search.cost(), walk);
-    }
-
-    private static List<PlatformStop> preferredStartCandidates(LocalPlayer player, UUID destinationStationGroupId, AccessDistances accessDistances, boolean allowDestinationAsStart) {
-        ResourceKey<Level> level = player.level().dimension();
-        LinkedHashMap<UUID, PlatformStop> nearbyDestinationStops = new LinkedHashMap<>();
-        if (ClientRouteDataCache.stationGroup(destinationStationGroupId)
-                .filter(station -> station.levelKey().equals(level))
-                .filter(station -> allowDestinationAsStart)
-                .isPresent()) {
-            ClientRouteDataCache.platformStopsInStation(destinationStationGroupId).stream()
-                    .sorted(Comparator.comparingDouble(accessDistances::platformDistance))
-                    .forEach(stop -> nearbyDestinationStops.put(stop.id(), stop));
-            if (!nearbyDestinationStops.isEmpty()) {
-                return List.copyOf(nearbyDestinationStops.values());
-            }
-        }
-        LinkedHashMap<UUID, PlatformStop> localStationCandidates = new LinkedHashMap<>();
-        ClientRouteDataCache.stationGroups().stream()
-                .filter(station -> station.levelKey().equals(level))
-                .filter(station -> accessDistances.stationGroupDistance(station.id()) <= BOARDING_LOCAL_RANGE)
-                .filter(station -> allowDestinationAsStart || !station.id().equals(destinationStationGroupId))
-                .sorted(Comparator.comparingDouble(station -> accessDistances.stationGroupDistance(station.id())))
-                .forEach(station -> ClientRouteDataCache.platformStopsInStation(station.id()).stream()
-                        .filter(stop -> !routeEdgesFrom(stop.id()).isEmpty())
-                        .sorted(Comparator.comparingDouble(accessDistances::platformDistance))
-                        .forEach(stop -> localStationCandidates.put(stop.id(), stop)));
-        if (!localStationCandidates.isEmpty()) {
-            return List.copyOf(localStationCandidates.values());
-        }
-        return List.of();
-    }
-
-    private static List<PlatformStop> fallbackStartCandidates(LocalPlayer player, UUID destinationStationGroupId, AccessDistances accessDistances, boolean allowDestinationAsStart) {
-        ResourceKey<Level> level = player.level().dimension();
-        LinkedHashMap<UUID, PlatformStop> candidates = new LinkedHashMap<>();
-        ClientRouteDataCache.platformStops().stream()
-                .filter(stop -> ClientRouteDataCache.stationGroup(stop.stationGroupId()).map(group -> group.levelKey().equals(level)).orElse(false))
-                .filter(stop -> allowDestinationAsStart || !stop.stationGroupId().equals(destinationStationGroupId))
-                .filter(stop -> !routeEdgesFrom(stop.id()).isEmpty())
-                .sorted(Comparator
-                        .comparingDouble((PlatformStop stop) -> accessDistances.platformDistance(stop))
-                        .thenComparingDouble(stop -> accessDistances.stationGroupDistance(stop.stationGroupId())))
-                .forEach(stop -> candidates.put(stop.id(), stop));
-        return List.copyOf(candidates.values());
-    }
-
-    private static NavigationGraph graph() {
-        long routeRevision = ClientRouteDataCache.revision();
-        long pipeRevision = ClientPipeNetworkCache.aggregateRevision();
-        if (cachedGraph != null && cachedRouteRevision == routeRevision && cachedPipeRevision == pipeRevision) {
-            return cachedGraph;
-        }
-        Map<NodeKey, List<GraphEdge>> edges = new LinkedHashMap<>();
-        for (RouteLayout layout : ClientRouteDataCache.routeLayouts()) {
-            addLayoutEdges(edges, layout, 1);
-            if (layout.bidirectional()) {
-                addLayoutEdges(edges, layout, -1);
-            }
-        }
-        Set<UUID> rideConnectedStops = rideConnectedStops(edges);
-        addSameStationTransferEdges(edges, rideConnectedStops);
-        addConfiguredOutOfStationTransferEdges(edges);
-        cachedGraph = new NavigationGraph(edges, rideConnectedStops);
-        cachedRouteRevision = routeRevision;
-        cachedPipeRevision = pipeRevision;
-        return cachedGraph;
-    }
-
-    private static Set<UUID> rideConnectedStops(Map<NodeKey, List<GraphEdge>> edges) {
-        Set<UUID> result = new HashSet<>();
-        for (List<GraphEdge> outgoing : edges.values()) {
-            for (GraphEdge edge : outgoing) {
-                if (edge.kind() == EdgeKind.RIDE) {
-                    result.add(edge.from().id());
-                    result.add(edge.to().id());
-                }
-            }
-        }
-        return result;
-    }
-
-    private static void addSameStationTransferEdges(Map<NodeKey, List<GraphEdge>> edges, Set<UUID> rideConnectedStops) {
-        for (StationGroup station : ClientRouteDataCache.stationGroups()) {
-            List<PlatformStop> stops = ClientRouteDataCache.platformStopsInStation(station.id());
-            NodeKey stationNode = NodeKey.stationTransfer(station.id());
-            for (PlatformStop stop : stops) {
-                if (!rideConnectedStops.contains(stop.id())) {
-                    continue;
-                }
-                edges.computeIfAbsent(NodeKey.platform(stop.id()), ignored -> new ArrayList<>()).add(GraphEdge.stationAccess(stop.id(), station));
-                edges.computeIfAbsent(stationNode, ignored -> new ArrayList<>()).add(GraphEdge.stationBoard(station, stop.id(), SAME_STATION_TRANSFER_PENALTY_TICKS));
-            }
-        }
-    }
-
-    private static void addConfiguredOutOfStationTransferEdges(Map<NodeKey, List<GraphEdge>> edges) {
-        for (StationTransferLink link : ClientRouteDataCache.stationTransferLinks()) {
-            Optional<StationGroup> firstStation = ClientRouteDataCache.stationGroup(link.firstStationGroupId());
-            Optional<StationGroup> secondStation = ClientRouteDataCache.stationGroup(link.secondStationGroupId());
-            if (firstStation.isEmpty() || secondStation.isEmpty()) {
-                continue;
-            }
-            TransferKind forwardKind = firstStation.get().levelKey().equals(secondStation.get().levelKey())
-                    ? TransferKind.OUT_OF_STATION
-                    : TransferKind.CROSS_DIMENSION_OUT_OF_STATION;
-            edges.computeIfAbsent(NodeKey.stationTransfer(firstStation.get().id()), ignored -> new ArrayList<>()).add(GraphEdge.stationTransfer(
-                    link.estimatedWalkTicks(),
-                    forwardKind,
-                    link.id(),
-                    firstStation.get(),
-                    secondStation.get()));
-            edges.computeIfAbsent(NodeKey.stationTransfer(secondStation.get().id()), ignored -> new ArrayList<>()).add(GraphEdge.stationTransfer(
-                    link.estimatedWalkTicks(),
-                    forwardKind,
-                    link.id(),
-                    secondStation.get(),
-                    firstStation.get()));
-        }
-    }
-
-    private static void addLayoutEdges(Map<NodeKey, List<GraphEdge>> edges, RouteLayout layout, int direction) {
-        for (UUID platformStopId : layout.orderedPlatformStops()) {
-            RouteLayoutNavigator.nextStep(layout, platformStopId, direction, ClientRouteDataCache::routeSection)
-                    .filter(step -> step.section().statusForDirection(direction) == RouteSectionStatus.VALID)
-                    .ifPresent(step -> {
-                        RouteSection section = step.section();
-                        double length = Math.max(1.0D, section.lengthForDirection(direction));
-                        double cost = length / ESTIMATED_RIDE_SPEED;
-                        List<Integer> colors = ClientRouteDataCache.routeLine(layout.routeLineId())
-                                .map(RouteLine::themeColors)
-                                .filter(values -> !values.isEmpty())
-                                .orElse(List.of(0xFF47A6FF));
-                        String lineName = ClientRouteDataCache.routeLine(layout.routeLineId()).map(RouteLine::displayName).orElse("Route");
-                        edges.computeIfAbsent(NodeKey.platform(platformStopId), ignored -> new ArrayList<>()).add(GraphEdge.ride(
-                                platformStopId,
-                                step.nextPlatformStopId(),
-                                layout.routeLineId(),
-                                layout.id(),
-                                direction,
-                                section.id(),
-                                step.sectionIndex(),
-                                cost,
-                                colors,
-                                lineName));
-                    });
-        }
-    }
-
-    private static List<GraphEdge> routeEdgesFrom(UUID platformStopId) {
-        return graph().edgesFrom(NodeKey.platform(platformStopId)).stream().filter(edge -> edge.kind() == EdgeKind.RIDE).toList();
-    }
-
-    private static SearchResult solve(NavigationGraph graph, List<PlatformStop> starts, Set<UUID> destinations, UUID destinationStationGroupId, AccessDistances accessDistances) {
-        PriorityQueue<SearchNode> open = new PriorityQueue<>(Comparator.comparingDouble(SearchNode::cost));
-        Map<SearchState, Double> bestCost = new HashMap<>();
-        Map<SearchState, PathBackref> backrefs = new HashMap<>();
-        Map<SearchState, PlatformStop> sourceByState = new HashMap<>();
-        for (PlatformStop start : starts) {
-            SearchState state = new SearchState(NodeKey.platform(start.id()), false);
-            double walk = accessDistances.platformDistance(start);
-            double cost = walk * WALK_TICKS_PER_BLOCK + BOARDING_PENALTY_TICKS;
-            if (cost >= bestCost.getOrDefault(state, Double.MAX_VALUE)) {
-                continue;
-            }
-            bestCost.put(state, cost);
-            sourceByState.put(state, start);
-            open.add(new SearchNode(state, cost));
-        }
-        SearchState reached = null;
-        while (!open.isEmpty()) {
-            SearchNode current = open.poll();
-            if (current.cost() > bestCost.getOrDefault(current.state(), Double.MAX_VALUE) + 1.0E-6D) {
-                continue;
-            }
-            if (isTargetState(current.state(), destinations, destinationStationGroupId)) {
-                reached = current.state();
-                break;
-            }
-            for (GraphEdge edge : graph.edgesFrom(current.state().node())) {
-                if (!current.state().hasRide() && edge.kind() != EdgeKind.RIDE) {
-                    continue;
-                }
-                boolean nextHasRide = current.state().hasRide() || edge.kind() == EdgeKind.RIDE;
-                SearchState nextState = new SearchState(edge.to(), nextHasRide);
-                double nextCost = current.cost() + edge.cost();
-                if (nextCost >= bestCost.getOrDefault(nextState, Double.MAX_VALUE)) {
-                    continue;
-                }
-                bestCost.put(nextState, nextCost);
-                backrefs.put(nextState, new PathBackref(current.state(), edge));
-                PlatformStop source = sourceByState.get(current.state());
-                if (source != null) {
-                    sourceByState.put(nextState, source);
-                }
-                open.add(new SearchNode(nextState, nextCost));
-            }
-        }
-        if (reached == null) {
-            return new SearchResult(List.of(), Double.MAX_VALUE, Optional.empty());
-        }
-        ArrayList<GraphEdge> path = new ArrayList<>();
-        SearchState cursor = reached;
-        while (backrefs.containsKey(cursor)) {
-            PathBackref backref = backrefs.get(cursor);
-            if (backref == null) {
-                return new SearchResult(List.of(), Double.MAX_VALUE, Optional.empty());
-            }
-            path.add(0, backref.edge());
-            cursor = backref.previous();
-        }
-        return new SearchResult(path, bestCost.getOrDefault(reached, Double.MAX_VALUE), Optional.ofNullable(sourceByState.get(reached)));
-    }
-
-    private static boolean isTargetState(SearchState state, Set<UUID> destinations, UUID destinationStationGroupId) {
-        if (state.node().type() == NodeType.PLATFORM && destinations.contains(state.node().id())) {
-            return true;
-        }
-        return state.hasRide()
-                && state.node().type() == NodeType.STATION_TRANSFER
-                && destinationStationGroupId.equals(state.node().id());
-    }
-
-    private static List<NavigationSegment> compressSegments(List<GraphEdge> edges) {
-        ArrayList<SegmentBuilder> builders = new ArrayList<>();
-        SegmentBuilder current = null;
-        ArrayList<GraphEdge> transferAfterCurrent = new ArrayList<>();
-        for (GraphEdge edge : edges) {
-            if (!(edge instanceof RideEdge rideEdge)) {
-                transferAfterCurrent.add(edge);
-                continue;
-            }
-            if (current != null && current.matches(rideEdge) && transferAfterCurrent.isEmpty()) {
-                current.add(rideEdge);
-                continue;
-            }
-            if (current != null) {
-                current.transferAfterEdges.addAll(transferAfterCurrent);
-                transferAfterCurrent.clear();
-                builders.add(current);
-            } else {
-                transferAfterCurrent.clear();
-            }
-            current = new SegmentBuilder(rideEdge);
-        }
-        if (current != null) {
-            current.transferAfterEdges.addAll(transferAfterCurrent);
-            builders.add(current);
-        } else if (!builders.isEmpty() && !transferAfterCurrent.isEmpty()) {
-            builders.getLast().transferAfterEdges.addAll(transferAfterCurrent);
-        }
-        ArrayList<NavigationSegment> segments = new ArrayList<>();
-        for (int i = 0; i < builders.size(); i++) {
-            SegmentBuilder builder = builders.get(i);
-            boolean finalSegment = i == builders.size() - 1;
-            Optional<TransferInstruction> transferInstruction = Optional.empty();
-            Optional<FinalWalkInstruction> finalWalkInstruction = Optional.empty();
-            if (!finalSegment) {
-                SegmentBuilder next = builders.get(i + 1);
-                transferInstruction = transferInstruction(builder, next);
-            } else if (!builder.transferAfterEdges.isEmpty()) {
-                finalWalkInstruction = finalWalkInstruction(builder.transferAfterEdges);
-            }
-            segments.add(builder.build(i, finalSegment, transferInstruction, finalWalkInstruction));
-        }
-        return List.copyOf(segments);
-    }
-
-    private static Optional<TransferInstruction> transferInstruction(SegmentBuilder builder, SegmentBuilder next) {
-        Optional<TransferEdge> semanticEdge = transferSemanticEdge(builder.transferAfterEdges);
-        if (semanticEdge.isPresent()) {
-            return Optional.of(TransferInstruction.fromEdge(semanticEdge.get(), next.boardingPlatformStopId, next.lineName, next.colors));
-        }
-        Optional<PlatformStop> fromStop = ClientRouteDataCache.platformStop(builder.alightingPlatformStopId());
-        Optional<PlatformStop> toStop = ClientRouteDataCache.platformStop(next.boardingPlatformStopId);
-        Optional<StationGroup> fromStation = fromStop.flatMap(stop -> ClientRouteDataCache.stationGroup(stop.stationGroupId()));
-        Optional<StationGroup> toStation = toStop.flatMap(stop -> ClientRouteDataCache.stationGroup(stop.stationGroupId()));
-        if (fromStation.isEmpty() || toStation.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(TransferInstruction.sameStation(
-                fromStation.get(),
-                toStation.get(),
-                next.boardingPlatformStopId,
-                next.lineName,
-                next.colors));
-    }
-
-    private static Optional<FinalWalkInstruction> finalWalkInstruction(List<GraphEdge> transferEdges) {
-        return transferEdges.stream()
-                .filter(TransferEdge.class::isInstance)
-                .map(TransferEdge.class::cast)
-                .filter(edge -> edge.transferKind() == TransferKind.OUT_OF_STATION || edge.transferKind() == TransferKind.CROSS_DIMENSION_OUT_OF_STATION)
-                .reduce((ignored, edge) -> edge)
-                .flatMap(edge -> {
-                    if (edge.transferLinkId().isEmpty()) {
-                        return Optional.empty();
-                    }
-                    return Optional.of(new FinalWalkInstruction(
-                            edge.transferKind(),
-                            edge.fromStationGroupId(),
-                            edge.toStationGroupId(),
-                            edge.transferLinkId(),
-                            edge.fromLevelKey(),
-                            edge.toLevelKey()));
-                });
-    }
-
-    private static Optional<TransferEdge> transferSemanticEdge(List<GraphEdge> transferEdges) {
-        Optional<TransferEdge> outOfStation = transferEdges.stream()
-                .filter(TransferEdge.class::isInstance)
-                .map(TransferEdge.class::cast)
-                .filter(edge -> edge.transferKind() == TransferKind.OUT_OF_STATION || edge.transferKind() == TransferKind.CROSS_DIMENSION_OUT_OF_STATION)
-                .reduce((ignored, edge) -> edge);
-        if (outOfStation.isPresent()) {
-            return outOfStation;
-        }
-        return transferEdges.stream()
-                .filter(TransferEdge.class::isInstance)
-                .map(TransferEdge.class::cast)
-                .filter(edge -> edge.transferKind() == TransferKind.SAME_STATION)
-                .reduce((ignored, edge) -> edge);
-    }
-
-    private static DestinationSearchResult destinationResult(ResourceKey<Level> playerLevel, Vec3 playerPosition, StationGroup station, String query, boolean reachable) {
-        int score = query.isBlank() ? 1 : matchScore(station, query);
-        double distance = station.levelKey().equals(playerLevel) ? Vec3.atCenterOf(station.stationBlockPos()).distanceTo(playerPosition) : Double.MAX_VALUE / 4.0D;
-        return new DestinationSearchResult(station.id(), station.primaryName(), station.translatedNames(), station.levelKey(), distance, reachable, score);
-    }
-
-    private static Set<UUID> reachableStationGroups(LocalPlayer player) {
-        NavigationGraph graph = graph();
-        long routeRevision = ClientRouteDataCache.revision();
-        long pipeRevision = ClientPipeNetworkCache.aggregateRevision();
-        ResourceKey<Level> level = player.level().dimension();
-        if (cachedReachability != null
-                && cachedReachability.routeRevision() == routeRevision
-                && cachedReachability.pipeRevision() == pipeRevision
-                && cachedReachability.levelKey().equals(level)) {
-            return cachedReachability.stationGroupIds();
-        }
-        LinkedHashSet<UUID> reachable = new LinkedHashSet<>();
-        ArrayDeque<SearchState> queue = new ArrayDeque<>();
-        HashSet<SearchState> visited = new HashSet<>();
-        for (PlatformStop start : ClientRouteDataCache.platformStops()) {
-            if (!graph.hasRideConnection(start.id())) {
-                continue;
-            }
-            if (ClientRouteDataCache.stationGroup(start.stationGroupId()).map(station -> station.levelKey().equals(level)).orElse(false)) {
-                SearchState state = new SearchState(NodeKey.platform(start.id()), false);
-                if (visited.add(state)) {
-                    queue.add(state);
-                }
-            }
-        }
-        while (!queue.isEmpty()) {
-            SearchState current = queue.removeFirst();
-            if (current.hasRide()) {
-                addReachableStation(current.node(), reachable);
-            }
-            for (GraphEdge edge : graph.edgesFrom(current.node())) {
-                if (!current.hasRide() && edge.kind() != EdgeKind.RIDE) {
-                    continue;
-                }
-                SearchState next = new SearchState(edge.to(), current.hasRide() || edge.kind() == EdgeKind.RIDE);
-                if (visited.add(next)) {
-                    queue.add(next);
-                }
-            }
-        }
-        cachedReachability = new ReachabilityCache(routeRevision, pipeRevision, level, Set.copyOf(reachable));
-        return cachedReachability.stationGroupIds();
-    }
-
-    private static void addReachableStation(NodeKey node, Set<UUID> reachable) {
-        if (node.type() == NodeType.STATION_TRANSFER) {
-            reachable.add(node.id());
-            return;
-        }
-        if (node.type() == NodeType.PLATFORM) {
-            ClientRouteDataCache.platformStop(node.id()).ifPresent(stop -> reachable.add(stop.stationGroupId()));
-        }
-    }
-
-    private static int matchScore(StationGroup station, String query) {
-        String primary = station.primaryName().toLowerCase(Locale.ROOT);
-        if (primary.equals(query)) {
-            return 100;
-        }
-        if (primary.startsWith(query)) {
-            return 80;
-        }
-        if (primary.contains(query)) {
-            return 60;
-        }
-        for (String translated : station.translatedNames()) {
-            String value = translated.toLowerCase(Locale.ROOT);
-            if (value.equals(query)) {
-                return 95;
-            }
-            if (value.startsWith(query)) {
-                return 75;
-            }
-            if (value.contains(query)) {
-                return 55;
-            }
-        }
-        return 0;
-    }
-
-    private static Vec3 platformPosition(PlatformStop platformStop) {
-        return ClientPipeNetworkCache.connection(platformStop.connectionRef())
-                .map(connection -> connection.positionAt(connection.length() * 0.5D))
-                .orElseGet(() -> ClientRouteDataCache.stationGroup(platformStop.stationGroupId())
-                        .map(group -> Vec3.atCenterOf(group.stationBlockPos()))
-                        .orElse(Vec3.ZERO));
-    }
-
-    private static Vec3 platformTargetPosition(PlatformStop platformStop, Vec3 playerPosition) {
-        return ClientPipeNetworkCache.connection(platformStop.connectionRef())
-                .map(connection -> SlideGeometry.project(connection, playerPosition).closestPoint())
-                .orElseGet(() -> ClientRouteDataCache.stationGroup(platformStop.stationGroupId())
-                        .map(group -> Vec3.atCenterOf(group.stationBlockPos()))
-                        .orElse(Vec3.ZERO));
-    }
-
-    private static double platformAccessDistance(PlatformStop platformStop, Vec3 playerPosition) {
-        return ClientPipeNetworkCache.connection(platformStop.connectionRef())
-                .map(connection -> SlideGeometry.project(connection, playerPosition).distance())
-                .orElseGet(() -> platformPosition(platformStop).distanceTo(playerPosition));
-    }
-
-    private static boolean isPhysicallyAtDestination(LocalPlayer player, UUID destinationStationGroupId) {
+    static boolean isPhysicallyAtDestination(LocalPlayer player, UUID destinationStationGroupId) {
         return stationArrivalDistance(player, destinationStationGroupId) <= DESTINATION_ARRIVAL_RANGE;
     }
 
@@ -1185,7 +869,7 @@ public final class ClientNavigationController {
                 .map(station -> {
                     double best = Vec3.atCenterOf(station.stationBlockPos()).distanceTo(playerPosition);
                     for (PlatformStop stop : ClientRouteDataCache.platformStopsInStation(stationGroupId)) {
-                        best = Math.min(best, platformPosition(stop).distanceTo(playerPosition));
+                        best = Math.min(best, NavigationPlanner.platformPosition(stop).distanceTo(playerPosition));
                     }
                     return best;
                 })
@@ -1281,9 +965,19 @@ public final class ClientNavigationController {
         suppressGenericArrivalNotice(segment.alightingPlatformStopId());
         FinalWalkInstruction instruction = segment.finalWalkInstruction().get();
         rememberRouteHudStopContext(segment, segment.alightingPlatformStopId());
-        session.phase = NavigationPhase.ARRIVED;
-        session.completedAtMs = System.currentTimeMillis();
         boolean crossDimension = instruction.kind() == TransferKind.CROSS_DIMENSION_OUT_OF_STATION;
+        session.walkStartDistance = Double.NaN;
+        if (crossDimension) {
+            // The destination is in another dimension and cannot be tracked from the
+            // alighting world, so the session completes immediately (as before).
+            session.phase = NavigationPhase.ARRIVED;
+            session.completedAtMs = System.currentTimeMillis();
+        } else {
+            // Same-dimension final walk: keep guiding the player to the destination
+            // station; updateBoardingProximity promotes the session to ARRIVED once
+            // the player comes within arrival range.
+            session.phase = NavigationPhase.FINAL_WALK_APPROACH;
+        }
         ArrayList<ClientboundSlideNoticePayload.NoticeLine> lines = new ArrayList<>();
         if (early) {
             lines.add(line(Component.translatable("navigation.superpipeslide.early_transfer.body")));
@@ -1319,7 +1013,9 @@ public final class ClientNavigationController {
         Component title = early
                 ? Component.translatable("navigation.superpipeslide.early_transfer")
                 : Component.translatable(titleKey, stationName(next.boardingPlatformStopId()));
-        sendNotice(ClientboundSlideNoticePayload.Kind.WARNING, next.colors(),
+        // Routine same-station / out-of-station transfers are demoted to STANDARD;
+        // only cross-dimension transfers and early-alighting prompts keep WARNING.
+        sendNotice(early || instruction.kind() == TransferKind.CROSS_DIMENSION_OUT_OF_STATION ? ClientboundSlideNoticePayload.Kind.WARNING : ClientboundSlideNoticePayload.Kind.STANDARD, next.colors(),
                 title,
                 lines);
     }
@@ -1406,6 +1102,8 @@ public final class ClientNavigationController {
         TRANSFER_WALK,
         TRANSFER_PROXIMITY,
         APPROACHING_DESTINATION,
+        /** On-foot final leg after alighting: guide to the destination station until within arrival range. */
+        FINAL_WALK_APPROACH,
         ARRIVED,
         ROUTE_FAILED
     }
@@ -1491,6 +1189,24 @@ public final class ClientNavigationController {
         public boolean transferAfter() {
             return this.transferInstruction.isPresent();
         }
+
+        /**
+         * Structural comparison used by automatic route rebuilds: two segments are
+         * equivalent when they ride the same layout in the same direction between
+         * the same platforms over the same section refs, with the same follow-up
+         * transfer/final-walk kind. Cost estimates and cosmetic fields (colors,
+         * line name) are ignored on purpose.
+         */
+        public boolean contentEquals(NavigationSegment other) {
+            return this.layoutId.equals(other.layoutId)
+                    && this.routeDirection == other.routeDirection
+                    && this.boardingPlatformStopId.equals(other.boardingPlatformStopId)
+                    && this.alightingPlatformStopId.equals(other.alightingPlatformStopId)
+                    && this.routeSections.equals(other.routeSections)
+                    && this.finalSegment == other.finalSegment
+                    && this.transferInstruction.map(TransferInstruction::kind).equals(other.transferInstruction.map(TransferInstruction::kind))
+                    && this.finalWalkInstruction.map(FinalWalkInstruction::kind).equals(other.finalWalkInstruction.map(FinalWalkInstruction::kind));
+        }
     }
 
     public record NavigationSectionRef(UUID routeSectionId, int layoutIndex) {}
@@ -1510,7 +1226,7 @@ public final class ClientNavigationController {
             nextColors = List.copyOf(nextColors);
         }
 
-        private static TransferInstruction fromEdge(TransferEdge edge, UUID nextBoardingPlatformStopId, String nextLineName, List<Integer> nextColors) {
+        static TransferInstruction fromEdge(NavigationPlanner.TransferEdge edge, UUID nextBoardingPlatformStopId, String nextLineName, List<Integer> nextColors) {
             return new TransferInstruction(
                     edge.transferKind(),
                     edge.fromStationGroupId(),
@@ -1523,7 +1239,7 @@ public final class ClientNavigationController {
                     nextColors);
         }
 
-        private static TransferInstruction sameStation(StationGroup fromStation, StationGroup toStation, UUID nextBoardingPlatformStopId, String nextLineName, List<Integer> nextColors) {
+        static TransferInstruction sameStation(StationGroup fromStation, StationGroup toStation, UUID nextBoardingPlatformStopId, String nextLineName, List<Integer> nextColors) {
             return new TransferInstruction(
                     TransferKind.SAME_STATION,
                     fromStation.id(),
@@ -1618,15 +1334,24 @@ public final class ClientNavigationController {
         private int segmentIndex;
         private boolean enteredCurrentBoardingRange;
         private long lastRangeExitMessageTick = Long.MIN_VALUE;
-        private boolean earlyTransferWarningShown;
-        private boolean rebuildAfterRide;
         @Nullable
         private ClientRouteHudSnapshot.NavigationStopContext lastRouteHudStopContext;
         private long completedAtMs;
+        /** Dimension the player was seen in on the previous tick; null until the first tick observes it. */
         @Nullable
-        private UUID slideSessionId;
-        @Nullable
-        private UUID lastPassedPlatformStopId;
+        private ResourceKey<Level> lastSeenDimension;
+        /** Ticks spent in a riding phase without any active slide or pipe transfer (soft-lock reconciliation). */
+        private int ridingLivenessGraceTicks;
+        /**
+         * Distance to the current leg's target when the walk started: the plan's
+         * initialWalkDistance for the first leg, NaN ("record the first observed
+         * distance lazily") for transfer and final-walk legs.
+         */
+        private double walkStartDistance = Double.NaN;
+        /** Last successfully computed riding progress, retained while the slide HUD snapshot is unavailable. */
+        private double lastRidingSegmentProgress;
+        /** Segment index lastRidingSegmentProgress belongs to; -1 when nothing was computed yet. */
+        private int lastRidingProgressSegmentIndex = -1;
 
         private NavigationSession(NavigationPlan plan, NavigationPhase phase) {
             this.plan = plan;
@@ -1652,255 +1377,6 @@ public final class ClientNavigationController {
 
         private NavigationSessionSnapshot snapshot() {
             return new NavigationSessionSnapshot(this.phase, this.plan, this.segmentIndex);
-        }
-    }
-
-    private record NavigationGraph(Map<NodeKey, List<GraphEdge>> edges, Set<UUID> rideConnectedStops) {
-        private NavigationGraph {
-            rideConnectedStops = Set.copyOf(rideConnectedStops);
-        }
-
-        private List<GraphEdge> edgesFrom(NodeKey node) {
-            return this.edges.getOrDefault(node, List.of());
-        }
-
-        private boolean hasRideConnection(UUID platformStopId) {
-            return this.rideConnectedStops.contains(platformStopId);
-        }
-    }
-
-    private enum NodeType {
-        PLATFORM,
-        STATION_TRANSFER
-    }
-
-    private record NodeKey(NodeType type, UUID id) {
-        private static NodeKey platform(UUID platformStopId) {
-            return new NodeKey(NodeType.PLATFORM, platformStopId);
-        }
-
-        private static NodeKey stationTransfer(UUID stationGroupId) {
-            return new NodeKey(NodeType.STATION_TRANSFER, stationGroupId);
-        }
-    }
-
-    private enum EdgeKind {
-        RIDE,
-        STATION_ACCESS,
-        TRANSFER
-    }
-
-    private sealed interface GraphEdge permits RideEdge, StationAccessEdge, TransferEdge {
-        EdgeKind kind();
-
-        NodeKey from();
-
-        NodeKey to();
-
-        double cost();
-
-        static RideEdge ride(UUID from, UUID to, UUID routeLineId, UUID layoutId, int routeDirection, UUID routeSectionId, int layoutIndex, double cost, List<Integer> colors, String lineName) {
-            return new RideEdge(NodeKey.platform(from), NodeKey.platform(to), routeLineId, layoutId, routeDirection, routeSectionId, layoutIndex, cost, colors, lineName);
-        }
-
-        static StationAccessEdge stationAccess(UUID platformStopId, StationGroup station) {
-            return new StationAccessEdge(NodeKey.platform(platformStopId), NodeKey.stationTransfer(station.id()), station.id(), station.levelKey());
-        }
-
-        static TransferEdge stationBoard(StationGroup station, UUID platformStopId, double cost) {
-            return new TransferEdge(
-                    NodeKey.stationTransfer(station.id()),
-                    NodeKey.platform(platformStopId),
-                    cost,
-                    TransferKind.SAME_STATION,
-                    Optional.empty(),
-                    station.id(),
-                    station.id(),
-                    station.levelKey(),
-                    station.levelKey());
-        }
-
-        static TransferEdge stationTransfer(double cost, TransferKind transferKind, UUID transferLinkId, StationGroup fromStation, StationGroup toStation) {
-            return new TransferEdge(
-                    NodeKey.stationTransfer(fromStation.id()),
-                    NodeKey.stationTransfer(toStation.id()),
-                    cost,
-                    transferKind,
-                    Optional.of(transferLinkId),
-                    fromStation.id(),
-                    toStation.id(),
-                    fromStation.levelKey(),
-                    toStation.levelKey());
-        }
-    }
-
-    private record RideEdge(
-            NodeKey from,
-            NodeKey to,
-            UUID routeLineId,
-            UUID layoutId,
-            int routeDirection,
-            UUID routeSectionId,
-            int layoutIndex,
-            double cost,
-            List<Integer> colors,
-            String lineName) implements GraphEdge {
-        private RideEdge {
-            routeDirection = routeDirection < 0 ? -1 : 1;
-            colors = List.copyOf(colors);
-        }
-
-        @Override
-        public EdgeKind kind() {
-            return EdgeKind.RIDE;
-        }
-    }
-
-    private record StationAccessEdge(
-            NodeKey from,
-            NodeKey to,
-            UUID stationGroupId,
-            ResourceKey<Level> levelKey) implements GraphEdge {
-        @Override
-        public EdgeKind kind() {
-            return EdgeKind.STATION_ACCESS;
-        }
-
-        @Override
-        public double cost() {
-            return 0.0D;
-        }
-    }
-
-    private record TransferEdge(
-            NodeKey from,
-            NodeKey to,
-            double cost,
-            TransferKind transferKind,
-            Optional<UUID> transferLinkId,
-            UUID fromStationGroupId,
-            UUID toStationGroupId,
-            ResourceKey<Level> fromLevelKey,
-            ResourceKey<Level> toLevelKey) implements GraphEdge {
-        private TransferEdge {
-            transferLinkId = transferLinkId == null ? Optional.empty() : transferLinkId;
-        }
-
-        @Override
-        public EdgeKind kind() {
-            return EdgeKind.TRANSFER;
-        }
-    }
-
-    private record SearchState(NodeKey node, boolean hasRide) {}
-
-    private record SearchNode(SearchState state, double cost) {}
-
-    private record PathBackref(SearchState previous, GraphEdge edge) {}
-
-    private record SearchResult(List<GraphEdge> edges, double cost, Optional<PlatformStop> start) {
-        private SearchResult {
-            edges = List.copyOf(edges);
-            start = start == null ? Optional.empty() : start;
-        }
-    }
-
-    private record ReachabilityCache(long routeRevision, long pipeRevision, ResourceKey<Level> levelKey, Set<UUID> stationGroupIds) {
-        private ReachabilityCache {
-            stationGroupIds = Set.copyOf(stationGroupIds);
-        }
-    }
-
-    private record CandidatePlan(PlatformStop start, SearchResult search, double cost, double walkDistance) {}
-
-    private static final class AccessDistances {
-        private final Vec3 playerPosition;
-        private final Map<UUID, Double> platformDistances = new HashMap<>();
-        private final Map<UUID, Double> stationGroupDistances = new HashMap<>();
-
-        private AccessDistances(Vec3 playerPosition) {
-            this.playerPosition = playerPosition;
-        }
-
-        private double platformDistance(PlatformStop platformStop) {
-            return this.platformDistances.computeIfAbsent(platformStop.id(), ignored -> platformAccessDistance(platformStop, this.playerPosition));
-        }
-
-        private double stationGroupDistance(UUID stationGroupId) {
-            return this.stationGroupDistances.computeIfAbsent(stationGroupId, ignored -> {
-                List<PlatformStop> stops = ClientRouteDataCache.platformStopsInStation(stationGroupId);
-                if (stops.isEmpty()) {
-                    return ClientRouteDataCache.stationGroup(stationGroupId)
-                            .map(station -> Vec3.atCenterOf(station.stationBlockPos()).distanceTo(this.playerPosition))
-                            .orElse(Double.MAX_VALUE / 4.0D);
-                }
-                return stops.stream()
-                        .mapToDouble(this::platformDistance)
-                        .min()
-                        .orElse(Double.MAX_VALUE / 4.0D);
-            });
-        }
-    }
-
-    private static final class SegmentBuilder {
-        private final UUID routeLineId;
-        private final UUID layoutId;
-        private final int routeDirection;
-        private final UUID boardingPlatformStopId;
-        private final ArrayList<UUID> stationSequence = new ArrayList<>();
-        private final ArrayList<UUID> sectionIds = new ArrayList<>();
-        private final ArrayList<NavigationSectionRef> sectionRefs = new ArrayList<>();
-        private final ArrayList<Integer> colors;
-        private final String lineName;
-        private double cost;
-        private final ArrayList<GraphEdge> transferAfterEdges = new ArrayList<>();
-
-        private SegmentBuilder(RideEdge first) {
-            this.routeLineId = first.routeLineId();
-            this.layoutId = first.layoutId();
-            this.routeDirection = first.routeDirection();
-            this.boardingPlatformStopId = first.from().id();
-            this.colors = new ArrayList<>(first.colors());
-            this.lineName = first.lineName();
-            this.stationSequence.add(first.from().id());
-            this.add(first);
-        }
-
-        private boolean matches(RideEdge edge) {
-            return this.routeLineId.equals(edge.routeLineId())
-                    && this.layoutId.equals(edge.layoutId())
-                    && this.routeDirection == edge.routeDirection()
-                    && this.stationSequence.getLast().equals(edge.from().id());
-        }
-
-        private void add(RideEdge edge) {
-            this.stationSequence.add(edge.to().id());
-            this.sectionIds.add(edge.routeSectionId());
-            this.sectionRefs.add(new NavigationSectionRef(edge.routeSectionId(), edge.layoutIndex()));
-            this.cost += edge.cost();
-        }
-
-        private UUID alightingPlatformStopId() {
-            return this.stationSequence.getLast();
-        }
-
-        private NavigationSegment build(int index, boolean finalSegment, Optional<TransferInstruction> transferInstruction, Optional<FinalWalkInstruction> finalWalkInstruction) {
-            return new NavigationSegment(
-                    index,
-                    this.routeLineId,
-                    this.layoutId,
-                    this.routeDirection,
-                    this.boardingPlatformStopId,
-                    this.alightingPlatformStopId(),
-                    this.stationSequence,
-                    this.sectionIds,
-                    this.sectionRefs,
-                    transferInstruction,
-                    finalWalkInstruction,
-                    finalSegment,
-                    (int) Math.round(this.cost),
-                    this.colors,
-                    this.lineName);
         }
     }
 }

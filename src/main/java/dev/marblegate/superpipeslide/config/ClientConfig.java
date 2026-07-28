@@ -49,6 +49,30 @@ public final class ClientConfig {
             .comment("Maximum decoded pixel count for one projection network image.")
             .defineInRange("projectionNetworkImageMaxPixels", 2048 * 2048, 64 * 64, 4096 * 4096);
 
+    public static final ModConfigSpec.BooleanValue FULL_MAP_DEBUG_OVERLAY = BUILDER
+            .comment("Whether the full route map screen draws a debug overlay line with the active dimension's schematic solver quality summary (solve time, node overlaps, edge crossings, label overlaps, layout profile). Intended for layout tuning and development.")
+            .define("fullMapDebugOverlay", false);
+
+    public static final ModConfigSpec.BooleanValue ENABLE_ROUTE_HUD = BUILDER
+            .comment("Whether the route HUD (the horizontal line strip shown at the top of the screen while sliding) is visible.")
+            .define("enableRouteHud", true);
+
+    public static final ModConfigSpec.BooleanValue ENABLE_NAVIGATION_HUD = BUILDER
+            .comment("Whether the navigation HUD (the vertical progress rail, info card, and target indicator shown during navigation) is visible.")
+            .define("enableNavigationHud", true);
+
+    public static final ModConfigSpec.ConfigValue<String> FULL_ROUTE_MAP_DEFAULT_LAYOUT_MODE = BUILDER
+            .comment("Layout mode the full route map opens with, and the mode restored on game restart. One of PHYSICAL, GEOGRAPHIC, PRACTICAL, SCHEMATIC. PHYSICAL shows real track geometry, GEOGRAPHIC and PRACTICAL are relaxed geographic layouts, SCHEMATIC is the pure metro-style line diagram. Stored as a string so this common config class never references client-only classes.")
+            .define("fullRouteMapDefaultLayoutMode", "PRACTICAL", value -> value instanceof String name && java.util.Set.of("PHYSICAL", "GEOGRAPHIC", "PRACTICAL", "SCHEMATIC").contains(name));
+
+    public static final ModConfigSpec.DoubleValue FULL_ROUTE_MAP_ZOOM_SENSITIVITY = BUILDER
+            .comment("Mouse wheel zoom sensitivity of the full route map. 1.0 is the default step, lower values zoom in smaller steps, higher values in larger steps.")
+            .defineInRange("fullRouteMapZoomSensitivity", 1.0D, 0.5D, 2.0D);
+
+    public static final ModConfigSpec.DoubleValue HUD_ANIMATION_SCALE = BUILDER
+            .comment("Speed multiplier for HUD animations (route HUD and navigation HUD pulses, flows, and transitions). 1.0 is full speed, 0.0 freezes all HUD animation.")
+            .defineInRange("hudAnimationScale", 1.0D, 0.0D, 1.0D);
+
     public static final ModConfigSpec SPEC = BUILDER.build();
 
     public static void save() {

@@ -7,8 +7,7 @@ import java.util.Optional;
 public record ClusterCardVisualGraph(
         List<ClusterCardVisualNode> nodes,
         List<ClusterCardVisualEdge> edges,
-        Aabb2 bounds,
-        boolean fallback) {
+        Aabb2 bounds) {
     public ClusterCardVisualGraph {
         nodes = List.copyOf(nodes);
         edges = List.copyOf(edges);

@@ -24,7 +24,7 @@ public final class SPSGui {
     public static final int PANEL_HIGHLIGHT = 0xFFE6F0FA;
     public static final int TEXT_PRIMARY = 0xFF1B2633;
     public static final int TEXT_SECONDARY = 0xFF415166;
-    public static final int TEXT_MUTED = 0xFF708092;
+    public static final int TEXT_MUTED = 0xFF5F6E80;
     public static final int TEXT_DISABLED = 0xFFA8B2BF;
     public static final int WARNING = 0xFFB37A00;
     public static final int DANGER = 0xFFD33C3C;
@@ -42,6 +42,29 @@ public final class SPSGui {
 
     public static void text(GuiGraphicsExtractor graphics, Font font, String text, int x, int y, int color) {
         graphics.text(font, text, x, y, color, false);
+    }
+
+    /**
+     * Text with a halo: the glyph run is stamped in {@code haloColor} at the eight 1px
+     * neighbor positions before the body is drawn, so labels stay readable over busy
+     * backgrounds. A fully transparent halo color disables the halo.
+     */
+    public static void text(GuiGraphicsExtractor graphics, Font font, String text, int x, int y, int color, int haloColor) {
+        textHalo(graphics, font, text, x, y, haloColor);
+        text(graphics, font, text, x, y, color);
+    }
+
+    private static void textHalo(GuiGraphicsExtractor graphics, Font font, String text, int x, int y, int haloColor) {
+        if ((haloColor >>> 24) == 0) {
+            return;
+        }
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                if (dx != 0 || dy != 0) {
+                    graphics.text(font, text, x + dx, y + dy, haloColor, false);
+                }
+            }
+        }
     }
 
     public static void text(GuiGraphicsExtractor graphics, Font font, Component text, int x, int y, int color) {
@@ -77,7 +100,7 @@ public final class SPSGui {
             drawIconButton(graphics, new Rect(panel.x() + 5, panel.y() + 3, 16, 16), Icon.BACK, false, contains(panel.x() + 5, panel.y() + 3, 16, 16, mouseX, mouseY), TEXT_SECONDARY);
             titleX = panel.x() + 25;
         }
-        SPSGui.text(graphics, font, scrollingText(font, title.getString(), panel.width() - 80, title.getString().hashCode()), titleX, panel.y() + 7, TEXT_PRIMARY);
+        scrollingText(graphics, font, title.getString(), titleX, panel.y() + 7, TEXT_PRIMARY, panel.width() - 80, title.getString().hashCode());
 
         int x = panel.right() - 21;
         for (int i = actions.size() - 1; i >= 0; i--) {
@@ -140,7 +163,21 @@ public final class SPSGui {
     }
 
     public static void drawIconButton(GuiGraphicsExtractor graphics, Rect rect, Icon icon, boolean disabled, boolean hovered, int color) {
-        int effectiveColor = disabled ? TEXT_DISABLED : icon == Icon.SAVE ? SAVE_ATTENTION : color;
+        drawIconButton(graphics, rect, icon, disabled, hovered, false, color, color, PANEL_HIGHLIGHT, PANEL_HIGHLIGHT, PANEL_LINE);
+    }
+
+    /**
+     * Icon button with explicit state colors, covering the full-map control style on top of
+     * the base panel style.
+     *
+     * @param color              icon tint in the resting state
+     * @param activeColor        icon tint while hovered or selected
+     * @param hoveredBackground  background while hovered (only used when not selected)
+     * @param selectedBackground background while selected
+     * @param selectedBorder     border while selected
+     */
+    public static void drawIconButton(GuiGraphicsExtractor graphics, Rect rect, Icon icon, boolean disabled, boolean hovered, boolean selected, int color, int activeColor, int hoveredBackground, int selectedBackground, int selectedBorder) {
+        int effectiveColor = disabled ? TEXT_DISABLED : icon == Icon.SAVE ? SAVE_ATTENTION : hovered || selected ? activeColor : color;
         int bg;
         int border;
         if (disabled) {
@@ -149,8 +186,11 @@ public final class SPSGui {
         } else if (icon == Icon.SAVE) {
             bg = hovered ? 0xFFFFEEE6 : 0xFFFFF6EC;
             border = withAlpha(SAVE_ATTENTION, hovered ? 0xDD : 0x99);
+        } else if (selected) {
+            bg = selectedBackground;
+            border = selectedBorder;
         } else {
-            bg = hovered ? PANEL_HIGHLIGHT : PANEL_ELEVATED;
+            bg = hovered ? hoveredBackground : PANEL_ELEVATED;
             border = PANEL_LINE;
         }
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), bg);
@@ -225,9 +265,8 @@ public final class SPSGui {
                 }
             }
             if (showNames && !node.missing()) {
-                String label = marquee(node.name(), large ? 12 : 6, i);
                 float labelScale = large ? 0.82F : 0.68F;
-                rotatedText(graphics, font, label, x + dot / 2, lineY + dot / 2 + (large ? 3 : 0), node.error() ? DANGER : TEXT_SECONDARY, labelScale, 0.7853982F);
+                marqueeRotatedText(graphics, font, node.name(), x + dot / 2, lineY + dot / 2 + (large ? 3 : 0), node.error() ? DANGER : TEXT_SECONDARY, labelScale, 0.7853982F, large ? 12 : 6, i);
             }
         }
         graphics.pose().popMatrix();
@@ -363,26 +402,76 @@ public final class SPSGui {
         return clamped * clamped * (3.0D - 2.0D * clamped);
     }
 
+    /**
+     * Returns the window of {@code text} to show inside {@code maxWidth} pixels. The window
+     * follows the smooth pixel offset from {@link #marqueeOffset}, snapped to glyph
+     * boundaries; the returned string always fits inside {@code maxWidth}. Where the text can
+     * be drawn directly, prefer the pixel-exact overload
+     * {@link #scrollingText(GuiGraphicsExtractor, Font, String, int, int, int, int, int)}.
+     */
     public static String scrollingText(Font font, String text, int maxWidth, int tickSeed) {
         if (font == null || font.width(text) <= maxWidth) {
             return text;
         }
-        int maxChars = Math.max(1, text.length());
-        while (maxChars > 1 && font.width(text.substring(0, Math.min(maxChars, text.length()))) > maxWidth) {
-            maxChars--;
+        double offset = marqueeOffset(font, text, maxWidth, tickSeed);
+        int start = glyphIndexAt(font, text, offset);
+        int end = start + 1;
+        while (end < text.length() && font.width(text.substring(start, end + 1)) <= maxWidth) {
+            end++;
         }
-        return marquee(text, maxChars, tickSeed);
+        return text.substring(start, end);
     }
 
-    private static String marquee(String text, int maxChars, int tickSeed) {
-        if (text.length() <= maxChars) {
-            return text;
+    /**
+     * Draws {@code text} clipped to {@code maxWidth} pixels, scrolling back and forth with a
+     * continuous pixel offset when it does not fit. Pixel-exact replacement for
+     * {@code text(graphics, font, scrollingText(font, text, maxWidth, seed), x, y, color)}.
+     */
+    public static void scrollingText(GuiGraphicsExtractor graphics, Font font, String text, int x, int y, int color, int maxWidth, int seed) {
+        if (font.width(text) <= maxWidth) {
+            text(graphics, font, text, x, y, color);
+            return;
         }
-        int maxStart = Math.max(0, text.length() - maxChars);
-        int endPauseSteps = 2;
-        int phase = (int) ((System.currentTimeMillis() / 450L + Math.floorMod(tickSeed, 997)) % (maxStart + 1L + endPauseSteps));
-        int start = Math.min(phase, maxStart);
-        return text.substring(start, start + maxChars);
+        double offset = marqueeOffset(font, text, maxWidth, seed);
+        graphics.enableScissor(x, y - 1, x + maxWidth, y + font.lineHeight + 1);
+        graphics.pose().pushMatrix();
+        graphics.pose().translate(x - (float) offset, y);
+        text(graphics, font, text, 0, 0, color);
+        graphics.pose().popMatrix();
+        graphics.disableScissor();
+    }
+
+    /**
+     * Smooth marquee scroll offset in pixels: the text dwells at both ends and eases in
+     * between, driven by the wall clock like {@link #autoStationMapScroll}. Returns 0 when
+     * the text fits inside {@code windowWidth}.
+     */
+    public static double marqueeOffset(Font font, String text, double windowWidth, int seed) {
+        double maxScroll = font.width(text) - windowWidth;
+        if (maxScroll <= 0.0D) {
+            return 0.0D;
+        }
+        long now = System.currentTimeMillis();
+        double cycleMs = Math.max(4200.0D, 1800.0D + maxScroll * 45.0D);
+        double pause = 0.16D;
+        double phase = ((now + Math.floorMod(seed, 997) * 37L) % (long) cycleMs) / cycleMs;
+        if (phase < pause) {
+            return 0.0D;
+        }
+        if (phase > 1.0D - pause) {
+            return maxScroll;
+        }
+        double t = (phase - pause) / (1.0D - pause * 2.0D);
+        return maxScroll * easeInOut(t);
+    }
+
+    /** Largest glyph count whose advance still fits inside {@code pixelOffset}. */
+    private static int glyphIndexAt(Font font, String text, double pixelOffset) {
+        int index = 0;
+        while (index < text.length() && font.width(text.substring(0, index + 1)) <= pixelOffset) {
+            index++;
+        }
+        return index;
     }
 
     private static void drawSegment(GuiGraphicsExtractor graphics, int x1, int y, int x2, RouteSectionStatus status, List<Integer> colors, int width) {
@@ -583,8 +672,7 @@ public final class SPSGui {
             TransferLine line = transferLines.get((start + i) % transferLines.size());
             int yy = cy + i * 8;
             drawRail(graphics, x + 1, x + size + 10, yy, metroColors(line.colors()), 4);
-            String label = marquee(line.shortName(), 12, i);
-            rotatedText(graphics, font, label, x + size + 14, yy + 2, TEXT_SECONDARY, 0.56F, -0.7853982F);
+            marqueeRotatedText(graphics, font, line.shortName(), x + size + 14, yy + 2, TEXT_SECONDARY, 0.56F, -0.7853982F, 12, i);
         }
         if (transferLines.size() > maxShown) {
             smallText(graphics, font, Component.translatable("screen.superpipeslide.more_count", transferLines.size() - maxShown).getString(), x + size + 13, cy - 7, TEXT_MUTED, 0.58F);
@@ -592,10 +680,53 @@ public final class SPSGui {
     }
 
     public static void smallText(GuiGraphicsExtractor graphics, Font font, String text, int x, int y, int color, float scale) {
+        drawScaledText(graphics, font, text, x, y, color, scale);
+    }
+
+    /**
+     * Scaled text with a halo: the glyph run is stamped in {@code haloColor} at the eight
+     * 1px neighbor positions (in screen pixels, independent of {@code scale}) before the
+     * body is drawn. A fully transparent halo color disables the halo.
+     */
+    public static void smallText(GuiGraphicsExtractor graphics, Font font, String text, int x, int y, int color, float scale, int haloColor) {
+        if ((haloColor >>> 24) != 0) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    if (dx != 0 || dy != 0) {
+                        drawScaledText(graphics, font, text, x + dx, y + dy, haloColor, scale);
+                    }
+                }
+            }
+        }
+        drawScaledText(graphics, font, text, x, y, color, scale);
+    }
+
+    /**
+     * Scaled variant of {@link #scrollingText(GuiGraphicsExtractor, Font, String, int, int, int, int, int)};
+     * {@code maxWidth} is given in scaled (screen) pixels.
+     */
+    public static void smallScrollingText(GuiGraphicsExtractor graphics, Font font, String text, int x, int y, int color, float scale, int maxWidth, int seed) {
+        double windowWidth = maxWidth / scale;
+        if (font.width(text) <= windowWidth) {
+            drawScaledText(graphics, font, text, x, y, color, scale);
+            return;
+        }
+        double offset = marqueeOffset(font, text, windowWidth, seed);
+        graphics.enableScissor(x, y - 1, x + maxWidth, y + (int) Math.ceil(font.lineHeight * scale) + 1);
         graphics.pose().pushMatrix();
         graphics.pose().translate(x, y);
         graphics.pose().scale(scale, scale);
-        SPSGui.text(graphics, font, text, 0, 0, color);
+        graphics.pose().translate(-(float) offset, 0.0F);
+        text(graphics, font, text, 0, 0, color);
+        graphics.pose().popMatrix();
+        graphics.disableScissor();
+    }
+
+    private static void drawScaledText(GuiGraphicsExtractor graphics, Font font, String text, int x, int y, int color, float scale) {
+        graphics.pose().pushMatrix();
+        graphics.pose().translate(x, y);
+        graphics.pose().scale(scale, scale);
+        text(graphics, font, text, 0, 0, color);
         graphics.pose().popMatrix();
     }
 
@@ -605,6 +736,30 @@ public final class SPSGui {
         graphics.pose().rotate(radians);
         graphics.pose().scale(scale, scale);
         SPSGui.text(graphics, font, text, 0, 0, color);
+        graphics.pose().popMatrix();
+    }
+
+    /**
+     * Rotated marquee label: shows a sliding window of at most {@code maxChars} glyphs,
+     * scrolled by the smooth pixel offset from {@link #marqueeOffset} and compensated by the
+     * sub-glyph residual, so the motion is pixel-smooth instead of jumping per character.
+     */
+    private static void marqueeRotatedText(GuiGraphicsExtractor graphics, Font font, String text, int x, int y, int color, float scale, float radians, int maxChars, int seed) {
+        if (text.length() <= maxChars) {
+            rotatedText(graphics, font, text, x, y, color, scale, radians);
+            return;
+        }
+        double windowWidth = font.width(text.substring(0, maxChars));
+        double offset = marqueeOffset(font, text, windowWidth, seed);
+        int start = glyphIndexAt(font, text, offset);
+        int end = Math.min(text.length(), start + maxChars + 1);
+        double residual = offset - font.width(text.substring(0, start));
+        graphics.pose().pushMatrix();
+        graphics.pose().translate(x, y);
+        graphics.pose().rotate(radians);
+        graphics.pose().scale(scale, scale);
+        graphics.pose().translate(-(float) residual, 0.0F);
+        text(graphics, font, text.substring(start, end), 0, 0, color);
         graphics.pose().popMatrix();
     }
 

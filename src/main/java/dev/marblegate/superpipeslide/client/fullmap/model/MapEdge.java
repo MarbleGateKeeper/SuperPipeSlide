@@ -12,12 +12,24 @@ public record MapEdge(
         NodeId from,
         NodeId to,
         List<MapEdgeOccurrence> occurrences,
-        Aabb2 worldBounds) {
-    public MapEdge {
-        occurrences = List.copyOf(occurrences);
+        Aabb2 worldBounds,
+        List<UUID> routeLineIds) {
+    public MapEdge(
+            String id,
+            ResourceKey<Level> levelKey,
+            NodeId from,
+            NodeId to,
+            List<MapEdgeOccurrence> occurrences,
+            Aabb2 worldBounds) {
+        this(id, levelKey, from, to, occurrences, worldBounds, computeRouteLineIds(occurrences));
     }
 
-    public List<UUID> routeLineIds() {
-        return this.occurrences.stream().map(MapEdgeOccurrence::routeLineId).distinct().sorted().toList();
+    public MapEdge {
+        occurrences = List.copyOf(occurrences);
+        routeLineIds = List.copyOf(routeLineIds);
+    }
+
+    private static List<UUID> computeRouteLineIds(List<MapEdgeOccurrence> occurrences) {
+        return occurrences.stream().map(MapEdgeOccurrence::routeLineId).distinct().sorted().toList();
     }
 }

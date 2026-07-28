@@ -6,6 +6,7 @@ import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.SchematicLayoutConfig;
+import dev.marblegate.superpipeslide.client.fullmap.schematic.model.LabelWidthMeasurer;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicEdge;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicInputGraph;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicNode;
@@ -27,9 +28,30 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * Default {@link SchematicSolverBackend}: a force-directed global solver used for the
+ * geographic-style layout modes, and the dispatcher that delegates the pure line-diagram
+ * mode to {@link MetroMapSchematicSolver}.
+ *
+ * <p>Input contract: a {@link SchematicInputGraph} produced by
+ * {@link dev.marblegate.superpipeslide.client.fullmap.schematic.SchematicInputBuilder},
+ * plus a mode-specific {@link SchematicLayoutConfig}; an optional previous layout snapshot
+ * is used as a warm start to stabilize consecutive solves. The main loop runs a
+ * grid-accelerated repulsion/edge-force relaxation bounded by the configured iteration
+ * count and wall-clock timeout, then offsets parallel corridors and greedily routes edges
+ * from a small candidate set.
+ *
+ * <p>Threading: instances are stateful (label measurer, cached grids) and must only be
+ * used from the single map-builder thread that owns the {@code FullRouteMapCache} executor.
+ */
 public final class HeuristicGlobalSolver implements SchematicSolverBackend {
     private static final double EPSILON = 1.0E-6D;
     private final MetroMapSchematicSolver metroSolver = new MetroMapSchematicSolver();
+    // Active label width measurer, set by layoutLabels at the start of every solve pass and read
+    // by the label helpers (labelCandidates, countLabelOverlaps, labelBox). Solver instances are
+    // confined to the single-threaded map build executor in FullRouteMapCache, so this field
+    // never races.
+    private LabelWidthMeasurer labelWidthMeasurer = LabelWidthMeasurer.latinEstimate();
 
     @Override
     public SchematicLayoutResult solve(SchematicInputGraph input, SchematicLayoutConfig config, Optional<VisualRouteMapGraphSnapshot> previous) {
@@ -76,7 +98,7 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
 
         Map<String, Double> corridorOffsets = this.computeCorridorOffsets(input, stateById, config);
         RouteOutput routeOutput = this.routeEdges(input, stateById, corridorOffsets, config);
-        List<VisualLabel> labels = this.layoutLabels(states);
+        List<VisualLabel> labels = this.layoutLabels(states, input.labelWidthMeasurer());
         SchematicQualityReport quality = this.quality(input, states, routeOutput, labels, iterations, timeout, previous.isPresent(), startNanos, config);
         Aabb2 bounds = this.bounds(visualNodes, routeOutput.edgePaths, labels);
         VisualRouteMapGraph graph = new VisualRouteMapGraph(
@@ -414,7 +436,8 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
         return lanes;
     }
 
-    private List<VisualLabel> layoutLabels(List<NodeState> states) {
+    private List<VisualLabel> layoutLabels(List<NodeState> states, LabelWidthMeasurer widthMeasurer) {
+        this.labelWidthMeasurer = widthMeasurer;
         List<NodeState> ordered = states.stream()
                 .sorted(Comparator.comparingInt((NodeState state) -> state.node.importance()).reversed().thenComparing(state -> state.node.id()))
                 .toList();
@@ -436,9 +459,13 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
                     bestPenalty = penalty;
                 }
             }
-            if (best == null || bestPenalty >= 500) {
+            if (best == null) {
                 continue;
             }
+            // Never skip: the old 500 skip threshold hid low-importance station names entirely.
+            // Every label is placed at its best candidate; fallback records that the placement
+            // carries conflict penalties, letting the renderer declutter it by zoom and priority
+            // instead of the solver deleting it here.
             placed.add(new LabelBox(best.box.minX, best.box.minZ, best.box.maxX, best.box.maxZ, state.node.importance()));
             labels.add(new VisualLabel(state.node.id(), state.node.label(), best.x, best.z, state.node.importance(), labelBaseScale(state.node), bestPenalty > 0));
         }
@@ -467,6 +494,7 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
         return new SchematicQualityReport(
                 solveTimeMillis,
                 iterations,
+                "heuristic",
                 overlaps,
                 crossings,
                 labelOverlaps,
@@ -474,6 +502,10 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
                 maxDisplacement,
                 routeOutput.bendCount,
                 routeOutput.fallbackEdges,
+                // Corridor failures are not tracked by any solver stage yet.
+                0,
+                // This backend routes edges directly between node positions without a clearance
+                // pass, so edge-node conflicts are not measured here.
                 0,
                 routeOutput.loopGlyphCount,
                 routeOutput.stationInternalEdges,
@@ -484,8 +516,10 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
     private Aabb2 bounds(List<VisualNode> nodes, List<VisualEdgePath> edges, List<VisualLabel> labels) {
         Aabb2 bounds = Aabb2.empty();
         for (VisualNode node : nodes) {
+            // Only the schematic position counts: including raw world coordinates made the
+            // fit-to-screen viewport needlessly conservative whenever the layout had been
+            // compressed or shifted away from the world frame (same semantics as the metro backend).
             bounds = bounds.include(node.x(), node.z());
-            bounds = bounds.include(node.worldX(), node.worldZ());
         }
         for (VisualEdgePath edge : edges) {
             bounds = bounds.include(edge.bounds());
@@ -501,7 +535,7 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
             case FOLD_ADJACENT -> 0.85D;
             case PARALLEL_CORRIDOR -> 1.04D;
             case LOOP_BACK -> 1.12D;
-            case SHARED_TRACK, NORMAL, TRANSFER_HINT -> 1.0D;
+            case SHARED_TRACK, NORMAL -> 1.0D;
             case STATION_INTERNAL -> 0.45D;
         };
         return clamp(original * factor, config.minEdgeLengthBlocks(), config.maxEdgeLengthBlocks());
@@ -514,9 +548,7 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
         if (mode == SchematicLayoutConfig.DirectionSetMode.FREEFORM) {
             return new Vec2(ux, uz);
         }
-        double[][] directions = mode == SchematicLayoutConfig.DirectionSetMode.ORTHOGONAL
-                ? new double[][] { { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 } }
-                : new double[][] { { 1, 0 }, { Math.sqrt(0.5D), Math.sqrt(0.5D) }, { 0, 1 }, { -Math.sqrt(0.5D), Math.sqrt(0.5D) }, { -1, 0 }, { -Math.sqrt(0.5D), -Math.sqrt(0.5D) }, { 0, -1 }, { Math.sqrt(0.5D), -Math.sqrt(0.5D) } };
+        double[][] directions = new double[][] { { 1, 0 }, { Math.sqrt(0.5D), Math.sqrt(0.5D) }, { 0, 1 }, { -Math.sqrt(0.5D), Math.sqrt(0.5D) }, { -1, 0 }, { -Math.sqrt(0.5D), -Math.sqrt(0.5D) }, { 0, -1 }, { Math.sqrt(0.5D), -Math.sqrt(0.5D) } };
         double bestDot = Double.NEGATIVE_INFINITY;
         double[] best = directions[0];
         for (double[] direction : directions) {
@@ -770,22 +802,35 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
         return new Vec2(-dz / length, dx / length);
     }
 
-    private static List<LabelCandidate> labelCandidates(NodeState state) {
+    private List<LabelCandidate> labelCandidates(NodeState state) {
         double radius = nodeObstacleRadius(state.node) * 0.62D;
-        double width = Math.max(24.0D, state.node.label().length() * 4.4D);
+        // Real font measurement at the same scale the label will carry, so CJK names get boxes as
+        // wide as the text the renderer draws. Placement and overlap measurement share the clamp.
+        double width = LabelWidthMeasurer.clampWidth(this.labelWidthMeasurer.width(state.node.label(), labelBaseScale(state.node)) + 8.0D);
         double height = 10.0D;
         double gap = Math.max(8.0D, radius * 0.35D);
         double near = radius + gap;
+        // Second, tighter tier for the near side above/below, so dense clusters can still squeeze
+        // a label between the node and the first ring of obstacles.
+        double close = radius + gap * 0.4D;
+        // Last-resort tier further out on the sides, behind the intersection penalties.
+        double far = near * 1.5D;
         double diagonal = near * 0.72D;
         List<LabelCandidate> candidates = new ArrayList<>();
+        // Deterministic preference order: sides, below/above near, below/above close, diagonals,
+        // sides far. Ties keep the earliest candidate (strict < in the penalty loop).
         addLabelCandidate(candidates, state.x + near, state.z - height * 0.5D, width, height);
         addLabelCandidate(candidates, state.x - near - width, state.z - height * 0.5D, width, height);
         addLabelCandidate(candidates, state.x - width * 0.5D, state.z + near, width, height);
         addLabelCandidate(candidates, state.x - width * 0.5D, state.z - near - height, width, height);
+        addLabelCandidate(candidates, state.x - width * 0.5D, state.z + close, width, height);
+        addLabelCandidate(candidates, state.x - width * 0.5D, state.z - close - height, width, height);
         addLabelCandidate(candidates, state.x + diagonal, state.z + diagonal, width, height);
         addLabelCandidate(candidates, state.x - diagonal - width, state.z + diagonal, width, height);
         addLabelCandidate(candidates, state.x + diagonal, state.z - diagonal - height, width, height);
         addLabelCandidate(candidates, state.x - diagonal - width, state.z - diagonal - height, width, height);
+        addLabelCandidate(candidates, state.x + far, state.z - height * 0.5D, width, height);
+        addLabelCandidate(candidates, state.x - far - width, state.z - height * 0.5D, width, height);
         return candidates;
     }
 
@@ -822,20 +867,24 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
         return count;
     }
 
-    private static int countLabelOverlaps(List<VisualLabel> labels) {
+    private int countLabelOverlaps(List<VisualLabel> labels) {
         int count = 0;
         for (int i = 0; i < labels.size(); i++) {
-            VisualLabel first = labels.get(i);
-            LabelBox a = new LabelBox(first.x(), first.z(), first.x() + first.text().length() * 4.4D, first.z() + 10.0D, first.priority());
+            LabelBox a = this.labelBox(labels.get(i));
             for (int j = i + 1; j < labels.size(); j++) {
-                VisualLabel second = labels.get(j);
-                LabelBox b = new LabelBox(second.x(), second.z(), second.x() + second.text().length() * 4.4D, second.z() + 10.0D, second.priority());
-                if (a.intersects(b)) {
+                if (a.intersects(this.labelBox(labels.get(j)))) {
                     count++;
                 }
             }
         }
         return count;
+    }
+
+    private LabelBox labelBox(VisualLabel label) {
+        // Same measurer, padding, and clamp as labelCandidates, so the overlap metric counts
+        // exactly the boxes the placement stage negotiated.
+        double width = LabelWidthMeasurer.clampWidth(this.labelWidthMeasurer.width(label.text(), label.scale()) + 8.0D);
+        return new LabelBox(label.x(), label.z(), label.x() + width, label.z() + 10.0D, label.priority());
     }
 
     private static boolean sharesEndpoint(VisualEdgePath first, VisualEdgePath second) {

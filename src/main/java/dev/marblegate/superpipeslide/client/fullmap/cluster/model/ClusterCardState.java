@@ -15,7 +15,11 @@ public record ClusterCardState(Optional<ClusterCardViewport> viewport) {
         return new ClusterCardState(Optional.of(viewport));
     }
 
-    public ClusterCardState fitViewport() {
+    /**
+     * Clears any custom viewport so the next frame re-fits the card contents; named
+     * "reset" rather than "fit" because the fit is computed by the renderer, not here.
+     */
+    public ClusterCardState resetViewport() {
         return new ClusterCardState(Optional.empty());
     }
 }

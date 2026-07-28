@@ -3,6 +3,7 @@ package dev.marblegate.superpipeslide.common.core.geometry;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
@@ -14,10 +15,30 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
-public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> levelKey, PipeAnchorId fromAnchor, PipeAnchorId toAnchor, CurveSpec curveSpec, Optional<PipeEndpoints> endpoints, Optional<PipeConnectionAttributes> attributes, Optional<UUID> platformStopId) {
-
+/**
+ * Immutable pipe connection value object. This is a hand-written class rather than a
+ * record only so it can carry the lazily computed {@link #cachedLength} field (records
+ * cannot declare extra instance state); the public API and equals/hashCode/toString keep
+ * record semantics, and every withX method still derives a new instance, so the cached
+ * length can never go stale.
+ */
+public final class PipeConnection {
     private static final int LENGTH_SAMPLES = 32;
     public static final int TRANSIENT_CONNECTION_KEY = 0;
+
+    private final UUID id;
+    private final int connectionKey;
+    private final ResourceKey<Level> levelKey;
+    private final PipeAnchorId fromAnchor;
+    private final PipeAnchorId toAnchor;
+    private final CurveSpec curveSpec;
+    private final Optional<PipeEndpoints> endpoints;
+    private final Optional<PipeConnectionAttributes> attributes;
+    private final Optional<UUID> platformStopId;
+    // Lazily computed arc length for the default sample count (NaN = not computed yet).
+    // volatile so the racy-but-idempotent double compute is safe when the full route map
+    // build samples connections on its background builder thread.
+    private volatile double cachedLength = Double.NaN;
 
     public static final Codec<PipeConnection> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             UUIDUtil.STRING_CODEC.fieldOf("id").forGetter(PipeConnection::id),
@@ -47,20 +68,63 @@ public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> leve
             ByteBufCodecs.optional(UUIDUtil.STREAM_CODEC).cast(),
             PipeConnection::platformStopId,
             PipeConnection::newFromAnchors);
+
     private static PipeConnection newFromAnchors(UUID id, int connectionKey, PipeAnchorId fromAnchor, PipeAnchorId toAnchor, CurveSpec curveSpec, Optional<PipeEndpoints> endpoints, Optional<PipeConnectionAttributes> attributes, Optional<UUID> platformStopId) {
         return new PipeConnection(id, connectionKey, fromAnchor.levelKey(), fromAnchor, toAnchor, curveSpec, endpoints, attributes, platformStopId);
     }
 
-    public PipeConnection {
+    public PipeConnection(UUID id, int connectionKey, ResourceKey<Level> levelKey, PipeAnchorId fromAnchor, PipeAnchorId toAnchor, CurveSpec curveSpec, Optional<PipeEndpoints> endpoints, Optional<PipeConnectionAttributes> attributes, Optional<UUID> platformStopId) {
         if (!fromAnchor.levelKey().equals(toAnchor.levelKey())) {
             throw new IllegalArgumentException("Pipe connections cannot cross dimensions");
         }
         if (fromAnchor.equals(toAnchor)) {
             throw new IllegalArgumentException("Pipe connections cannot connect an anchor to itself");
         }
-        levelKey = fromAnchor.levelKey();
-        connectionKey = Math.max(TRANSIENT_CONNECTION_KEY, connectionKey);
-        attributes = normalizeAttributes(attributes);
+        this.id = id;
+        this.connectionKey = Math.max(TRANSIENT_CONNECTION_KEY, connectionKey);
+        this.levelKey = fromAnchor.levelKey();
+        this.fromAnchor = fromAnchor;
+        this.toAnchor = toAnchor;
+        this.curveSpec = curveSpec;
+        this.endpoints = endpoints;
+        this.attributes = normalizeAttributes(attributes);
+        this.platformStopId = platformStopId;
+    }
+
+    public UUID id() {
+        return this.id;
+    }
+
+    public int connectionKey() {
+        return this.connectionKey;
+    }
+
+    public ResourceKey<Level> levelKey() {
+        return this.levelKey;
+    }
+
+    public PipeAnchorId fromAnchor() {
+        return this.fromAnchor;
+    }
+
+    public PipeAnchorId toAnchor() {
+        return this.toAnchor;
+    }
+
+    public CurveSpec curveSpec() {
+        return this.curveSpec;
+    }
+
+    public Optional<PipeEndpoints> endpoints() {
+        return this.endpoints;
+    }
+
+    public Optional<PipeConnectionAttributes> attributes() {
+        return this.attributes;
+    }
+
+    public Optional<UUID> platformStopId() {
+        return this.platformStopId;
     }
 
     public static PipeConnection straight(PipeAnchorId fromAnchor, PipeAnchorId toAnchor) {
@@ -125,7 +189,12 @@ public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> leve
     }
 
     public double length() {
-        return this.sampledLength(LENGTH_SAMPLES);
+        double cached = this.cachedLength;
+        if (Double.isNaN(cached)) {
+            cached = this.sampledLength(LENGTH_SAMPLES);
+            this.cachedLength = cached;
+        }
+        return cached;
     }
 
     public double sampledLength(int samples) {
@@ -274,5 +343,42 @@ public record PipeConnection(UUID id, int connectionKey, ResourceKey<Level> leve
             }
         }
         return points[0];
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof PipeConnection that)) {
+            return false;
+        }
+        return this.connectionKey == that.connectionKey
+                && this.id.equals(that.id)
+                && this.levelKey.equals(that.levelKey)
+                && this.fromAnchor.equals(that.fromAnchor)
+                && this.toAnchor.equals(that.toAnchor)
+                && this.curveSpec.equals(that.curveSpec)
+                && this.endpoints.equals(that.endpoints)
+                && this.attributes.equals(that.attributes)
+                && this.platformStopId.equals(that.platformStopId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(this.id, this.connectionKey, this.levelKey, this.fromAnchor, this.toAnchor, this.curveSpec, this.endpoints, this.attributes, this.platformStopId);
+    }
+
+    @Override
+    public String toString() {
+        return "PipeConnection[id=" + this.id
+                + ", connectionKey=" + this.connectionKey
+                + ", levelKey=" + this.levelKey
+                + ", fromAnchor=" + this.fromAnchor
+                + ", toAnchor=" + this.toAnchor
+                + ", curveSpec=" + this.curveSpec
+                + ", endpoints=" + this.endpoints
+                + ", attributes=" + this.attributes
+                + ", platformStopId=" + this.platformStopId + "]";
     }
 }

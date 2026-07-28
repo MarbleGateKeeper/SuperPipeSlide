@@ -64,14 +64,21 @@ public final class FullMapText {
             Optional<StationGroup> station = ClientRouteDataCache.stationGroup(node.stationGroupId().get());
             if (station.isPresent()) {
                 DisplayNameStack stationName = displayNameStack(station.get());
+                // Stations visited more than once carry an occurrence on their node id;
+                // keep the " #n" suffix (1-based, matching the semantic builder labels)
+                // so repeat visits stay distinguishable in every card view.
+                String occurrenceSuffix = node.id().occurrence() > 0 ? " #" + (node.id().occurrence() + 1) : "";
                 if (node.platformStopId().isPresent()) {
                     String platform = ClientRouteDataCache.platformStop(node.platformStopId().get())
                             .map(FullMapText::platformLabel)
                             .filter(name -> !name.isBlank())
                             .orElse("");
                     if (!platform.isBlank()) {
-                        return new DisplayNameStack(stationName.primary() + " " + platform, stationName.secondary(), stationName.aliases());
+                        return new DisplayNameStack(stationName.primary() + " " + platform + occurrenceSuffix, stationName.secondary(), stationName.aliases());
                     }
+                }
+                if (!occurrenceSuffix.isEmpty()) {
+                    return new DisplayNameStack(stationName.primary() + occurrenceSuffix, stationName.secondary(), stationName.aliases());
                 }
                 return stationName;
             }
@@ -118,22 +125,5 @@ public final class FullMapText {
                 .sorted()
                 .reduce((a, b) -> a + " / " + b)
                 .orElse(Component.translatable("screen.superpipeslide.route.missing").getString());
-    }
-
-    public static String combine(String primary, List<String> translatedNames) {
-        String safePrimary = primary == null || primary.isBlank() ? "?" : primary.trim();
-        String translated = translatedNames == null
-                ? ""
-                : translatedNames.stream()
-                        .filter(name -> name != null && !name.isBlank())
-                        .map(String::trim)
-                        .filter(name -> !name.equalsIgnoreCase(safePrimary))
-                        .distinct()
-                        .reduce((a, b) -> a + " / " + b)
-                        .orElse("");
-        if (translated.isBlank()) {
-            return safePrimary;
-        }
-        return safePrimary + " / " + translated;
     }
 }

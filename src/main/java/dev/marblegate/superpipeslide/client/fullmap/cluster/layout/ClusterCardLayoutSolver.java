@@ -42,17 +42,18 @@ public final class ClusterCardLayoutSolver {
         Map<String, Vec2> positions = new LinkedHashMap<>();
         Map<String, Vec2> anchors = new HashMap<>();
         if (members.isEmpty()) {
-            return new ClusterCardVisualGraph(List.of(), List.of(), Aabb2.around(0.0D, 0.0D, 1.0D), true);
+            return new ClusterCardVisualGraph(List.of(), List.of(), Aabb2.around(0.0D, 0.0D, 1.0D));
         }
 
         double memberMinGap = memberMinGap(profile);
         if (usesVerticalFallback(members, profile)) {
+            double fallbackGap = verticalFallbackGap(members, profile);
             List<ClusterCardNode> sorted = members.stream()
                     .sorted(Comparator.comparingDouble(ClusterCardNode::worldY).reversed().thenComparing(ClusterCardNode::label).thenComparing(ClusterCardNode::id))
                     .toList();
             double center = (sorted.size() - 1) * 0.5D;
             for (int i = 0; i < sorted.size(); i++) {
-                Vec2 point = new Vec2(0.0D, (i - center) * memberMinGap);
+                Vec2 point = new Vec2(0.0D, (i - center) * fallbackGap);
                 positions.put(sorted.get(i).id(), point);
                 anchors.put(sorted.get(i).id(), point);
             }
@@ -103,7 +104,7 @@ public final class ClusterCardLayoutSolver {
         if (bounds.isEmpty()) {
             bounds = Aabb2.around(0.0D, 0.0D, 1.0D);
         }
-        return new ClusterCardVisualGraph(visualNodes, visualEdges, bounds, false);
+        return new ClusterCardVisualGraph(visualNodes, visualEdges, bounds);
     }
 
     private static boolean usesVerticalFallback(List<ClusterCardNode> members, ClusterCardProfile profile) {
@@ -212,12 +213,14 @@ public final class ClusterCardLayoutSolver {
             memberBounds = Aabb2.around(0.0D, 0.0D, 1.0D);
         }
         Aabb2 placementBounds = memberBounds.inflate(externalPortBoundsInflate(profile));
+        Map<String, ClusterCardEdge> edgesById = new HashMap<>();
+        for (ClusterCardEdge edge : graph.edges()) {
+            edgesById.put(edge.id(), edge);
+        }
         Map<Integer, List<PortPlacement>> byDirection = new LinkedHashMap<>();
         for (ClusterCardNode port : ports) {
-            ClusterCardEdge edge = graph.edges().stream()
-                    .filter(value -> value.kind() == ClusterCardEdgeKind.EXTERNAL_ROUTE && (value.from().equals(port.id()) || value.to().equals(port.id())))
-                    .findFirst()
-                    .orElse(null);
+            String edgeId = graph.edgeByPortId().get(port.id());
+            ClusterCardEdge edge = edgeId == null ? null : edgesById.get(edgeId);
             if (edge == null) {
                 positions.put(port.id(), new Vec2(memberBounds.centerX(), memberBounds.minY() - externalPortGap(profile)));
                 continue;
@@ -281,17 +284,10 @@ public final class ClusterCardLayoutSolver {
     }
 
     private static List<Vec2> routeEdge(ClusterCardEdge edge, Vec2 from, Vec2 to) {
-        if (edge.kind() != ClusterCardEdgeKind.EXTERNAL_ROUTE) {
-            return List.of(from, to);
-        }
-        double dx = to.x() - from.x();
-        double dy = to.y() - from.y();
-        double length = Math.hypot(dx, dy);
-        if (length < 1.0D) {
-            return List.of(from, to);
-        }
-        Vec2 mid = new Vec2(from.x() + dx * 0.62D, from.y() + dy * 0.62D);
-        return List.of(from, mid, to);
+        // Straight runs for every edge kind. The previous EXTERNAL_ROUTE midpoint at
+        // 0.62 sat on the same line, so it neither bent the edge nor marked the trunk
+        // midpoint (trunk dots are placed by arc length in the renderer instead).
+        return List.of(from, to);
     }
 
     private static int priority(ClusterCardNode node) {
@@ -331,6 +327,27 @@ public final class ClusterCardLayoutSolver {
 
     private static double memberMinGap(ClusterCardProfile profile) {
         return profile == ClusterCardProfile.DEEP ? DEEP_MEMBER_MIN_GAP : MEMBER_MIN_GAP;
+    }
+
+    /**
+     * Vertical-strip spacing that stays consistent with the collision radii: the fixed
+     * minimum gap wins for small members, but a pair of large members (e.g. two deep
+     * clusters needing 17 + 17 + 14 = 48px) widens the strip so the collision relax
+     * pass no longer has to push neighbours apart and wave the strip.
+     */
+    private static double verticalFallbackGap(List<ClusterCardNode> members, ClusterCardProfile profile) {
+        double largest = 0.0D;
+        double secondLargest = 0.0D;
+        for (ClusterCardNode member : members) {
+            double radius = collisionRadius(member, profile);
+            if (radius > largest) {
+                secondLargest = largest;
+                largest = radius;
+            } else if (radius > secondLargest) {
+                secondLargest = radius;
+            }
+        }
+        return Math.max(memberMinGap(profile), largest + secondLargest + memberPadding(profile));
     }
 
     private static double memberPadding(ClusterCardProfile profile) {

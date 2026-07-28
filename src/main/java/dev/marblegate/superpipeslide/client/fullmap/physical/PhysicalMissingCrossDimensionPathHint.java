@@ -1,5 +1,6 @@
 package dev.marblegate.superpipeslide.client.fullmap.physical;
 
+import dev.marblegate.superpipeslide.client.fullmap.diagnostic.MissingCrossDimensionReason;
 import java.util.UUID;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
@@ -16,4 +17,5 @@ public record PhysicalMissingCrossDimensionPathHint(
         UUID toPlatformStopId,
         ResourceKey<Level> targetLevelKey,
         double directionX,
-        double directionZ) {}
+        double directionZ,
+        MissingCrossDimensionReason reason) {}

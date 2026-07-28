@@ -1,3 +1,7 @@
+/**
+ * Immutable visual output of a schematic solve: positioned nodes, routed edge paths,
+ * lanes, labels, and hit shapes handed to {@code FullRouteMapRenderer}.
+ */
 @FieldsAreNonnullByDefault
 @MethodsReturnNonnullByDefault
 @ParametersAreNonnullByDefault

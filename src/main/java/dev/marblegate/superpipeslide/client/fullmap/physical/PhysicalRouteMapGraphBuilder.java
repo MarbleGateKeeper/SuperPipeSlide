@@ -1,9 +1,9 @@
 package dev.marblegate.superpipeslide.client.fullmap.physical;
 
-import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
 import dev.marblegate.superpipeslide.client.fullmap.diagnostic.DiagnosticType;
 import dev.marblegate.superpipeslide.client.fullmap.diagnostic.MapBuildDiagnostic;
+import dev.marblegate.superpipeslide.client.fullmap.diagnostic.MissingCrossDimensionReason;
 import dev.marblegate.superpipeslide.client.fullmap.model.FullRouteMapSourceSnapshot;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -28,6 +29,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
@@ -49,17 +52,34 @@ public final class PhysicalRouteMapGraphBuilder {
     private final Map<ResourceKey<Level>, List<PhysicalMapEdge>> edgesByLevel = new LinkedHashMap<>();
     private final Map<ResourceKey<Level>, List<PhysicalMissingCrossDimensionPathHint>> missingCrossDimensionHintsByLevel = new LinkedHashMap<>();
     private final Map<ResourceKey<Level>, List<MapBuildDiagnostic>> diagnosticsByLevel = new LinkedHashMap<>();
+    // Per-build curve sampling caches (B7): the arc length and the sampled polyline of a
+    // connection never change within one build, so they are computed once per connection
+    // instead of once per referencing section/layout.
+    private final Map<UUID, Double> lengthByConnectionId = new HashMap<>();
+    private final Map<UUID, List<Vec3>> samplesByConnectionId = new HashMap<>();
+    // Polled between build phases and inside the hot loops so a superseded build can
+    // bail out early instead of burning builder-thread time on a stale snapshot.
+    private final BooleanSupplier cancellation;
 
-    public PhysicalRouteMapGraphBuilder(FullRouteMapSourceSnapshot source) {
+    public PhysicalRouteMapGraphBuilder(FullRouteMapSourceSnapshot source, BooleanSupplier cancellation) {
         this.source = source;
+        this.cancellation = cancellation;
     }
 
     public Map<ResourceKey<Level>, PhysicalRouteMapGraph> build(Collection<ResourceKey<Level>> knownDimensions) {
         this.indexSource();
         this.indexRouteLineUsage();
+        this.checkCancelled();
         this.buildPlatformNodes();
         this.buildLayoutEdges();
+        this.checkCancelled();
         return this.finishGraphs(knownDimensions);
+    }
+
+    private void checkCancelled() {
+        if (this.cancellation.getAsBoolean()) {
+            throw new CancellationException("Full route map build cancelled");
+        }
     }
 
     private void indexSource() {
@@ -94,7 +114,7 @@ public final class PhysicalRouteMapGraphBuilder {
             if (routeLineIds.isEmpty()) {
                 continue;
             }
-            Optional<PipeConnection> connection = ClientPipeNetworkCache.connection(platform.connectionRef());
+            Optional<PipeConnection> connection = this.source.connection(platform.connectionRef());
             if (connection.isEmpty()) {
                 this.diagnostic(platform.connectionRef().levelKey(), DiagnosticType.MISSING_PIPE_CONNECTION, "Physical map platform " + platform.id() + " references missing pipe connection " + platform.connectionRef().connectionId());
                 continue;
@@ -124,6 +144,7 @@ public final class PhysicalRouteMapGraphBuilder {
 
     private void buildLayoutEdges() {
         for (RouteLayout layout : this.source.routeLayouts()) {
+            this.checkCancelled();
             RouteLine line = this.linesById.get(layout.routeLineId());
             if (line == null) {
                 this.diagnostic(null, DiagnosticType.MISSING_ROUTE_LINE, "Physical map layout " + layout.id() + " references missing route line " + layout.routeLineId());
@@ -180,8 +201,8 @@ public final class PhysicalRouteMapGraphBuilder {
             this.diagnostic(null, DiagnosticType.MISSING_PLATFORM_STOP, "Physical map fallback edge for layout " + layout.id() + " has missing endpoints");
             return;
         }
-        Optional<PipeConnection> fromConnection = ClientPipeNetworkCache.connection(from.connectionRef());
-        Optional<PipeConnection> toConnection = ClientPipeNetworkCache.connection(to.connectionRef());
+        Optional<PipeConnection> fromConnection = this.source.connection(from.connectionRef());
+        Optional<PipeConnection> toConnection = this.source.connection(to.connectionRef());
         if (fromConnection.isEmpty() || toConnection.isEmpty()) {
             ResourceKey<Level> levelKey = fromConnection.map(PipeConnection::levelKey).orElseGet(() -> to.connectionRef().levelKey());
             this.diagnostic(levelKey, DiagnosticType.MISSING_PIPE_CONNECTION, "Physical map fallback edge for section " + sectionId + " has missing platform connection");
@@ -215,7 +236,8 @@ public final class PhysicalRouteMapGraphBuilder {
     private void buildPhysicalPathEdges(RouteLine line, RouteLayout layout, RouteSection section, int layoutIndex, UUID fromStopId, UUID toStopId, List<PipeConnectionRef> pathRefs) {
         List<PathConnection> path = new ArrayList<>();
         for (PipeConnectionRef ref : pathRefs) {
-            Optional<PipeConnection> connection = ClientPipeNetworkCache.connection(ref);
+            this.checkCancelled();
+            Optional<PipeConnection> connection = this.source.connection(ref);
             if (connection.isEmpty()) {
                 this.diagnostic(ref.levelKey(), DiagnosticType.MISSING_PIPE_CONNECTION, "Physical map section " + section.id() + " references missing pipe connection " + ref.connectionId());
                 continue;
@@ -278,8 +300,9 @@ public final class PhysicalRouteMapGraphBuilder {
         List<List<Vec2>> result = new ArrayList<>();
         Vec3 previousEnd = null;
         for (int i = 0; i < run.size(); i++) {
+            this.checkCancelled();
             PipeConnection connection = run.get(i).connection();
-            List<Vec3> connectionSamples = sampleConnection(connection);
+            List<Vec3> connectionSamples = this.samplesOf(connection);
             if (connectionSamples.size() < 2) {
                 result.add(List.of());
                 continue;
@@ -308,7 +331,7 @@ public final class PhysicalRouteMapGraphBuilder {
         if (platform == null) {
             return Optional.empty();
         }
-        return ClientPipeNetworkCache.connection(platform.connectionRef()).map(PhysicalRouteMapGraphBuilder::midpoint);
+        return this.source.connection(platform.connectionRef()).map(this::midpoint);
     }
 
     private PhysicalMapNode ensureFoldNode(PipeAnchorId anchorId) {
@@ -334,14 +357,14 @@ public final class PhysicalRouteMapGraphBuilder {
     }
 
     private String foldAnchorLabel(PipeAnchorId anchorId) {
-        Optional<String> ownName = ClientPipeNetworkCache.foldAnchorAt(anchorId)
+        Optional<String> ownName = this.source.foldAnchorAt(anchorId)
                 .map(FoldAnchorNode::displayName)
                 .filter(name -> !name.isBlank());
         if (ownName.isPresent()) {
             return ownName.get();
         }
-        return ClientPipeNetworkCache.globalFoldCounterpart(anchorId)
-                .flatMap(ClientPipeNetworkCache::foldAnchorAt)
+        return this.source.foldCounterpart(anchorId)
+                .flatMap(this.source::foldAnchorAt)
                 .map(FoldAnchorNode::displayName)
                 .filter(name -> !name.isBlank())
                 .orElse(anchorId.blockPos().toShortString());
@@ -357,8 +380,8 @@ public final class PhysicalRouteMapGraphBuilder {
         }
         for (PipeAnchorId currentAnchor : currentAnchors) {
             for (PipeAnchorId nextAnchor : nextAnchors) {
-                if (ClientPipeNetworkCache.globalFoldCounterpart(currentAnchor).filter(nextAnchor::equals).isPresent()
-                        || ClientPipeNetworkCache.globalFoldCounterpart(nextAnchor).filter(currentAnchor::equals).isPresent()) {
+                if (this.source.foldCounterpart(currentAnchor).filter(nextAnchor::equals).isPresent()
+                        || this.source.foldCounterpart(nextAnchor).filter(currentAnchor::equals).isPresent()) {
                     return Optional.of(new FoldTransition(currentAnchor, nextAnchor));
                 }
             }
@@ -467,7 +490,7 @@ public final class PhysicalRouteMapGraphBuilder {
             ResourceKey<Level> targetLevelKey,
             Vec3 fromCenter,
             Vec3 toCenter) {
-        Vec2 direction = missingCrossDimensionDirection(fromCenter, toCenter, sectionId, fromStopId);
+        Vec2 direction = missingCrossDimensionDirection(fromCenter, toCenter, levelKey, targetLevelKey, sectionId, fromStopId);
         PhysicalMissingCrossDimensionPathHint hint = new PhysicalMissingCrossDimensionPathHint(
                 "physical-missing-cross:" + sectionId + ":" + levelKey.identifier() + ":" + fromStopId,
                 levelKey,
@@ -480,13 +503,29 @@ public final class PhysicalRouteMapGraphBuilder {
                 toStopId,
                 targetLevelKey,
                 direction.x(),
-                direction.y());
+                direction.y(),
+                MissingCrossDimensionReason.MISSING_PATH_DATA);
         this.missingCrossDimensionHintsByLevel.computeIfAbsent(levelKey, ignored -> new ArrayList<>()).add(hint);
     }
 
-    private static Vec2 missingCrossDimensionDirection(Vec3 fromCenter, Vec3 toCenter, UUID sectionId, UUID fromStopId) {
-        double dx = toCenter.x - fromCenter.x;
-        double dz = toCenter.z - fromCenter.z;
+    private static Vec2 missingCrossDimensionDirection(Vec3 fromCenter, Vec3 toCenter, ResourceKey<Level> levelKey, ResourceKey<Level> targetLevelKey, UUID sectionId, UUID fromStopId) {
+        // Raw world coordinates are not comparable across dimensions: the nether
+        // compresses the horizontal plane 8:1 against the overworld, so a naive
+        // coordinate delta makes the arrow deviate by a large, systematic angle.
+        // Express the target in the source dimension's scale before taking the
+        // direction. Other dimension pairs have no canonical scale factor, so their
+        // raw offset stays as an approximation.
+        double targetX = toCenter.x;
+        double targetZ = toCenter.z;
+        if (levelKey.equals(Level.OVERWORLD) && targetLevelKey.equals(Level.NETHER)) {
+            targetX *= 8.0D;
+            targetZ *= 8.0D;
+        } else if (levelKey.equals(Level.NETHER) && targetLevelKey.equals(Level.OVERWORLD)) {
+            targetX /= 8.0D;
+            targetZ /= 8.0D;
+        }
+        double dx = targetX - fromCenter.x;
+        double dz = targetZ - fromCenter.z;
         double length = Math.hypot(dx, dz);
         if (length >= 0.001D) {
             return new Vec2(dx / length, dz / length);
@@ -498,22 +537,27 @@ public final class PhysicalRouteMapGraphBuilder {
 
     private void diagnostic(ResourceKey<Level> levelKey, DiagnosticType type, String message) {
         if (levelKey == null) {
-            this.source.stationGroups().stream()
-                    .map(StationGroup::levelKey)
-                    .distinct()
-                    .forEach(key -> this.diagnosticsByLevel.computeIfAbsent(key, ignored -> new ArrayList<>()).add(new MapBuildDiagnostic(type, message)));
+            // Global diagnostic: broadcast to every dimension that owns stations (falling
+            // back to the overworld when there are none) so no dimension silently loses it.
+            Set<ResourceKey<Level>> targets = this.source.stationGroups().stream().map(StationGroup::levelKey).collect(Collectors.toCollection(LinkedHashSet::new));
+            if (targets.isEmpty()) {
+                targets = Set.of(Level.OVERWORLD);
+            }
+            targets.forEach(key -> this.diagnosticsByLevel.computeIfAbsent(key, ignored -> new ArrayList<>()).add(new MapBuildDiagnostic(type, message)));
             return;
         }
         this.diagnosticsByLevel.computeIfAbsent(levelKey, ignored -> new ArrayList<>()).add(new MapBuildDiagnostic(type, message));
     }
 
-    private static List<Vec3> sampleConnection(PipeConnection connection) {
-        double length = connection.length();
+    private List<Vec3> samplesOf(PipeConnection connection) {
+        return this.samplesByConnectionId.computeIfAbsent(connection.id(), id -> sampleConnection(connection, this.lengthOf(connection)));
+    }
+
+    private static List<Vec3> sampleConnection(PipeConnection connection, double length) {
         int samples = Math.max(2, Math.min(MAX_CONNECTION_SAMPLES, (int) Math.ceil(length / PATH_SAMPLE_STEP_BLOCKS) + 1));
         List<Vec3> result = new ArrayList<>(samples + 1);
         for (int i = 0; i <= samples; i++) {
-            double distance = length * i / samples;
-            result.add(connection.positionAt(distance));
+            result.add(connection.positionAt(length * i / samples));
         }
         return result;
     }
@@ -524,16 +568,20 @@ public final class PhysicalRouteMapGraphBuilder {
         return result;
     }
 
-    private static Vec3 midpoint(PipeConnection connection) {
-        return connection.positionAt(connection.length() * 0.5D);
+    private Vec3 midpoint(PipeConnection connection) {
+        return connection.positionAt(this.lengthOf(connection) * 0.5D);
     }
 
     private static Vec3 anchorCenter(PipeAnchorId anchorId) {
         return Vec3.atCenterOf(anchorId.blockPos());
     }
 
-    private static double lengthOf(List<PathConnection> connections) {
-        return connections.stream().mapToDouble(path -> path.connection().length()).sum();
+    private double lengthOf(PipeConnection connection) {
+        return this.lengthByConnectionId.computeIfAbsent(connection.id(), id -> connection.length());
+    }
+
+    private double lengthOf(List<PathConnection> connections) {
+        return connections.stream().mapToDouble(path -> this.lengthOf(path.connection())).sum();
     }
 
     private static Aabb2 boundsFor(List<Vec2> points) {

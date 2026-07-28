@@ -1,3 +1,8 @@
+/**
+ * Schematic ("metro map") layout pipeline for the full route map: semantic input building,
+ * interchangeable solver backends, and the immutable visual-graph output consumed by the
+ * renderer.
+ */
 @FieldsAreNonnullByDefault
 @MethodsReturnNonnullByDefault
 @ParametersAreNonnullByDefault

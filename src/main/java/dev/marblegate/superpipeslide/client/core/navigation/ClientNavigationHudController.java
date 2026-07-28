@@ -1,9 +1,13 @@
 package dev.marblegate.superpipeslide.client.core.navigation;
 
+import com.mojang.blaze3d.platform.Window;
+import dev.marblegate.superpipeslide.client.SuperPipeSlideClient;
+import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteHudController;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.client.fullmap.render.SmoothGuiPrimitives;
 import dev.marblegate.superpipeslide.client.gui.base.SPSGui;
+import dev.marblegate.superpipeslide.config.ClientConfig;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -13,6 +17,7 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3fc;
 
@@ -21,9 +26,6 @@ public final class ClientNavigationHudController {
     private static final int MUTED = 0xFFB8C6D0;
     private static final int PANEL = 0xDE121920;
     private static final int PANEL_LINE = 0x7A6EA7D6;
-    private static final int GREEN = 0xFF7CC7A2;
-    private static final int AMBER = 0xFFE0B65A;
-    private static final int BLUE = 0xFF69AEE8;
     private static final int RED = 0xFFE36D63;
     private static final double ENTRY_STEP = 0.22D;
     private static final double EXIT_STEP = 0.16D;
@@ -36,8 +38,7 @@ public final class ClientNavigationHudController {
     private static final int RAIL_TRACK_BOTTOM_PADDING = 14;
     private static final int CARD_GAP = 8;
     private static final int MAX_CARD_WIDTH = 176;
-    private static final int MIN_CARD_WIDTH = 96;
-    private static final double FAR_SCREEN_MARKER_RANGE = 64.0D;
+    private static final int CANCEL_HINT_HEIGHT = 11;
     private static final double EDGE_MARKER_MARGIN = 22.0D;
     private static final double PROJECTED_MARKER_PADDING = 18.0D;
 
@@ -50,6 +51,10 @@ public final class ClientNavigationHudController {
     private static double cardReveal;
     private static double displayedProgress = Double.NaN;
     private static long cardPeekUntilMs;
+    /** Tick-accumulated clock (50 ms per client tick) driving every HUD animation; freezes while the game is paused. */
+    private static long animationClockMs;
+    /** Render-time animation clock: {@link #animationClockMs} smoothed with the frame partial tick. */
+    private static double animationTimeMs;
 
     private ClientNavigationHudController() {}
 
@@ -61,9 +66,14 @@ public final class ClientNavigationHudController {
         cardReveal = 0.0D;
         displayedProgress = Double.NaN;
         cardPeekUntilMs = 0L;
+        animationClockMs = 0L;
+        animationTimeMs = 0.0D;
     }
 
     public static void tick() {
+        // Drive every animation from accumulated tick time so all HUD motion
+        // freezes while the game is paused; the configured scale slows or freezes it.
+        animationClockMs += Math.round(50L * ClientConfig.HUD_ANIMATION_SCALE.get());
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null || minecraft.level == null) {
             clear();
@@ -72,7 +82,7 @@ public final class ClientNavigationHudController {
         Optional<ClientNavigationController.NavigationHudSnapshot> next = ClientNavigationController.hudSnapshot(minecraft.player);
         if (next.isPresent()) {
             ClientNavigationController.NavigationHudSnapshot value = next.get();
-            long now = System.currentTimeMillis();
+            long now = animationClockMs;
             if (isAttentionPhase(value.phase()) && (lastPhase != value.phase() || lastSegmentNumber != value.segmentNumber())) {
                 cardPeekUntilMs = now + CARD_PEEK_MILLIS;
             }
@@ -98,7 +108,7 @@ public final class ClientNavigationHudController {
 
     public static void render(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null || minecraft.level == null || minecraft.options.hideGui || snapshot == null || visibleAlpha <= 0.02D) {
+        if (minecraft.player == null || minecraft.level == null || minecraft.options.hideGui || !ClientConfig.ENABLE_NAVIGATION_HUD.get() || snapshot == null || visibleAlpha <= 0.02D) {
             return;
         }
         Font font = minecraft.font;
@@ -107,6 +117,8 @@ public final class ClientNavigationHudController {
         if (alpha <= 0.02D) {
             return;
         }
+        // Smooth the tick clock with the frame partial tick; frozen while paused.
+        animationTimeMs = animationClockMs + deltaTracker.getGameTimeDeltaPartialTick(true) * 50.0D;
 
         HudGeometry geometry = geometry(graphics.guiWidth(), graphics.guiHeight(), snapshot);
         renderProgressRail(graphics, snapshot, geometry, alpha);
@@ -145,11 +157,12 @@ public final class ClientNavigationHudController {
         int cardX = railX + RAIL_WIDTH + CARD_GAP;
         int cardWidth = Math.min(MAX_CARD_WIDTH, Math.max(0, screenWidth - cardX - 8));
         int cardHeight = value.target().isPresent() || !value.detailText().isBlank() ? 54 : 44;
+        if (ClientNavigationController.isNavigating()) {
+            // Reserve a footer line for the cancel-navigation key hint.
+            cardHeight += CANCEL_HINT_HEIGHT;
+        }
         int preferredCardY = railY + 8;
         int cardY = Math.max(6, Math.min(screenHeight - cardHeight - 6, preferredCardY));
-        if (cardWidth > 0 && cardWidth < MIN_CARD_WIDTH) {
-            cardWidth = Math.max(0, cardWidth);
-        }
         return new HudGeometry(railX, railY, RAIL_WIDTH, railHeight, cardX, cardY, cardWidth, cardHeight);
     }
 
@@ -269,6 +282,10 @@ public final class ClientNavigationHudController {
         if (!value.detailText().isBlank() && height >= 50) {
             graphics.text(font, SPSGui.ellipsize(font, value.detailText(), right - textX), textX, y + 33, color(MUTED, cardAlpha * 0.72D), true);
         }
+        if (ClientNavigationController.isNavigating()) {
+            String hint = Component.translatable("navigation.superpipeslide.hud.cancel_hint", SuperPipeSlideClient.CANCEL_NAVIGATION.getTranslatedKeyMessage()).getString();
+            graphics.text(font, SPSGui.ellipsize(font, hint, right - textX), textX, y + height - CANCEL_HINT_HEIGHT + 1, color(MUTED, cardAlpha * 0.60D), true);
+        }
     }
 
     private static String targetLine(ClientNavigationController.NavigationHudSnapshot value, String distance, boolean distanceIsSeparate) {
@@ -294,8 +311,8 @@ public final class ClientNavigationHudController {
     }
 
     private static void drawStateGlyph(GuiGraphicsExtractor graphics, Vec2 center, ClientNavigationController.NavigationPhase phase, int accent, double alpha) {
-        long now = System.currentTimeMillis();
-        double pulse = 0.5D + 0.5D * Math.sin(now / 210.0D);
+        long now = (long) animationTimeMs;
+        double pulse = pulse(now, 210.0D);
         switch (phase) {
             case ROUTE_FAILED -> {
                 SmoothGuiPrimitives.diamond(graphics, center, 7.2D, color(RED, alpha * 0.78D));
@@ -303,14 +320,14 @@ public final class ClientNavigationHudController {
                 SmoothGuiPrimitives.line(graphics, new Vec2(center.x() + 3.2D, center.y() - 3.2D), new Vec2(center.x() - 3.2D, center.y() + 3.2D), 1.4D, color(0xFFFFFFFF, alpha * 0.86D));
             }
             case ARRIVED -> {
-                SmoothGuiPrimitives.circle(graphics, center, 7.2D + pulse * 0.7D, color(GREEN, alpha * 0.22D));
-                SmoothGuiPrimitives.circle(graphics, center, 5.3D, color(GREEN, alpha * 0.86D));
+                SmoothGuiPrimitives.circle(graphics, center, 7.2D + pulse * 0.7D, color(NavigationSemanticColors.DESTINATION, alpha * 0.22D));
+                SmoothGuiPrimitives.circle(graphics, center, 5.3D, color(NavigationSemanticColors.DESTINATION, alpha * 0.86D));
                 SmoothGuiPrimitives.line(graphics, new Vec2(center.x() - 3.2D, center.y()), new Vec2(center.x() - 0.8D, center.y() + 2.7D), 1.6D, color(0xFFFFFFFF, alpha));
                 SmoothGuiPrimitives.line(graphics, new Vec2(center.x() - 0.8D, center.y() + 2.7D), new Vec2(center.x() + 4.0D, center.y() - 3.6D), 1.6D, color(0xFFFFFFFF, alpha));
             }
-            case TRANSFER_WALK, TRANSFER_PROXIMITY -> {
-                SmoothGuiPrimitives.circle(graphics, center, 7.0D + pulse, color(AMBER, alpha * 0.22D));
-                SmoothGuiPrimitives.diamond(graphics, center, 5.2D, color(AMBER, alpha * 0.88D));
+            case TRANSFER_WALK, TRANSFER_PROXIMITY, FINAL_WALK_APPROACH -> {
+                SmoothGuiPrimitives.circle(graphics, center, 7.0D + pulse, color(NavigationSemanticColors.FINAL_WALK, alpha * 0.22D));
+                SmoothGuiPrimitives.diamond(graphics, center, 5.2D, color(NavigationSemanticColors.FINAL_WALK, alpha * 0.88D));
                 SmoothGuiPrimitives.line(graphics, new Vec2(center.x() - 4.2D, center.y()), new Vec2(center.x() + 4.2D, center.y()), 1.4D, color(0xFFFFFFFF, alpha * 0.72D));
             }
             default -> {
@@ -321,26 +338,37 @@ public final class ClientNavigationHudController {
         }
     }
 
+    /**
+     * Shared on-screen ownership test for the navigation world target, consulted by
+     * both indicator surfaces so exactly one of them draws it: inside the view
+     * frustum (projected safe area) the world marker owns the target; outside it —
+     * behind the camera or past the safe area, at any distance — the HUD edge arrow
+     * takes over.
+     */
+    public static boolean isWorldTargetOnScreen(Minecraft minecraft, ClientNavigationController.WorldTarget target) {
+        Window window = minecraft.getWindow();
+        TargetProjection projection = projectTarget(minecraft, target, window.getGuiScaledWidth(), window.getGuiScaledHeight());
+        return !projection.behind() && projection.insideSafeArea();
+    }
+
+    /** True while the navigation info card is on screen, so the world label can drop its redundant station name. */
+    public static boolean isInfoCardVisible() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return !minecraft.options.hideGui && snapshot != null && visibleAlpha > 0.08D && cardReveal > 0.08D;
+    }
+
     private static void renderWorldTargetIndicator(GuiGraphicsExtractor graphics, Font font, Minecraft minecraft, double alpha) {
         Optional<ClientNavigationController.WorldTarget> target = ClientNavigationController.worldTarget(minecraft.player);
         if (target.isEmpty()) {
             return;
         }
         TargetProjection projection = projectTarget(minecraft, target.get(), graphics.guiWidth(), graphics.guiHeight());
-        boolean farTarget = target.get().distance() > FAR_SCREEN_MARKER_RANGE;
-        if (!farTarget) {
+        if (!projection.behind() && projection.insideSafeArea()) {
+            // On-screen targets belong to the world marker; no HUD indicator.
             return;
         }
-        Vec2 point;
-        boolean edge = projection.behind() || !projection.insideSafeArea();
-        if (edge) {
-            point = clampDirectionToEdge(graphics.guiWidth(), graphics.guiHeight(), projection.directionX(), projection.directionY());
-        } else {
-            point = new Vec2(
-                    Math.max(PROJECTED_MARKER_PADDING, Math.min(graphics.guiWidth() - PROJECTED_MARKER_PADDING, projection.screenX())),
-                    Math.max(PROJECTED_MARKER_PADDING, Math.min(graphics.guiHeight() - PROJECTED_MARKER_PADDING, projection.screenY())));
-        }
-        drawTargetIndicator(graphics, font, target.get(), point, edge, alpha);
+        Vec2 point = clampDirectionToEdge(graphics.guiWidth(), graphics.guiHeight(), projection.directionX(), projection.directionY());
+        drawTargetIndicator(graphics, font, target.get(), point, alpha);
     }
 
     private static TargetProjection projectTarget(Minecraft minecraft, ClientNavigationController.WorldTarget target, int screenWidth, int screenHeight) {
@@ -407,18 +435,16 @@ public final class ClientNavigationHudController {
                 Math.max(top, Math.min(bottom, centerY + directionY * t)));
     }
 
-    private static void drawTargetIndicator(GuiGraphicsExtractor graphics, Font font, ClientNavigationController.WorldTarget target, Vec2 point, boolean edge, double alpha) {
+    private static void drawTargetIndicator(GuiGraphicsExtractor graphics, Font font, ClientNavigationController.WorldTarget target, Vec2 point, double alpha) {
         int accent = targetColor(target.kind(), List.of(target.color()));
-        long now = System.currentTimeMillis();
-        double pulse = 0.5D + 0.5D * Math.sin(now / 190.0D);
-        double radius = edge ? 7.6D : 6.2D;
+        long now = (long) animationTimeMs;
+        double pulse = pulse(now, 190.0D);
+        double radius = 7.6D;
         SmoothGuiPrimitives.circle(graphics, point, radius + 4.0D + pulse * 1.6D, color(accent, alpha * 0.15D));
         SmoothGuiPrimitives.diamond(graphics, point, radius + 1.8D, color(0xEE071018, alpha * 0.70D));
         SmoothGuiPrimitives.diamond(graphics, point, radius, color(accent, alpha * 0.92D));
         SmoothGuiPrimitives.circle(graphics, point, 2.1D, color(0xFFFFFFFF, alpha * 0.86D));
-        if (edge) {
-            drawEdgeArrow(graphics, point, graphics.guiWidth(), graphics.guiHeight(), accent, alpha);
-        }
+        drawEdgeArrow(graphics, point, graphics.guiWidth(), graphics.guiHeight(), accent, alpha);
 
         String distance = target.distance() >= 999.0D ? "999m+" : Math.round(target.distance()) + "m";
         String label = SPSGui.ellipsize(font, target.name() + " / " + distance, Math.min(148, Math.max(72, graphics.guiWidth() / 3)));
@@ -460,9 +486,11 @@ public final class ClientNavigationHudController {
 
     private static int targetColor(ClientNavigationController.TargetKind kind, List<Integer> colors) {
         return switch (kind) {
-            case BOARDING, SAME_STATION_TRANSFER, DESTINATION -> firstColor(colors);
-            case OUT_OF_STATION_TRANSFER, FINAL_WALK -> AMBER;
-            case CROSS_DIMENSION_TRANSFER, CROSS_DIMENSION_FINAL_WALK -> BLUE;
+            case BOARDING, DESTINATION -> firstColor(colors);
+            case SAME_STATION_TRANSFER -> NavigationSemanticColors.SAME_STATION_TRANSFER;
+            case OUT_OF_STATION_TRANSFER -> NavigationSemanticColors.OUT_OF_STATION_TRANSFER;
+            case FINAL_WALK -> NavigationSemanticColors.FINAL_WALK;
+            case CROSS_DIMENSION_TRANSFER, CROSS_DIMENSION_FINAL_WALK -> NavigationSemanticColors.CROSS_DIMENSION_TRANSFER;
         };
     }
 
@@ -473,6 +501,15 @@ public final class ClientNavigationHudController {
     private static int color(int color, double alphaScale) {
         int alpha = (int) Math.round(((color >>> 24) & 0xFF) * clamp(alphaScale));
         return (alpha << 24) | (color & 0x00FFFFFF);
+    }
+
+    private static double pulse(long nowMillis, double periodScale) {
+        // Photosensitivity-safe mode freezes every breathing highlight at its mid
+        // value so no HUD element oscillates over time.
+        if (ClientSafetyOptions.reducePhotosensitivityRisk()) {
+            return 0.5D;
+        }
+        return 0.5D + 0.5D * Math.sin(nowMillis / periodScale);
     }
 
     private static double clamp(double value) {

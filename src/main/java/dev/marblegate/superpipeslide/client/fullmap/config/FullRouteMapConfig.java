@@ -5,7 +5,6 @@ import dev.marblegate.superpipeslide.client.fullmap.ui.FullMapTheme;
 public final class FullRouteMapConfig {
     public static final double CLUSTER_THRESHOLD = 64.0D;
     public static final double DEEP_CLUSTER_THRESHOLD = 12.0D;
-    public static final double TRANSFER_HINT_THRESHOLD = 192.0D;
     public static final double CLUSTER_AUTO_EXPAND_ZOOM = 2.5D;
     public static final double CLUSTER_CARD_SPREAD_FLAT_THRESHOLD = 16.0D;
     public static final double BASE_SCALE = 0.25D;
@@ -33,26 +32,29 @@ public final class FullRouteMapConfig {
     public static final int MAX_LABELS_PER_FRAME = 360;
     public static final long UPDATE_DEBOUNCE_MILLIS = 500L;
     public static final long CACHE_TTL_MILLIS = 60_000L;
-    public static final int SCHEMATIC_SOLVER_VERSION = 10;
+    public static final int SCHEMATIC_SOLVER_VERSION = 12;
 
-    public static final int MAP_BACKGROUND = 0xFFFFFFFF;
+    public static final int MAP_BACKGROUND = FullMapTheme.palette().mapBackground();
     public static final int MAP_GRID = FullMapTheme.PRACTICAL_GRID;
     public static final int MAP_GRID_MAJOR = FullMapTheme.PRACTICAL_GRID_MAJOR;
     public static final int MAP_LABEL = FullMapTheme.TEXT_PRIMARY;
     public static final int MAP_LABEL_MUTED = FullMapTheme.TEXT_MUTED;
     public static final int MAP_NODE_FILL = 0xFFF5F8FC;
     public static final int MAP_NODE_OUTLINE = 0xFF1B2633;
-    public static final int MAP_CARD_NODE_OUTLINE = 0xFF000000;
-    public static final int MAP_CARD_LABEL = 0xFF000000;
+    public static final int MAP_CARD_NODE_OUTLINE = 0xFF1B2633;
+    public static final int MAP_CARD_LABEL = 0xFF1B2633;
     public static final int MAP_CLUSTER_FILL = 0xFFF2F7FD;
-    public static final int MAP_CLUSTER_OUTLINE = 0xFF000000;
+    public static final int MAP_CLUSTER_OUTLINE = 0xFF1B2633;
     public static final int MAP_FOLD_FILL = 0xFFFFFFFF;
-    public static final int MAP_TRANSFER_HINT = 0x66888888;
+    public static final int MAP_TRANSFER_HINT = 0x99888888;
     public static final int MAP_TRANSFER_HINT_DIMMED_EDGE = 0x4D888888;
-    public static final int MAP_TRUNK = 0xFFB8C0CA;
+    public static final int MAP_TRUNK = 0xFF9AA6B2;
     public static final int MAP_FOCUS_HALO = FullMapTheme.FOCUS_HALO;
     public static final int MAP_FOCUS_RING = FullMapTheme.FOCUS_RING;
     public static final int MAP_FOLD_MULTI_LINE = 0xFF888888;
+    public static final int MAP_PORT_FILL = 0xFFFFFFFF;
+    public static final int MAP_VIEWPORT_HINT_FADE = 0x44EEF2F7;
+    public static final int MAP_VIEWPORT_HINT_CHEVRON = 0xAA4B5563;
 
     private FullRouteMapConfig() {}
 }

@@ -37,13 +37,22 @@ public final class ClusterCardSemanticBuilder {
         members.forEach(member -> memberById.put(member.id(), member));
         Set<NodeId> memberIds = new LinkedHashSet<>(memberById.keySet());
 
+        // Collect self-loop stations in a single edge pass instead of rescanning all edges per member.
+        Set<NodeId> selfLoopNodeIds = new LinkedHashSet<>();
+        for (MapEdge edge : graph.edges()) {
+            if (edge.from().equals(edge.to())) {
+                selfLoopNodeIds.add(edge.from());
+            }
+        }
+
         Map<String, ClusterCardNode> nodes = new LinkedHashMap<>();
         for (MapNode member : members) {
-            ClusterCardNode node = this.memberNode(member, this.hasStationInternalLoop(graph, member.id()));
+            ClusterCardNode node = this.memberNode(member, member.kind() == NodeKind.STATION && selfLoopNodeIds.contains(member.id()));
             nodes.put(node.id(), node);
         }
 
         List<ClusterCardEdge> edges = new ArrayList<>();
+        Map<String, String> edgeByPortId = new LinkedHashMap<>();
         int externalCount = 0;
         for (MapEdge edge : graph.edges()) {
             NodeId from = this.cardMemberId(graph, edge.from(), memberIds);
@@ -68,8 +77,9 @@ public final class ClusterCardSemanticBuilder {
                 }
                 String portId = externalPortNodeId(edge, inside, outside);
                 nodes.putIfAbsent(portId, this.externalPortNode(portId, outsideNode, edge.routeLineIds()));
+                String cardEdgeId = "cluster-card-edge:external:" + edge.id() + ":" + inside + ":" + outside;
                 edges.add(new ClusterCardEdge(
-                        "cluster-card-edge:external:" + edge.id() + ":" + inside + ":" + outside,
+                        cardEdgeId,
                         ClusterCardEdgeKind.EXTERNAL_ROUTE,
                         memberNodeId(inside),
                         portId,
@@ -77,6 +87,7 @@ public final class ClusterCardSemanticBuilder {
                         Optional.of(inside),
                         Optional.of(outside),
                         edge.routeLineIds()));
+                edgeByPortId.put(portId, cardEdgeId);
                 externalCount++;
             }
         }
@@ -100,7 +111,8 @@ public final class ClusterCardSemanticBuilder {
                 edges,
                 cluster.routeLineIds(),
                 externalCount,
-                bounds);
+                bounds,
+                edgeByPortId);
     }
 
     private List<MapNode> clusterMembers(MapDimensionGraph graph, MapCluster cluster, ClusterCardProfile profile) {
@@ -132,7 +144,10 @@ public final class ClusterCardSemanticBuilder {
         ClusterCardNodeKind kind = switch (node.kind()) {
             case DEEP_CLUSTER -> ClusterCardNodeKind.MEMBER_DEEP_CLUSTER;
             case FOLD_ANCHOR -> ClusterCardNodeKind.MEMBER_FOLD_ANCHOR;
-            case STATION, CLUSTER -> ClusterCardNodeKind.MEMBER_STATION;
+            case STATION -> ClusterCardNodeKind.MEMBER_STATION;
+            // Aggregates only ever contain stations and deep clusters; a nested cluster
+            // member would mean the builder invariant broke, so fail loudly.
+            case CLUSTER -> throw new IllegalArgumentException("Cluster node cannot be a cluster card member: " + node.id());
         };
         return new ClusterCardNode(
                 memberNodeId(node.id()),
@@ -167,13 +182,6 @@ public final class ClusterCardSemanticBuilder {
                 Optional.empty(),
                 Optional.of(outsideNode.id()),
                 false);
-    }
-
-    private boolean hasStationInternalLoop(MapDimensionGraph graph, NodeId nodeId) {
-        return graph.node(nodeId)
-                .filter(node -> node.kind() == NodeKind.STATION)
-                .isPresent()
-                && graph.edges().stream().anyMatch(edge -> edge.from().equals(nodeId) && edge.to().equals(nodeId));
     }
 
     private List<ClusterCardEdge> foldPeerLinks(List<MapNode> members) {
@@ -230,7 +238,7 @@ public final class ClusterCardSemanticBuilder {
     }
 
     private static String memberNodeId(NodeId nodeId) {
-        return "member:" + nodeId.kind() + ":" + nodeId.levelKey().identifier() + ":" + nodeId.primaryId() + ":" + nodeId.occurrence();
+        return "member:" + nodeId.kind() + ":" + nodeId.levelKey().identifier() + ":" + nodeId.primaryId();
     }
 
     private static String externalPortNodeId(MapEdge edge, NodeId inside, NodeId outside) {

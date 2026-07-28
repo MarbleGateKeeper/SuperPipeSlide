@@ -5,15 +5,34 @@ import dev.marblegate.superpipeslide.client.core.route.ClientRouteDataCache;
 import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import javax.annotation.Nullable;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 
 public final class FullMapNavigationViewModel {
+    /**
+     * Preview models are pure functions of the plan, the route data revision (station
+     * names), the active navigation session, and the selected language, all of which are
+     * stable across frames. The translated view models are therefore cached per frame
+     * instead of rebuilding every {@link Component#translatable} string on each render.
+     */
+    private static final int PREVIEW_CACHE_LIMIT = 8;
+
+    private static final Map<PreviewKey, RoutePreview> PREVIEW_CACHE = new LinkedHashMap<>(16, 0.75F, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<PreviewKey, RoutePreview> eldest) {
+            return size() > PREVIEW_CACHE_LIMIT;
+        }
+    };
+
     private FullMapNavigationViewModel() {}
 
     public static DestinationCard destinationCard(LocalPlayer player, ClientNavigationController.DestinationSearchResult result, boolean selected) {
@@ -38,6 +57,10 @@ public final class FullMapNavigationViewModel {
     }
 
     public static RoutePreview emptyPreview() {
+        return PREVIEW_CACHE.computeIfAbsent(PreviewKey.empty(currentLanguage()), key -> buildEmptyPreview());
+    }
+
+    private static RoutePreview buildEmptyPreview() {
         return new RoutePreview(
                 Component.translatable("screen.superpipeslide.navigation.pick_destination").getString(),
                 Component.translatable("screen.superpipeslide.navigation.pick_destination.body").getString(),
@@ -54,6 +77,10 @@ public final class FullMapNavigationViewModel {
     }
 
     public static RoutePreview unreachablePreview(UUID stationGroupId) {
+        return PREVIEW_CACHE.computeIfAbsent(PreviewKey.unreachable(stationGroupId, ClientRouteDataCache.revision(), currentLanguage()), key -> buildUnreachablePreview(stationGroupId));
+    }
+
+    private static RoutePreview buildUnreachablePreview(UUID stationGroupId) {
         StationGroup station = ClientRouteDataCache.stationGroup(stationGroupId).orElse(null);
         String name = station == null ? Component.translatable("screen.superpipeslide.station.missing").getString() : station.primaryName();
         String subtitle = station == null || station.translatedNames().isEmpty()
@@ -83,6 +110,26 @@ public final class FullMapNavigationViewModel {
     }
 
     public static RoutePreview routePreview(ClientNavigationController.NavigationPlan plan) {
+        return PREVIEW_CACHE.computeIfAbsent(previewKey(plan), key -> buildRoutePreview(plan));
+    }
+
+    /**
+     * Cache key for {@link #routePreview}: the plan identity covers the immutable plan
+     * content, the route data revision covers station name lookups, and the active
+     * session destination plus the navigating flag cover the primary-action state.
+     */
+    private static PreviewKey previewKey(ClientNavigationController.NavigationPlan plan) {
+        UUID activeDestinationId = ClientNavigationController.activeSessionSnapshot()
+                .map(snapshot -> snapshot.plan().destinationStationGroupId())
+                .orElse(null);
+        return PreviewKey.forPlan(plan.id(), ClientRouteDataCache.revision(), currentLanguage(), activeDestinationId, ClientNavigationController.isNavigating());
+    }
+
+    private static String currentLanguage() {
+        return Minecraft.getInstance().getLanguageManager().getSelected();
+    }
+
+    private static RoutePreview buildRoutePreview(ClientNavigationController.NavigationPlan plan) {
         String destinationName = stationName(plan.destinationStationGroupId());
         String destinationSubtitle = ClientRouteDataCache.stationGroup(plan.destinationStationGroupId())
                 .map(StationGroup::translatedNames)
@@ -320,6 +367,32 @@ public final class FullMapNavigationViewModel {
 
     private static int primaryColor(List<Integer> colors) {
         return colors == null || colors.isEmpty() ? 0xFF47A6FF : 0xFF000000 | colors.getFirst() & 0x00FFFFFF;
+    }
+
+    /**
+     * Identity of a cached preview. Which unique id slot is populated discriminates the
+     * three preview kinds: none for {@link #emptyPreview()}, {@code stationGroupId} for
+     * {@link #unreachablePreview(UUID)}, and {@code planId} for
+     * {@link #routePreview(ClientNavigationController.NavigationPlan)}.
+     */
+    private record PreviewKey(
+            @Nullable UUID planId,
+            @Nullable UUID stationGroupId,
+            long routeRevision,
+            String language,
+            @Nullable UUID activeDestinationId,
+            boolean navigating) {
+        private static PreviewKey empty(String language) {
+            return new PreviewKey(null, null, 0L, language, null, false);
+        }
+
+        private static PreviewKey unreachable(UUID stationGroupId, long routeRevision, String language) {
+            return new PreviewKey(null, stationGroupId, routeRevision, language, null, false);
+        }
+
+        private static PreviewKey forPlan(UUID planId, long routeRevision, String language, @Nullable UUID activeDestinationId, boolean navigating) {
+            return new PreviewKey(planId, null, routeRevision, language, activeDestinationId, navigating);
+        }
     }
 
     public record DestinationCard(

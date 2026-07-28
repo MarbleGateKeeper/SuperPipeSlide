@@ -15,4 +15,5 @@ public record MissingCrossDimensionPathHint(
         int layoutIndex,
         ResourceKey<Level> targetLevelKey,
         double directionX,
-        double directionZ) {}
+        double directionZ,
+        MissingCrossDimensionReason reason) {}

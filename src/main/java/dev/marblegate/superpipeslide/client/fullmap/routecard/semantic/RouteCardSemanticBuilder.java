@@ -147,9 +147,6 @@ public final class RouteCardSemanticBuilder {
             RouteCardNode to = stopNodes.get((index + 1) % stopNodes.size());
             boolean loopBack = this.isLoopBack(layout, stopNodes, index);
             SemanticEdgeKind kind = this.edgeKind(from, to, loopBack);
-            if (kind == SemanticEdgeKind.STATION_INTERNAL && from.stationGroupId().equals(to.stationGroupId()) && stopNodes.size() <= 1) {
-                continue;
-            }
             if (kind == SemanticEdgeKind.STATION_INTERNAL) {
                 this.stationInternalCount++;
             }

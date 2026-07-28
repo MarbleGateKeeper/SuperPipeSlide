@@ -3,6 +3,7 @@ package dev.marblegate.superpipeslide.client.fullmap.routecard.layout;
 import dev.marblegate.superpipeslide.client.core.pipe.ClientPipeNetworkCache;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
+import dev.marblegate.superpipeslide.client.fullmap.routecard.RouteCardGeometry;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardEdge;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardNode;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardNodeId;
@@ -262,31 +263,15 @@ public final class RouteCardPhysicalLayoutBuilder {
     }
 
     private static double distanceToSegment(Vec2 p, Vec2 a, Vec2 b) {
-        double dx = b.x() - a.x();
-        double dy = b.y() - a.y();
-        double lengthSqr = dx * dx + dy * dy;
-        if (lengthSqr <= 1.0E-9D) {
-            return p.distanceTo(a);
-        }
-        double t = Math.max(0.0D, Math.min(1.0D, ((p.x() - a.x()) * dx + (p.y() - a.y()) * dy) / lengthSqr));
-        return p.distanceTo(new Vec2(a.x() + dx * t, a.y() + dy * t));
+        return RouteCardGeometry.distanceToSegment(p, a, b);
     }
 
     private static Aabb2 boundsFor(List<Vec2> points) {
-        Aabb2 bounds = Aabb2.empty();
-        for (Vec2 point : points) {
-            bounds = bounds.include(point.x(), point.y());
-        }
-        return bounds;
+        return RouteCardGeometry.boundsFor(points);
     }
 
     private static int nodePriority(RouteCardNode node) {
-        return switch (node.kind()) {
-            case STATION -> 680;
-            case PORTAL_BOUNDARY -> 755;
-            case FOLD_BOUNDARY -> 760;
-            case MISSING_PATH_BOUNDARY -> 720;
-        } + Math.max(0, 100 - node.layoutOccurrence());
+        return RouteCardGeometry.nodePriority(node);
     }
 
     private record PhysicalSegmentGroup(
