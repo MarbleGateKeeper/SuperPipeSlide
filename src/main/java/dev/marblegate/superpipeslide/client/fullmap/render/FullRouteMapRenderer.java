@@ -409,14 +409,37 @@ public final class FullRouteMapRenderer {
         SmoothGuiPrimitives.FrameProgram program = this.staticProgram(graph, visualGraph, null, viewport, mapRect, font, () -> {
             drawMapBackground(graphics, mapRect, viewport, FullRouteMapCache.layoutMode());
             Aabb2 visualView = screenWorldBounds(viewport, mapRect).inflate(96.0D / scale(viewport));
-            this.drawPureSchematicEdges(graphics, visualGraph, viewport, mapRect, visualView);
+            EdgeBlockerIndex edgeBlockers = this.drawPureSchematicEdges(graphics, visualGraph, viewport, mapRect, visualView);
             this.drawPureSchematicNodes(graphics, font, graph, visualGraph, viewport, mapRect, visualView);
-            this.drawPureSchematicLabels(graphics, font, graph, visualGraph, viewport, mapRect, visualView);
+            this.drawPureSchematicLabels(graphics, font, graph, visualGraph, viewport, mapRect, visualView, edgeBlockers);
         });
         program.replay(graphics);
         if (visualGraph.nodes().isEmpty()) {
             SPSGui.centeredText(graphics, font, Component.translatable("screen.superpipeslide.full_map.empty_dimension"), mapRect.x() + mapRect.width() / 2, mapRect.y() + mapRect.height() / 2, FullRouteMapConfig.MAP_LABEL_MUTED);
         }
+    }
+
+    /**
+     * Draws the pure schematic map content straight into the given graphics, bypassing the
+     * static frame-program cache. The PNG map export renders through this entry into an
+     * offscreen GUI render state: caching would be wasted work and would evict programs the
+     * on-screen map still reuses. With no capture active, {@code SmoothGuiPrimitives}
+     * submits everything directly, and the empty hover leaves no focus decorations in the
+     * exported image.
+     *
+     * @param drawBackground false skips the opaque map background, producing content on the
+     *                       transparent clear color — the transparent-background export variant
+     */
+    public void renderPureSchematicDirect(GuiGraphicsExtractor graphics, Font font, MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport,
+            SPSGui.Rect mapRect, boolean drawBackground) {
+        liveHover = LiveHover.forVisual(graph, visualGraph, HitTarget.none(), Optional.empty());
+        if (drawBackground) {
+            drawMapBackground(graphics, mapRect, viewport, FullRouteMapLayoutMode.SCHEMATIC);
+        }
+        Aabb2 visualView = screenWorldBounds(viewport, mapRect).inflate(96.0D / scale(viewport));
+        EdgeBlockerIndex edgeBlockers = this.drawPureSchematicEdges(graphics, visualGraph, viewport, mapRect, visualView);
+        this.drawPureSchematicNodes(graphics, font, graph, visualGraph, viewport, mapRect, visualView);
+        this.drawPureSchematicLabels(graphics, font, graph, visualGraph, viewport, mapRect, visualView, edgeBlockers);
     }
 
     private HitTarget hitTestPureSchematic(MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport, SPSGui.Rect mapRect, double mouseX, double mouseY) {
@@ -1476,7 +1499,7 @@ public final class FullRouteMapRenderer {
             if (rectsOverlap(bounds, rect) && !labelBlockedByPlaced(bounds, placed) && !labelBlockedByIcons(label.nodeId(), bounds, iconBlockers) && !labelBlockedByEdges(bounds, edgeBlockers)) {
                 selected = bounds;
             } else if (denseZoom) {
-                LabelCandidate fallback = new LabelCandidate(node, text, labelBounds(node, nodeScreen, elementZoom, rect, width, height), label.priority(), scale);
+                LabelCandidate fallback = new LabelCandidate(node, text, labelBounds(node, nodeScreen, elementZoom, rect, width, height), label.priority(), scale, nodeScreen);
                 selected = chooseDenseVisualLabelBounds(fallback, placed, iconBlockers, edgeBlockers).orElse(null);
                 if (selected == null && rectsOverlap(bounds, rect) && shouldForceDenseLabel(node, label.priority())) {
                     selected = bounds;
@@ -1497,7 +1520,13 @@ public final class FullRouteMapRenderer {
         }
     }
 
-    private void drawPureSchematicEdges(GuiGraphicsExtractor graphics, VisualRouteMapGraph visualGraph, ViewportState viewport, SPSGui.Rect rect, Aabb2 visualView) {
+    /**
+     * Paints the schematic edge lanes and returns them indexed as label blockers, so the label
+     * pass can keep station names off the colored lines (the visual path has always done this;
+     * the pure schematic path used to run edge-neutral).
+     */
+    private EdgeBlockerIndex drawPureSchematicEdges(GuiGraphicsExtractor graphics, VisualRouteMapGraph visualGraph, ViewportState viewport, SPSGui.Rect rect, Aabb2 visualView) {
+        EdgeBlockerIndex edgeBlockers = new EdgeBlockerIndex();
         for (VisualEdgePath path : visualGraph.edgePaths()) {
             if (path.points().size() < 2 || !visualView.intersects(path.bounds().inflate(32.0D / scale(viewport)))) {
                 continue;
@@ -1521,11 +1550,13 @@ public final class FullRouteMapRenderer {
                     }
                 });
                 drawPolyline(graphics, screenPath, trunkWidth, FullRouteMapConfig.MAP_TRUNK, false);
+                addEdgeBlockerPath(edgeBlockers, screenPath, trunkWidth * 0.5D);
                 this.drawTrunkDots(graphics, screenPath, lines, viewport.zoom());
             } else {
-                this.drawPureSchematicEdgeRouteBundle(graphics, screenPath, path, hovered, viewport.zoom());
+                this.drawPureSchematicEdgeRouteBundle(graphics, screenPath, path, hovered, viewport.zoom(), edgeBlockers);
             }
         }
+        return edgeBlockers;
     }
 
     private void drawPureSchematicNodes(GuiGraphicsExtractor graphics, Font font, MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport, SPSGui.Rect rect, Aabb2 visualView) {
@@ -1575,7 +1606,8 @@ public final class FullRouteMapRenderer {
         }
     }
 
-    private List<SPSGui.Rect> drawPureSchematicLabels(GuiGraphicsExtractor graphics, Font font, MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport, SPSGui.Rect rect, Aabb2 visualView) {
+    private List<SPSGui.Rect> drawPureSchematicLabels(GuiGraphicsExtractor graphics, Font font, MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport, SPSGui.Rect rect,
+            Aabb2 visualView, EdgeBlockerIndex edgeBlockers) {
         // Low-zoom trunk tier: the floor drops from 0.45 to 0.30; between the two only
         // trunk-tier stations are labelled and their alpha fades in linearly instead of
         // popping at the old hard cutoff.
@@ -1595,9 +1627,6 @@ public final class FullRouteMapRenderer {
         }
 
         List<SPSGui.Rect> placed = new ArrayList<>();
-        // Pure schematic mode does not index its painted edges yet, so the shared
-        // penalty path runs with an empty (edge-neutral) blocker index here.
-        EdgeBlockerIndex edgeBlockers = new EdgeBlockerIndex();
         int rendered = 0;
         for (VisualLabel label : visualGraph.labels().stream().sorted(Comparator.comparingInt(VisualLabel::priority).reversed()).toList()) {
             if (rendered >= FullRouteMapConfig.MAX_LABELS_PER_FRAME) {
@@ -1629,10 +1658,15 @@ public final class FullRouteMapRenderer {
             screen = clampLabelAnchorToNode(screen, nodeScreen, visualNodeCollisionRadius(visualNode, graph, viewport.zoom()) + 20.0D);
             SPSGui.Rect bounds = new SPSGui.Rect((int) Math.round(screen.x()), (int) Math.round(screen.y()), width, height);
             SPSGui.Rect selected = null;
-            if (rectsOverlap(bounds, rect) && !labelBlockedByPlaced(bounds, placed) && !labelBlockedByIcons(label.nodeId(), bounds, iconBlockers)) {
+            // The solver's layout-space anchor is NOT guaranteed to clear the node's own icon
+            // (clampLabelAnchorToNode only caps the far distance), so the first-choice test here
+            // counts every icon — including the label's own node — and the painted edge lanes;
+            // the fallback candidates below re-solve with proper icon gaps when it fails.
+            if (rectsOverlap(bounds, rect) && !labelBlockedByPlaced(bounds, placed) && !labelBlockedByAnyIcon(bounds, iconBlockers)
+                    && !labelBlockedByEdges(bounds, edgeBlockers)) {
                 selected = bounds;
             } else {
-                LabelCandidate fallback = new LabelCandidate(raw, text, labelBounds(raw, nodeScreen, viewport.zoom(), rect, width, height), label.priority(), scale);
+                LabelCandidate fallback = new LabelCandidate(raw, text, labelBounds(raw, nodeScreen, viewport.zoom(), rect, width, height), label.priority(), scale, nodeScreen);
                 selected = chooseDenseVisualLabelBounds(fallback, placed, iconBlockers, edgeBlockers).orElse(null);
             }
             if (selected == null) {
@@ -1840,7 +1874,7 @@ public final class FullRouteMapRenderer {
                 case FOLD_ANCHOR -> 800;
                 case STATION -> node.isTransferStation() ? 700 : 200;
             } + node.routeLineIds().size() * 10;
-            candidates.add(new LabelCandidate(node, label, labelBounds(node, screen, elementZoom, rect, width, height), priority, labelScale));
+            candidates.add(new LabelCandidate(node, label, labelBounds(node, screen, elementZoom, rect, width, height), priority, labelScale, screen));
         }
         candidates.sort(Comparator.comparingInt(LabelCandidate::priority).reversed());
         List<SPSGui.Rect> placed = new ArrayList<>();
@@ -2061,6 +2095,16 @@ public final class FullRouteMapRenderer {
         return false;
     }
 
+    /** Icon test that also counts the label's own node: used where the anchor is not icon-aware. */
+    private static boolean labelBlockedByAnyIcon(SPSGui.Rect bounds, List<IconBlocker> iconBlockers) {
+        for (IconBlocker blocker : iconBlockers) {
+            if (rectsOverlap(bounds, blocker.bounds())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static boolean labelBlockedByEdges(SPSGui.Rect bounds, EdgeBlockerIndex edgeBlockers) {
         return edgeBlockers.overlapArea(bounds) > 0;
     }
@@ -2091,6 +2135,13 @@ public final class FullRouteMapRenderer {
         if (edgeOverlap > 0) {
             penalty += 400 + edgeOverlap;
         }
+        // Distance tie-breaker, deliberately tiny next to the blocker terms: among positions
+        // that are otherwise equal, the label hugs its own node instead of drifting into the
+        // gap between a neighbouring node's icon and that neighbour's own label (which reads
+        // as if it split the neighbour's name off its icon).
+        double distanceToNode = Math.hypot(bounds.x() + bounds.width() * 0.5D - candidate.nodeScreen().x(),
+                bounds.y() + bounds.height() * 0.5D - candidate.nodeScreen().y());
+        penalty += (int) Math.round(distanceToNode / 4.0D);
         return penalty;
     }
 
@@ -3381,26 +3432,34 @@ public final class FullRouteMapRenderer {
         }
     }
 
-    private void drawPureSchematicEdgeRouteBundle(GuiGraphicsExtractor graphics, List<Vec2> screenPath, VisualEdgePath path, BooleanSupplier hovered, double zoom) {
+    private void drawPureSchematicEdgeRouteBundle(GuiGraphicsExtractor graphics, List<Vec2> screenPath, VisualEdgePath path, BooleanSupplier hovered, double zoom,
+            EdgeBlockerIndex edgeBlockers) {
         double laneWidth = Math.max(1.2D, FullRouteMapConfig.LINE_WIDTH_PX * lineWidthScale(zoom));
         if (path.kind() == SemanticEdgeKind.FOLD_ADJACENT && path.routeLineIds().isEmpty()) {
             drawPolyline(graphics, screenPath, laneWidth, FullRouteMapConfig.MAP_FOLD_MULTI_LINE, false);
+            addEdgeBlockerPath(edgeBlockers, screenPath, laneWidth * 0.5D);
             return;
         }
         List<VisualLane> visualLanes = path.lanes();
         if (visualLanes.isEmpty()) {
             List<EdgeLane> lanes = edgeLanes(routeLinesForIds(path.routeLineIds()));
+            double step = laneWidth + 1.0D;
+            double center = (lanes.size() - 1) * 0.5D;
+            // Round the centerline BEFORE spreading lanes: every lane then sweeps the corner
+            // at the same generous radius with constant spacing, instead of each lane pivoting
+            // around the raw vertex at its own (tiny) offset radius.
+            List<Vec2> laneBasePath = center > 0.0D ? roundPathCorners(screenPath, center * step + laneWidth + 1.0D) : screenPath;
             double haloWidth = routeBundleWidth(lanes, laneWidth) + 5.0D * iconScale(zoom);
             // Hover halo slot: re-evaluated against the live hover at replay time.
             SmoothGuiPrimitives.recordOrReplay(graphics, g -> {
                 if (hovered.getAsBoolean()) {
-                    drawPolyline(g, screenPath, haloWidth, FullRouteMapConfig.MAP_FOCUS_HALO, false, laneWidth);
+                    drawPolyline(g, laneBasePath, haloWidth, FullRouteMapConfig.MAP_FOCUS_HALO, false, laneWidth);
                 }
             });
-            double step = laneWidth + 1.0D;
-            double center = (lanes.size() - 1) * 0.5D;
             for (int i = 0; i < lanes.size(); i++) {
-                drawColorLanePath(graphics, offsetScreenPath(screenPath, (i - center) * step), laneWidth, lanes.get(i).colors(), false);
+                List<Vec2> lanePath = offsetScreenPath(laneBasePath, (i - center) * step);
+                drawColorLanePath(graphics, lanePath, laneWidth, lanes.get(i).colors(), false);
+                addEdgeBlockerPath(edgeBlockers, lanePath, laneWidth * 0.5D);
             }
             return;
         }
@@ -3412,18 +3471,84 @@ public final class FullRouteMapRenderer {
         for (VisualLane lane : visualLanes) {
             maxAbsOffset = Math.max(maxAbsOffset, Math.abs(lane.offsetBlocks()) * laneOffsetScale);
         }
+        List<Vec2> laneBasePath = maxAbsOffset > 0.01D ? roundPathCorners(screenPath, maxAbsOffset + laneWidth + 1.0D) : screenPath;
         // The halo spans exactly the spread lanes: twice the outermost lane offset plus one lane width.
         double haloWidth = 2.0D * maxAbsOffset + laneWidth + 5.0D * iconScale(zoom);
         // Hover halo slot: re-evaluated against the live hover at replay time.
         SmoothGuiPrimitives.recordOrReplay(graphics, g -> {
             if (hovered.getAsBoolean()) {
-                drawPolyline(g, screenPath, haloWidth, FullRouteMapConfig.MAP_FOCUS_HALO, false, laneWidth);
+                drawPolyline(g, laneBasePath, haloWidth, FullRouteMapConfig.MAP_FOCUS_HALO, false, laneWidth);
             }
         });
         for (VisualLane lane : visualLanes) {
-            List<Vec2> lanePath = offsetScreenPath(screenPath, lane.offsetBlocks() * laneOffsetScale);
+            List<Vec2> lanePath = offsetScreenPath(laneBasePath, lane.offsetBlocks() * laneOffsetScale);
             drawColorLanePath(graphics, lanePath, laneWidth, colorsForVisualLane(lane), false);
+            addEdgeBlockerPath(edgeBlockers, lanePath, laneWidth * 0.5D);
         }
+    }
+
+    /**
+     * Rounds the sharp corners of a path with circular fillets of the given radius, so lane
+     * offsets computed afterwards share one generous corner radius instead of each lane
+     * pivoting tightly around the raw vertex. Corners whose tangent length would eat more
+     * than ~half of an adjacent segment degrade to a plain chamfer (the spacing error of a
+     * small chamfer is negligible next to the lane offsets this feeds).
+     */
+    private static List<Vec2> roundPathCorners(List<Vec2> points, double radius) {
+        if (points.size() < 3 || radius < 0.75D) {
+            return points;
+        }
+        List<Vec2> result = new ArrayList<>();
+        result.add(points.getFirst());
+        for (int i = 1; i + 1 < points.size(); i++) {
+            Vec2 vertex = points.get(i);
+            Vec2 previous = result.getLast();
+            Vec2 next = points.get(i + 1);
+            double inLength = previous.distanceTo(vertex);
+            double outLength = vertex.distanceTo(next);
+            if (inLength < 0.01D || outLength < 0.01D) {
+                continue;
+            }
+            double dirInX = (vertex.x() - previous.x()) / inLength;
+            double dirInY = (vertex.y() - previous.y()) / inLength;
+            double dirOutX = (next.x() - vertex.x()) / outLength;
+            double dirOutY = (next.y() - vertex.y()) / outLength;
+            double cosTurn = Math.max(-1.0D, Math.min(1.0D, dirInX * dirOutX + dirInY * dirOutY));
+            double turn = Math.acos(cosTurn);
+            if (turn < 0.02D) {
+                result.add(vertex);
+                continue;
+            }
+            double tangent = Math.min(radius * Math.tan(turn * 0.5D), 0.45D * Math.min(inLength, outLength));
+            Vec2 arcStart = new Vec2(vertex.x() - dirInX * tangent, vertex.y() - dirInY * tangent);
+            Vec2 arcEnd = new Vec2(vertex.x() + dirOutX * tangent, vertex.y() + dirOutY * tangent);
+            result.add(arcStart);
+            // Circular fillet from arcStart to arcEnd, only when the radius survived the
+            // tangent clamp (a clamped corner stays a plain chamfer).
+            if (tangent >= radius * Math.tan(turn * 0.5D) * 0.98D) {
+                double cross = dirInX * dirOutY - dirInY * dirOutX;
+                double side = cross > 0.0D ? 1.0D : -1.0D;
+                double centerX = arcStart.x() + side * -dirInY * radius;
+                double centerY = arcStart.y() + side * dirInX * radius;
+                double startAngle = Math.atan2(arcStart.y() - centerY, arcStart.x() - centerX);
+                double endAngle = Math.atan2(arcEnd.y() - centerY, arcEnd.x() - centerX);
+                double sweep = endAngle - startAngle;
+                while (sweep <= -Math.PI) {
+                    sweep += 2.0D * Math.PI;
+                }
+                while (sweep > Math.PI) {
+                    sweep -= 2.0D * Math.PI;
+                }
+                int arcSegments = Math.max(1, (int) Math.ceil(Math.abs(sweep) / (Math.PI / 8.0D)));
+                for (int segment = 1; segment < arcSegments; segment++) {
+                    double arcAngle = startAngle + sweep * segment / arcSegments;
+                    result.add(new Vec2(centerX + Math.cos(arcAngle) * radius, centerY + Math.sin(arcAngle) * radius));
+                }
+            }
+            result.add(arcEnd);
+        }
+        result.add(points.getLast());
+        return result;
     }
 
     private static void drawColorLanePath(GuiGraphicsExtractor graphics, List<Vec2> points, double totalWidth, List<Integer> colors) {
@@ -3515,6 +3640,7 @@ public final class FullRouteMapRenderer {
         List<Vec2> result = new ArrayList<>();
         for (int i = 0; i < points.size(); i++) {
             Vec2 normal;
+            double vertexOffset = offset;
             if (i == 0) {
                 normal = segmentNormal(points.get(0), points.get(1));
             } else if (i == points.size() - 1) {
@@ -3525,9 +3651,19 @@ public final class FullRouteMapRenderer {
                 double nx = first.x() + second.x();
                 double ny = first.y() + second.y();
                 double length = Math.hypot(nx, ny);
-                normal = length < 0.001D ? second : new Vec2(nx / length, ny / length);
+                if (length < 0.001D) {
+                    normal = second;
+                } else {
+                    normal = new Vec2(nx / length, ny / length);
+                    // Miter joint: scale the offset along the bisector by 1/cos(half the turn
+                    // angle), so the lane keeps its full perpendicular distance to BOTH
+                    // adjoining segments through the corner instead of pinching inwards.
+                    // Clamped to a 2x miter limit so hairpins cannot spike.
+                    double cosHalfTurn = normal.x() * first.x() + normal.y() * first.y();
+                    vertexOffset = offset / Math.max(0.5D, cosHalfTurn);
+                }
             }
-            result.add(new Vec2(points.get(i).x() + normal.x() * offset, points.get(i).y() + normal.y() * offset));
+            result.add(new Vec2(points.get(i).x() + normal.x() * vertexOffset, points.get(i).y() + normal.y() * vertexOffset));
         }
         return result;
     }
@@ -3992,5 +4128,5 @@ public final class FullRouteMapRenderer {
 
     private record IconBlocker(NodeId nodeId, SPSGui.Rect bounds) {}
 
-    private record LabelCandidate(MapNode node, DisplayNameStack label, List<SPSGui.Rect> bounds, int priority, float scale) {}
+    private record LabelCandidate(MapNode node, DisplayNameStack label, List<SPSGui.Rect> bounds, int priority, float scale, Vec2 nodeScreen) {}
 }

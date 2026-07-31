@@ -60,6 +60,8 @@ import org.slf4j.Logger;
 
 public final class FullRouteMapCache {
     private static final Logger LOGGER = LogUtils.getLogger();
+    /** Every printable ASCII character, pre-baked so lazy ASCII glyph stitches never reach the builder thread. */
+    private static final String ASCII_PRINTABLE = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
     // Dedicated single-threaded executor for full route map builds. The daemon thread
     // never blocks JVM shutdown, and serial execution guarantees a superseded build has
     // wound down (via its cancellation flag) before the next build starts.
@@ -266,9 +268,14 @@ public final class FullRouteMapCache {
      * snapshot list, so it is covered too), and the static cluster-name translation wrappers. The
      * derived cluster names themselves are assembled from primary-name glyphs (a common prefix, or
      * the first name embedded in the "and N more" wrapper), so baking the names and wrappers
-     * covers them glyph by glyph. Portal labels are dimension identifiers and the fold-label
-     * block-position fallback is "x, y, z" -- pure ASCII, eagerly baked at font reload -- so they
-     * need no pre-bake.
+     * covers them glyph by glyph.
+     *
+     * <p>Portal labels (dimension identifiers) and the fold-label block-position fallback
+     * ("x, y, z") are pure ASCII -- but ASCII bitmap glyphs stitch lazily on first use like any
+     * other, and a first-open schematic build can be the first code anywhere to measure them
+     * (doing so on the builder thread throws and drops the whole dimension to the geographic
+     * fallback layout). Baking the full printable ASCII range here closes that hole for every
+     * present and future ASCII composite.
      */
     private static void preBakeLabelGlyphs(Font font, FullRouteMapSourceSnapshot source) {
         Set<String> labelTexts = new HashSet<>();
@@ -280,6 +287,7 @@ public final class FullRouteMapCache {
         }
         labelTexts.add(Component.translatable("screen.superpipeslide.full_map.cluster_fallback_name").getString());
         labelTexts.add(Component.translatable("screen.superpipeslide.full_map.cluster_more", "", 0).getString());
+        labelTexts.add(ASCII_PRINTABLE);
         for (String text : labelTexts) {
             if (!text.isBlank()) {
                 font.width(text);

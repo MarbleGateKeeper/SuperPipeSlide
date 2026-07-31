@@ -30,6 +30,9 @@ import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapLayoutMod
 import dev.marblegate.superpipeslide.client.fullmap.diagnostic.DiagnosticType;
 import dev.marblegate.superpipeslide.client.fullmap.diagnostic.MapBuildDiagnostic;
 import dev.marblegate.superpipeslide.client.fullmap.diagnostic.MissingCrossDimensionReason;
+import dev.marblegate.superpipeslide.client.fullmap.export.MapExportOptions;
+import dev.marblegate.superpipeslide.client.fullmap.export.MapExportPlan;
+import dev.marblegate.superpipeslide.client.fullmap.export.MapExportService;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapCluster;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapDimensionGraph;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapEdge;
@@ -115,6 +118,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.util.Util;
 import net.minecraft.world.level.Level;
 import org.lwjgl.glfw.GLFW;
 
@@ -128,7 +132,6 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private static final int NAVIGATION_ITINERARY_STEP_GAP = 2;
     private static final double MAP_CLICK_DRAG_THRESHOLD_PX = 6.0D;
     private static final long MAP_DOUBLE_CLICK_INTERVAL_MILLIS = 400L;
-    private static final long NAVIGATION_UNDO_TOAST_DURATION_MILLIS = 5000L;
     // D1: viewport tween / inertia / soft bounds tuning.
     private static final long VIEWPORT_TWEEN_DURATION_MILLIS = 240L;
     private static final long VIEWPORT_SCROLL_TWEEN_DURATION_MILLIS = 120L;
@@ -245,6 +248,16 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private SPSGui.Rect navigationDrawerUserBounds;
     private final FullMapNavigationSheetController navigationSheetController = new FullMapNavigationSheetController();
     private EditBox searchBox;
+    private final FullMapExportSheetController exportSheetController = new FullMapExportSheetController();
+    private EditBox exportZoomBox;
+    private SPSGui.Rect exportSheetBounds = new SPSGui.Rect(0, 0, 0, 0);
+    private String exportStatusText = "";
+    @Nullable
+    private MapExportPlan cachedExportPlan;
+    @Nullable
+    private MapExportOptions cachedExportPlanOptions;
+    private long cachedExportPlanRouteRevision = Long.MIN_VALUE;
+    private long cachedExportPlanPipeRevision = Long.MIN_VALUE;
     private boolean dimensionMenuOpen;
     private final FullMapSearchController searchController = new FullMapSearchController();
     private boolean draggingMapCamera;
@@ -352,6 +365,25 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     protected void rebuildWidgets() {
         this.clearWidgets();
         this.searchBox = this.borderlessBox(-1000, -1000, 1, this.searchBox == null ? this.searchController.restoredText() : this.searchBox.getValue());
+        this.exportZoomBox = this.borderlessBox(-1000, -1000, 1, this.exportZoomBox == null ? "" : this.exportZoomBox.getValue());
+        this.exportZoomBox.setMaxLength(6);
+        this.exportZoomBox.setResponder(value -> {
+            this.exportSheetController.setCustomZoomLevel(parseExportCustomZoom(value));
+        });
+        this.exportZoomBox.setVisible(this.exportSheetController.open());
+    }
+
+    /** Parses the custom zoom input; a blank or invalid value removes the custom level. */
+    private static @Nullable Double parseExportCustomZoom(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            double zoom = Double.parseDouble(value.trim());
+            return zoom >= FullRouteMapConfig.ZOOM_MIN && zoom <= FullRouteMapConfig.ZOOM_MAX ? zoom : null;
+        } catch (NumberFormatException exception) {
+            return null;
+        }
     }
 
     @Override
@@ -485,6 +517,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         this.renderDimensionControl(graphics, mouseX, mouseY);
         this.renderDiagnosticsControl(graphics, mouseX, mouseY);
         this.renderSearchControl(graphics, mouseX, mouseY);
+        // Before super: the sheet panel paints under the widget pass so the custom-zoom
+        // EditBox (rendered by super) stays visible on top of it, same as the search box.
+        this.renderExportSheet(graphics, mouseX, mouseY);
         super.extractRenderState(graphics, mouseX, mouseY, partialTick);
         this.renderCards(graphics, mouseX, mouseY);
         this.renderFullMapNavigationSearch(graphics, mouseX, mouseY);
@@ -751,6 +786,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         this.dimensionMenuBounds = this.computeDimensionMenuBounds();
         this.diagnosticsBadgeBounds = this.computeDiagnosticsBadgeBounds();
         this.diagnosticsPanelBounds = this.computeDiagnosticsPanelBounds();
+        this.exportSheetBounds = this.computeExportSheetBounds();
         this.mapChromeBounds.add(this.layoutModeStripBounds);
         if (this.cameraCompassBounds.width() > 0 && this.cameraCompassBounds.height() > 0) {
             this.mapChromeBounds.add(this.cameraCompassBounds);
@@ -777,6 +813,13 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         }
         if (this.diagnosticsPanelOpen && this.diagnosticsPanelBounds.width() > 0 && this.diagnosticsPanelBounds.height() > 0) {
             this.mapChromeBounds.add(this.diagnosticsPanelBounds);
+        }
+        if (this.exportSheetBounds.width() > 0 && this.exportSheetBounds.height() > 0) {
+            this.mapChromeBounds.add(this.exportSheetBounds);
+        }
+        SPSGui.Rect toastBounds = this.computeToastBounds();
+        if (toastBounds.width() > 0 && toastBounds.height() > 0) {
+            this.mapChromeBounds.add(toastBounds);
         }
     }
 
@@ -1995,23 +2038,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         Optional<UUID> destination = ClientNavigationController.activeSessionSnapshot().map(snapshot -> snapshot.plan().destinationStationGroupId());
         ClientNavigationController.cancelNavigation();
         this.clearNavigationPreview();
-        destination.ifPresent(stationGroupId -> this.toast(
-                Component.translatable("screen.superpipeslide.full_map.navigation.cancelled", FullMapNavigationViewModel.stationName(stationGroupId)).getString(),
-                Component.translatable("screen.superpipeslide.full_map.navigation.undo").getString(),
-                () -> this.restoreCancelledNavigation(stationGroupId),
-                NAVIGATION_UNDO_TOAST_DURATION_MILLIS));
-    }
-
-    private void restoreCancelledNavigation(UUID stationGroupId) {
-        if (this.minecraft == null || this.minecraft.player == null) {
-            return;
-        }
-        Optional<ClientNavigationController.NavigationPlan> plan = ClientNavigationController.startNavigation(this.minecraft.player, stationGroupId);
-        if (plan.isPresent()) {
-            this.toast(Component.translatable("screen.superpipeslide.full_map.navigation.restored", FullMapNavigationViewModel.stationName(plan.get().destinationStationGroupId())).getString());
-        } else {
-            this.toast(Component.translatable("screen.superpipeslide.full_map.navigation.restore_failed").getString());
-        }
+        destination.ifPresent(stationGroupId -> this.toast(Component.translatable("screen.superpipeslide.full_map.navigation.cancelled", FullMapNavigationViewModel.stationName(stationGroupId)).getString()));
     }
 
     private void clearNavigationPreview() {
@@ -2191,8 +2218,23 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             SPSGui.Rect action = new SPSGui.Rect(rect.right() - actionWidth + 1, rect.y() + 1, actionWidth - 2, 16);
             graphics.outline(action.x(), action.y(), action.width(), action.height(), SPSGui.withAlpha(SPSGui.INFO, 0x88));
             SPSGui.centeredText(graphics, this.font, this.toastActionLabel, action.x() + action.width() / 2, action.y() + 5, SPSGui.INFO);
-            this.addClick(action, this::runToastAction, Component.translatable("screen.superpipeslide.full_map.navigation.undo"));
+            // Priority: the toast paints above the sheets, so its button must win over any
+            // sheet control whose bounds it overlaps.
+            this.addPriorityClick(action, this::runToastAction, Component.literal(this.toastActionLabel));
         }
+    }
+
+    /**
+     * The toast's current screen rectangle (empty when no toast is showing). The toast must be
+     * part of the map chrome: without that its button clicks fall through to map panning.
+     */
+    private SPSGui.Rect computeToastBounds() {
+        if (this.toast.isEmpty() || System.currentTimeMillis() > this.toastUntilMillis) {
+            return new SPSGui.Rect(0, 0, 0, 0);
+        }
+        int width = this.font.width(this.toast) + 16;
+        int actionWidth = this.toastAction == null ? 0 : this.font.width(this.toastActionLabel) + 14;
+        return new SPSGui.Rect((this.width - width - actionWidth) / 2, this.height - 30, width + actionWidth, 18);
     }
 
     private void renderContextPicker(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
@@ -2452,7 +2494,11 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 this.schematicLegendHoverRouteLineId = Optional.empty();
             }
         }, Component.translatable(this.schematicLegendCollapsed ? "screen.superpipeslide.full_map.visible_routes.expand" : "screen.superpipeslide.full_map.visible_routes.collapse"));
-        int countRight = toggle.x() - 4;
+        // PNG export entry: opens/closes the export sheet.
+        SPSGui.Rect exportButton = new SPSGui.Rect(bounds.right() - 37, bounds.y() + 3, 16, 16);
+        FullMapUi.iconButton(graphics, exportButton, exportButton.contains(mouseX, mouseY), this.exportSheetController.open(), false, SPSGui.Icon.SAVE);
+        this.addClick(exportButton, () -> this.setExportSheetOpen(!this.exportSheetController.open()), Component.translatable("screen.superpipeslide.full_map.export.open"));
+        int countRight = exportButton.x() - 4;
         SPSGui.smallText(graphics, this.font, Integer.toString(rows.size()), countRight - Math.round(this.font.width(Integer.toString(rows.size())) * FullMapTheme.TYPE_META), bounds.y() + 7, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
         if (this.schematicLegendCollapsed) {
             this.schematicLegendMaxScroll = 0.0D;
@@ -2511,6 +2557,287 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         } else {
             SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, name.primary(), Math.round(nameWidth / ROW_TITLE_TEXT_SCALE)), nameX, rowBounds.y() + 6, hovered ? SPSGui.INFO : FullMapTheme.TEXT_PRIMARY, ROW_TITLE_TEXT_SCALE);
         }
+    }
+
+    private SPSGui.Rect computeExportSheetBounds() {
+        if (!this.exportSheetController.open() || FullRouteMapCache.layoutMode() != FullRouteMapLayoutMode.SCHEMATIC) {
+            return new SPSGui.Rect(0, 0, 0, 0);
+        }
+        int width = Math.min(320, this.width - 40);
+        int height = Math.min(540, this.height - 40);
+        return new SPSGui.Rect((this.width - width) / 2, (this.height - height) / 2, width, height);
+    }
+
+    private void setExportSheetOpen(boolean open) {
+        this.exportSheetController.setOpen(open);
+        if (this.exportZoomBox != null) {
+            this.exportZoomBox.setVisible(open);
+            if (!open && this.exportZoomBox.isFocused()) {
+                this.exportZoomBox.setFocused(false);
+                this.setFocused(null);
+            }
+        }
+        if (open) {
+            this.exportStatusText = Component.translatable("screen.superpipeslide.full_map.export.output_hint").getString();
+        }
+    }
+
+    private void focusExportZoomBox() {
+        if (this.exportZoomBox != null) {
+            this.exportZoomBox.setFocused(true);
+            this.setFocused(this.exportZoomBox);
+        }
+    }
+
+    /** The export plan behind the sheet's size estimates, rebuilt only when inputs change. */
+    private MapExportPlan exportPlan(MapExportOptions options) {
+        long routeRevision = ClientRouteDataCache.revision();
+        long pipeRevision = ClientPipeNetworkCache.aggregateRevision();
+        if (this.cachedExportPlan == null
+                || !options.equals(this.cachedExportPlanOptions)
+                || this.cachedExportPlanRouteRevision != routeRevision
+                || this.cachedExportPlanPipeRevision != pipeRevision) {
+            this.cachedExportPlan = MapExportPlan.build(options);
+            this.cachedExportPlanOptions = options;
+            this.cachedExportPlanRouteRevision = routeRevision;
+            this.cachedExportPlanPipeRevision = pipeRevision;
+        }
+        return this.cachedExportPlan;
+    }
+
+    private void startExport() {
+        MapExportService.export(this.exportSheetController.options(), this::onExportDone);
+    }
+
+    private void onExportDone(MapExportService.Result result) {
+        if (result.fileCount() == 0) {
+            this.exportStatusText = Component.translatable("screen.superpipeslide.full_map.export.error.no_content").getString();
+            return;
+        }
+        this.exportStatusText = Component.translatable("screen.superpipeslide.full_map.export.status_saved").getString();
+        String message = Component.translatable(result.allSucceeded() ? "screen.superpipeslide.full_map.export.success" : "screen.superpipeslide.full_map.export.partial", result.successCount(), result.fileCount()).getString();
+        this.toast(message, Component.translatable("screen.superpipeslide.full_map.export.open_folder").getString(), () -> Util.getPlatform().openFile(result.outputDirectory().toFile()), 8000L);
+    }
+
+    private static String formatExportZoom(double zoom) {
+        return (zoom == Math.floor(zoom) && !Double.isInfinite(zoom) ? Integer.toString((int) zoom) : Double.toString(zoom)) + "×";
+    }
+
+    private void renderExportSheet(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        boolean sheetVisible = this.exportSheetController.open() && FullRouteMapCache.layoutMode() == FullRouteMapLayoutMode.SCHEMATIC && this.exportSheetBounds.width() > 0;
+        // Keep the widget in sync even when the sheet fades out without setExportSheetOpen
+        // (e.g. the layout mode switches away from SCHEMATIC while the sheet is open).
+        if (this.exportZoomBox != null && this.exportZoomBox.isVisible() != sheetVisible) {
+            this.exportZoomBox.setVisible(sheetVisible);
+            if (!sheetVisible && this.exportZoomBox.isFocused()) {
+                this.exportZoomBox.setFocused(false);
+                this.setFocused(null);
+            }
+        }
+        if (!sheetVisible) {
+            this.exportSheetController.setRouteListMaxScroll(0.0D);
+            return;
+        }
+        SPSGui.Rect bounds = this.exportSheetBounds;
+        graphics.fill(bounds.x() + 2, bounds.y() + 3, bounds.right() + 2, bounds.bottom() + 3, FullMapTheme.SHADOW);
+        FullMapUi.toolbarPanel(graphics, bounds);
+        int pad = 8;
+        int contentX = bounds.x() + pad;
+        int contentWidth = bounds.width() - pad * 2;
+        int y = bounds.y() + 4;
+        // Header: title plus close button.
+        SPSGui.icon(graphics, new SPSGui.Rect(contentX, y + 1, 14, 14), SPSGui.Icon.SAVE, FullMapTheme.TEXT_SECONDARY);
+        SPSGui.smallText(graphics, this.font, Component.translatable("screen.superpipeslide.full_map.export.title").getString(), contentX + 17, y + 4, FullMapTheme.TEXT_PRIMARY, FullMapTheme.TYPE_META);
+        SPSGui.Rect close = new SPSGui.Rect(bounds.right() - pad - 16, y, 16, 16);
+        FullMapUi.iconButton(graphics, close, close.contains(mouseX, mouseY), false, false, SPSGui.Icon.CLOSE);
+        this.addClick(close, () -> this.setExportSheetOpen(false), Component.translatable("screen.superpipeslide.full_map.export.close"));
+        y += 21;
+
+        // Routes section header with select-all / clear text buttons.
+        SPSGui.smallText(graphics, this.font, Component.translatable("screen.superpipeslide.full_map.export.routes").getString(), contentX, y + 3, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
+        String selectAll = Component.translatable("screen.superpipeslide.full_map.export.select_all").getString();
+        String clear = Component.translatable("screen.superpipeslide.full_map.export.clear").getString();
+        int clearWidth = Math.round(this.font.width(clear) * FullMapTheme.TYPE_META);
+        int allWidth = Math.round(this.font.width(selectAll) * FullMapTheme.TYPE_META);
+        SPSGui.Rect clearButton = new SPSGui.Rect(bounds.right() - pad - clearWidth, y, clearWidth, 12);
+        SPSGui.Rect allButton = new SPSGui.Rect(clearButton.x() - 8 - allWidth, y, allWidth, 12);
+        SPSGui.smallText(graphics, this.font, selectAll, allButton.x(), y + 3, allButton.contains(mouseX, mouseY) ? SPSGui.INFO : FullMapTheme.TEXT_SECONDARY, FullMapTheme.TYPE_META);
+        SPSGui.smallText(graphics, this.font, clear, clearButton.x(), y + 3, clearButton.contains(mouseX, mouseY) ? SPSGui.INFO : FullMapTheme.TEXT_SECONDARY, FullMapTheme.TYPE_META);
+        this.addClick(allButton, this.exportSheetController::selectAllRouteLines, Component.translatable("screen.superpipeslide.full_map.export.select_all"));
+        this.addClick(clearButton, this.exportSheetController::clearRouteLines, Component.translatable("screen.superpipeslide.full_map.export.clear"));
+        y += 14;
+
+        // Route line checkbox list; the bottom sections below reserve fixed heights and
+        // the list takes what is left. The option sections are single compact rows (label
+        // inline with its chips) so the list keeps most of the sheet.
+        int optionRowHeight = 22;
+        int estimateHeight = 13;
+        int dimensionsHeight = 13;
+        int buttonHeight = 22;
+        int statusHeight = 12;
+        int bottomHeight = optionRowHeight * 3 + estimateHeight + dimensionsHeight + buttonHeight + statusHeight + 8 + pad;
+        int listHeight = Math.max(36, bounds.bottom() - y - bottomHeight);
+        List<RouteLine> lines = ClientRouteDataCache.routeLines().stream()
+                .sorted(Comparator.comparing(FullMapText::primaryName, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+        int rowHeight = 18;
+        int contentHeight = Math.max(rowHeight, lines.size() * rowHeight);
+        SPSGui.Rect list = new SPSGui.Rect(contentX, y, contentWidth, listHeight);
+        this.exportSheetController.setRouteListMaxScroll(Math.max(0.0D, contentHeight - list.height()));
+        graphics.enableScissor(list.x(), list.y(), list.right(), list.bottom());
+        int rowY = (int) Math.round(list.y() - this.exportSheetController.routeListScroll());
+        if (lines.isEmpty()) {
+            SPSGui.smallText(graphics, this.font, Component.translatable("screen.superpipeslide.full_map.export.no_routes").getString(), list.x() + 4, list.y() + 6, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_TINY);
+        }
+        for (RouteLine line : lines) {
+            SPSGui.Rect rowBounds = new SPSGui.Rect(list.x(), rowY, list.width() - (this.exportSheetController.routeListMaxScroll() > 0.0D ? 6 : 0), rowHeight - 2);
+            if (rectsOverlap(rowBounds, list)) {
+                boolean hovered = rowBounds.contains(mouseX, mouseY) && list.contains(mouseX, mouseY);
+                boolean selected = this.exportSheetController.selectedRouteLineIds().contains(line.id());
+                this.drawExportRouteRow(graphics, line, rowBounds, hovered, selected);
+                this.addClick(clipRect(rowBounds, list), () -> this.exportSheetController.toggleRouteLine(line.id()), Component.translatable("screen.superpipeslide.full_map.export.toggle_route", FullMapText.primaryName(line)));
+            }
+            rowY += rowHeight;
+        }
+        graphics.disableScissor();
+        if (this.exportSheetController.routeListMaxScroll() > 0.0D) {
+            FullMapScrollBar.Binding binding = new FullMapScrollBar.Binding(
+                    "exportRoutes",
+                    list,
+                    contentHeight,
+                    this.exportSheetController.routeListScroll(),
+                    this.exportSheetController.routeListMaxScroll(),
+                    FullMapScrollBar.LEGEND,
+                    true,
+                    this.exportSheetController::setRouteListScroll);
+            this.registerScrollBar(binding);
+            FullMapScrollBar.render(graphics, binding);
+        }
+        y += listHeight + 4;
+
+        // Zoom levels: one compact row with the section label, the preset chips, the
+        // custom value chip (once accepted) and the custom input field side by side.
+        int optionLabelWidth = 52;
+        this.drawExportSectionLabel(graphics, "screen.superpipeslide.full_map.export.zoom_levels", contentX, y, optionLabelWidth);
+        int chipX = contentX + optionLabelWidth + 4;
+        for (double preset : MapExportOptions.PRESET_ZOOM_LEVELS) {
+            SPSGui.Rect chip = new SPSGui.Rect(chipX, y, 28, 18);
+            boolean selected = this.exportSheetController.selectedZoomLevels().contains(preset);
+            this.drawExportChip(graphics, chip, formatExportZoom(preset), chip.contains(mouseX, mouseY), selected);
+            this.addClick(chip, () -> this.exportSheetController.togglePresetZoomLevel(preset), Component.translatable("screen.superpipeslide.full_map.export.toggle_zoom", formatExportZoom(preset)));
+            chipX += 31;
+        }
+        Double customZoom = this.exportSheetController.customZoomLevel();
+        if (customZoom != null) {
+            SPSGui.Rect chip = new SPSGui.Rect(chipX + 3, y, 36, 18);
+            this.drawExportChip(graphics, chip, formatExportZoom(customZoom), chip.contains(mouseX, mouseY), true);
+            this.addClick(chip, () -> {
+                this.exportSheetController.setCustomZoomLevel(null);
+                if (this.exportZoomBox != null) {
+                    this.exportZoomBox.setValue("");
+                }
+            }, Component.translatable("screen.superpipeslide.full_map.export.custom_zoom_remove"));
+            chipX += 39;
+        }
+        if (this.exportZoomBox != null) {
+            SPSGui.Rect field = new SPSGui.Rect(chipX + 3, y, Math.max(40, bounds.right() - pad - chipX - 3), 18);
+            graphics.fill(field.x(), field.y(), field.right(), field.bottom(), FullMapTheme.SURFACE_CONTROL);
+            graphics.outline(field.x(), field.y(), field.width(), field.height(), this.exportZoomBox.isFocused() ? FullMapTheme.BORDER_SELECTED : FullMapTheme.BORDER);
+            this.exportZoomBox.setX(field.x() + 4);
+            this.exportZoomBox.setY(field.y() + 4);
+            this.exportZoomBox.setWidth(field.width() - 8);
+            if (this.exportZoomBox.getValue().isEmpty()) {
+                SPSGui.smallText(graphics, this.font, Component.translatable("screen.superpipeslide.full_map.export.custom_zoom_hint").getString(), field.x() + 4, field.y() + 6, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
+            }
+        }
+        y += optionRowHeight;
+
+        // Resolution multiplier: raster density relative to the on-screen map, with the
+        // baseline explained at the row's right end.
+        this.drawExportSectionLabel(graphics, "screen.superpipeslide.full_map.export.density", contentX, y, optionLabelWidth);
+        chipX = contentX + optionLabelWidth + 4;
+        for (double preset : MapExportOptions.DENSITY_PRESETS) {
+            SPSGui.Rect chip = new SPSGui.Rect(chipX, y, 36, 18);
+            boolean selected = this.exportSheetController.selectedResolutionMultiplier() == preset;
+            this.drawExportChip(graphics, chip, formatExportZoom(preset), chip.contains(mouseX, mouseY), selected);
+            this.addClick(chip, () -> this.exportSheetController.setResolutionMultiplier(preset), Component.translatable("screen.superpipeslide.full_map.export.toggle_density", formatExportZoom(preset)));
+            chipX += 39;
+        }
+        String densityHint = Component.translatable("screen.superpipeslide.full_map.export.density_hint").getString();
+        SPSGui.smallText(graphics, this.font, densityHint, bounds.right() - pad - Math.round(this.font.width(densityHint) * FullMapTheme.TYPE_META), y + 6, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
+        y += optionRowHeight;
+
+        // Background variant: opaque, transparent, or one file of each per image.
+        this.drawExportSectionLabel(graphics, "screen.superpipeslide.full_map.export.background", contentX, y, optionLabelWidth);
+        MapExportOptions.ExportBackground[] backgroundModes = {
+                MapExportOptions.ExportBackground.BOTH,
+                MapExportOptions.ExportBackground.OPAQUE,
+                MapExportOptions.ExportBackground.TRANSPARENT };
+        int backgroundChipWidth = (contentWidth - optionLabelWidth - 4 - 6) / 3;
+        chipX = contentX + optionLabelWidth + 4;
+        for (MapExportOptions.ExportBackground mode : backgroundModes) {
+            SPSGui.Rect chip = new SPSGui.Rect(chipX, y, backgroundChipWidth, 18);
+            Component label = Component.translatable("screen.superpipeslide.full_map.export.bg." + mode.name().toLowerCase(java.util.Locale.ROOT));
+            this.drawExportChip(graphics, chip, label.getString(), chip.contains(mouseX, mouseY), this.exportSheetController.backgroundMode() == mode);
+            this.addClick(chip, () -> this.exportSheetController.setBackgroundMode(mode), label);
+            chipX += backgroundChipWidth + 3;
+        }
+        y += optionRowHeight;
+
+        // Size estimate, dimension summary, export button, status line.
+        MapExportOptions options = this.exportSheetController.options();
+        MapExportPlan plan = this.exportPlan(options);
+        double pixelScale = MapExportService.pixelScale(options.resolutionMultiplier());
+        int maxSpan = 0;
+        for (double zoom : options.zoomLevels()) {
+            maxSpan = Math.max(maxSpan, plan.estimateMaxSpan(zoom, pixelScale));
+        }
+        boolean tooLarge = maxSpan > MapExportService.maxTextureSize();
+        SPSGui.smallText(graphics, this.font, Component.translatable("screen.superpipeslide.full_map.export.estimated_max_span", maxSpan).getString(), contentX, y + 3, tooLarge ? FullMapTheme.WARNING : FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
+        y += estimateHeight;
+        String dimensions = plan.isEmpty() ? "-" : plan.entries().stream().map(entry -> dimensionLabel(entry.levelKey())).distinct().collect(java.util.stream.Collectors.joining(", "));
+        SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, Component.translatable("screen.superpipeslide.full_map.export.dimensions", dimensions).getString(), Math.round(contentWidth / FullMapTheme.TYPE_META)), contentX, y + 3, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
+        y += dimensionsHeight;
+
+        String errorKey = MapExportService.validateForExport(options, plan);
+        boolean exporting = MapExportService.exportInProgress();
+        boolean disabled = errorKey != null || exporting;
+        SPSGui.Rect button = new SPSGui.Rect(contentX, y, contentWidth, buttonHeight);
+        boolean buttonHovered = button.contains(mouseX, mouseY) && !disabled;
+        graphics.fill(button.x(), button.y(), button.right(), button.bottom(), disabled ? FullMapTheme.SURFACE_CONTROL_DISABLED : buttonHovered ? FullMapTheme.SURFACE_CONTROL_HOVER : FullMapTheme.SURFACE_CONTROL_SELECTED);
+        graphics.outline(button.x(), button.y(), button.width(), button.height(), buttonHovered ? FullMapTheme.BORDER_SELECTED : FullMapTheme.BORDER);
+        String buttonLabel = Component.translatable(exporting ? "screen.superpipeslide.full_map.export.exporting" : "screen.superpipeslide.full_map.export.export_button").getString();
+        int labelWidth = Math.round(this.font.width(buttonLabel) * FullMapTheme.TYPE_BODY);
+        SPSGui.smallText(graphics, this.font, buttonLabel, button.x() + (button.width() - labelWidth) / 2, button.y() + 7, disabled ? FullMapTheme.TEXT_MUTED : FullMapTheme.TEXT_PRIMARY, FullMapTheme.TYPE_BODY);
+        if (!disabled) {
+            this.addClick(button, this::startExport, Component.translatable("screen.superpipeslide.full_map.export.export_button"));
+        }
+        y += buttonHeight + 2;
+
+        String status = errorKey != null ? Component.translatable("screen.superpipeslide.full_map.export." + errorKey).getString() : this.exportStatusText;
+        SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, status, Math.round(contentWidth / FullMapTheme.TYPE_META)), contentX, y + 3, errorKey != null ? FullMapTheme.WARNING : FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
+    }
+
+    private void drawExportRouteRow(GuiGraphicsExtractor graphics, RouteLine line, SPSGui.Rect rowBounds, boolean hovered, boolean selected) {
+        graphics.fill(rowBounds.x(), rowBounds.y(), rowBounds.right(), rowBounds.bottom(), hovered ? FullMapTheme.SURFACE_CONTROL_HOVER : FullMapTheme.SURFACE_CONTROL);
+        graphics.outline(rowBounds.x(), rowBounds.y(), rowBounds.width(), rowBounds.height(), selected ? FullMapTheme.BORDER_SELECTED : FullMapTheme.BORDER);
+        SPSGui.icon(graphics, new SPSGui.Rect(rowBounds.x() + 3, rowBounds.y() + 2, 12, 12), selected ? SPSGui.Icon.CHECKBOX_ON : SPSGui.Icon.CHECKBOX_OFF, selected ? SPSGui.INFO : FullMapTheme.TEXT_SECONDARY);
+        FullMapUi.drawThemeBands(graphics, new SPSGui.Rect(rowBounds.x() + 18, rowBounds.y() + 2, 6, rowBounds.height() - 4), routeLineColors(line));
+        String name = FullMapText.primaryName(line);
+        int nameWidth = Math.max(24, rowBounds.width() - 30);
+        SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, name, Math.round(nameWidth / ROW_TITLE_TEXT_SCALE)), rowBounds.x() + 28, rowBounds.y() + 5, hovered ? SPSGui.INFO : FullMapTheme.TEXT_PRIMARY, ROW_TITLE_TEXT_SCALE);
+    }
+
+    private void drawExportSectionLabel(GuiGraphicsExtractor graphics, String translationKey, int x, int y, int maxWidth) {
+        SPSGui.smallText(graphics, this.font, SPSGui.ellipsize(this.font, Component.translatable(translationKey).getString(), Math.round(maxWidth / FullMapTheme.TYPE_META)), x, y + 6,
+                FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
+    }
+
+    private void drawExportChip(GuiGraphicsExtractor graphics, SPSGui.Rect chip, String label, boolean hovered, boolean selected) {
+        graphics.fill(chip.x(), chip.y(), chip.right(), chip.bottom(), selected ? FullMapTheme.SURFACE_CONTROL_SELECTED : hovered ? FullMapTheme.SURFACE_CONTROL_HOVER : FullMapTheme.SURFACE_CONTROL);
+        graphics.outline(chip.x(), chip.y(), chip.width(), chip.height(), selected ? FullMapTheme.BORDER_SELECTED : FullMapTheme.BORDER);
+        int labelWidth = Math.round(this.font.width(label) * FullMapTheme.TYPE_META);
+        SPSGui.smallText(graphics, this.font, label, chip.x() + (chip.width() - labelWidth) / 2, chip.y() + 6, selected ? FullMapTheme.TEXT_PRIMARY : FullMapTheme.TEXT_SECONDARY, FullMapTheme.TYPE_META);
     }
 
     private Optional<ViewportState> currentViewport() {
@@ -3275,12 +3602,17 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         if (event.button() == 0) {
             boolean insideSearchChrome = this.searchControlBounds.contains(event.x(), event.y()) || this.searchResultsBounds.contains(event.x(), event.y());
             boolean insideDimensionChrome = this.dimensionChipBounds.contains(event.x(), event.y()) || this.dimensionMenuBounds.contains(event.x(), event.y());
+            boolean insideExportChrome = this.exportSheetBounds.width() > 0 && this.exportSheetBounds.contains(event.x(), event.y());
             if (!insideSearchChrome && this.searchBox != null) {
                 this.searchBox.setFocused(false);
                 this.setFocused(null);
                 if (this.searchBox.getValue().isBlank()) {
                     this.searchController.setExpanded(false);
                 }
+            }
+            if (!insideExportChrome && this.exportZoomBox != null && this.exportZoomBox.isFocused()) {
+                this.exportZoomBox.setFocused(false);
+                this.setFocused(null);
             }
             if (!insideDimensionChrome) {
                 this.dimensionMenuOpen = false;
@@ -3316,6 +3648,12 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     return true;
                 }
                 if (this.dispatchClickActions(this.backgroundClickActions, event.x(), event.y())) {
+                    // A sheet control (chip, checkbox, button) consumed the click: typing should
+                    // no longer go to the custom-zoom box.
+                    if (insideExportChrome && this.exportZoomBox != null && this.exportZoomBox.isFocused()) {
+                        this.exportZoomBox.setFocused(false);
+                        this.setFocused(null);
+                    }
                     return true;
                 }
                 if (this.searchControlBounds.contains(event.x(), event.y()) && this.dispatchWidgetMouseClicked(event, doubleClick)) {
@@ -3324,6 +3662,18 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 }
                 if (this.searchControlBounds.contains(event.x(), event.y())) {
                     this.focusSearch();
+                }
+                if (insideExportChrome && this.exportZoomBox != null && this.exportZoomBox.isVisible()) {
+                    boolean insideBox = event.x() >= this.exportZoomBox.getX() && event.x() < this.exportZoomBox.getX() + this.exportZoomBox.getWidth()
+                            && event.y() >= this.exportZoomBox.getY() && event.y() < this.exportZoomBox.getY() + this.exportZoomBox.getHeight();
+                    if (insideBox && this.dispatchWidgetMouseClicked(event, doubleClick)) {
+                        this.focusExportZoomBox();
+                        return true;
+                    }
+                    if (this.exportZoomBox.isFocused()) {
+                        this.exportZoomBox.setFocused(false);
+                        this.setFocused(null);
+                    }
                 }
                 return true;
             }
@@ -3723,6 +4073,13 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             }
             return true;
         }
+        if (this.exportSheetController.open() && this.exportSheetBounds.width() > 0 && this.exportSheetBounds.contains(mouseX, mouseY)) {
+            if (this.exportSheetController.routeListMaxScroll() > 0.0D) {
+                double delta = Math.abs(scrollX) > Math.abs(scrollY) ? scrollX : -scrollY;
+                this.exportSheetController.setRouteListScroll(this.exportSheetController.routeListScroll() + delta * 26.0D);
+            }
+            return true;
+        }
         if (FullRouteMapCache.layoutMode() == FullRouteMapLayoutMode.SCHEMATIC && this.schematicLegendBounds.contains(mouseX, mouseY)) {
             if (!this.schematicLegendCollapsed && this.schematicLegendMaxScroll > 0.0D) {
                 double delta = Math.abs(scrollX) > Math.abs(scrollY) ? scrollX : -scrollY;
@@ -3748,6 +4105,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             return this.closeTopmostOverlayOrScreen(event, true);
         }
         if (this.searchBox != null && this.searchBox.isFocused()) {
+            return super.keyPressed(event);
+        }
+        if (this.exportZoomBox != null && this.exportZoomBox.isFocused()) {
             return super.keyPressed(event);
         }
         // Toggle key bound to open this screen: mirrors ESC's layered close, one layer per
@@ -3790,9 +4150,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     /**
      * Closes the topmost overlay layer, one layer per invocation: search first, then
-     * context picker, dimension menu, navigation preview, and finally the topmost card.
-     * When nothing is left, ESC delegates to the super implementation (which closes the
-     * screen); other callers close directly.
+     * context picker, the export sheet, dimension menu, navigation preview, and finally
+     * the topmost card. When nothing is left, ESC delegates to the super implementation
+     * (which closes the screen); other callers close directly.
      */
     private boolean closeTopmostOverlayOrScreen(KeyEvent event, boolean delegateToSuper) {
         if (this.searchBox != null && (this.searchBox.isFocused() || this.searchController.expanded() || !this.searchBox.getValue().isBlank())) {
@@ -3807,6 +4167,15 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         }
         if (this.contextPicker.isPresent()) {
             this.clearContextPicker();
+            return true;
+        }
+        if (this.exportSheetController.open()) {
+            if (this.exportZoomBox != null && this.exportZoomBox.isFocused()) {
+                this.exportZoomBox.setFocused(false);
+                this.setFocused(null);
+            } else {
+                this.setExportSheetOpen(false);
+            }
             return true;
         }
         if (this.diagnosticsPanelOpen) {
