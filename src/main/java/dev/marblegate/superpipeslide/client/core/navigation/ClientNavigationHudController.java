@@ -1,7 +1,6 @@
 package dev.marblegate.superpipeslide.client.core.navigation;
 
 import com.mojang.blaze3d.platform.Window;
-import dev.marblegate.superpipeslide.client.SuperPipeSlideClient;
 import dev.marblegate.superpipeslide.client.core.accessibility.ClientSafetyOptions;
 import dev.marblegate.superpipeslide.client.core.route.ClientRouteHudController;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
@@ -17,7 +16,6 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3fc;
 
@@ -38,7 +36,6 @@ public final class ClientNavigationHudController {
     private static final int RAIL_TRACK_BOTTOM_PADDING = 14;
     private static final int CARD_GAP = 8;
     private static final int MAX_CARD_WIDTH = 176;
-    private static final int CANCEL_HINT_HEIGHT = 11;
     private static final double EDGE_MARKER_MARGIN = 22.0D;
     private static final double PROJECTED_MARKER_PADDING = 18.0D;
 
@@ -156,11 +153,7 @@ public final class ClientNavigationHudController {
         int railY = topLimit + Math.max(0, (availableHeight - railHeight) / 2);
         int cardX = railX + RAIL_WIDTH + CARD_GAP;
         int cardWidth = Math.min(MAX_CARD_WIDTH, Math.max(0, screenWidth - cardX - 8));
-        int cardHeight = value.target().isPresent() || !value.detailText().isBlank() ? 54 : 44;
-        if (ClientNavigationController.isNavigating()) {
-            // Reserve a footer line for the cancel-navigation key hint.
-            cardHeight += CANCEL_HINT_HEIGHT;
-        }
+        int cardHeight = value.target().isPresent() || !value.detailText().isBlank() ? 48 : 34;
         int preferredCardY = railY + 8;
         int cardY = Math.max(6, Math.min(screenHeight - cardHeight - 6, preferredCardY));
         return new HudGeometry(railX, railY, RAIL_WIDTH, railHeight, cardX, cardY, cardWidth, cardHeight);
@@ -279,12 +272,8 @@ public final class ClientNavigationHudController {
 
         String targetLine = targetLine(value, distance, showDistanceChip);
         graphics.text(font, SPSGui.ellipsize(font, targetLine, right - textX), textX, y + 19, color(MUTED, cardAlpha * 0.92D), true);
-        if (!value.detailText().isBlank() && height >= 50) {
+        if (!value.detailText().isBlank() && height >= 48) {
             graphics.text(font, SPSGui.ellipsize(font, value.detailText(), right - textX), textX, y + 33, color(MUTED, cardAlpha * 0.72D), true);
-        }
-        if (ClientNavigationController.isNavigating()) {
-            String hint = Component.translatable("navigation.superpipeslide.hud.cancel_hint", SuperPipeSlideClient.CANCEL_NAVIGATION.getTranslatedKeyMessage()).getString();
-            graphics.text(font, SPSGui.ellipsize(font, hint, right - textX), textX, y + height - CANCEL_HINT_HEIGHT + 1, color(MUTED, cardAlpha * 0.60D), true);
         }
     }
 

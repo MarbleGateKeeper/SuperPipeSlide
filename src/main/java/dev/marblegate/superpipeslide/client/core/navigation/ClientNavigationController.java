@@ -8,16 +8,20 @@ import dev.marblegate.superpipeslide.client.core.slide.ClientSlideController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideNoticeController;
 import dev.marblegate.superpipeslide.client.core.slide.ClientSlideState;
 import dev.marblegate.superpipeslide.common.core.geometry.PipeConnection;
+import dev.marblegate.superpipeslide.common.core.geometry.PipeConnectionRef;
 import dev.marblegate.superpipeslide.common.core.route.model.layout.RouteLayout;
 import dev.marblegate.superpipeslide.common.core.route.model.platform.PlatformStop;
+import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionPath;
 import dev.marblegate.superpipeslide.common.core.route.model.section.RouteSectionStatus;
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationGroup;
 import dev.marblegate.superpipeslide.common.core.route.service.RouteLayoutNavigator;
 import dev.marblegate.superpipeslide.network.slide.ClientboundSlideNoticePayload;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import javax.annotation.Nullable;
 import net.minecraft.client.Minecraft;
@@ -79,12 +83,12 @@ public final class ClientNavigationController {
     }
 
     public static Optional<NavigationPlan> previewPlan(LocalPlayer player, UUID destinationStationGroupId) {
-        return NavigationPlanner.buildPlan(player, destinationStationGroupId);
+        return NavigationPlanner.buildPlan(player, destinationStationGroupId, null);
     }
 
     public static Optional<NavigationPlan> startNavigation(LocalPlayer player, UUID destinationStationGroupId) {
         ClientSlideController.clearRouteHudNavigationStopRetention();
-        Optional<NavigationPlan> plan = NavigationPlanner.buildPlan(player, destinationStationGroupId);
+        Optional<NavigationPlan> plan = NavigationPlanner.buildPlan(player, destinationStationGroupId, null);
         if (plan.isEmpty()) {
             sendNotice(ClientboundSlideNoticePayload.Kind.WARNING, List.of(0xFFFFB13B),
                     Component.translatable("navigation.superpipeslide.failed"),
@@ -92,6 +96,22 @@ public final class ClientNavigationController {
             return Optional.empty();
         }
         NavigationPlan navigationPlan = plan.get();
+        if (navigationPlan.walkOnly()) {
+            if (isPhysicallyAtDestination(player, destinationStationGroupId)) {
+                session = new NavigationSession(navigationPlan, NavigationPhase.ARRIVED);
+                session.completedAtMs = System.currentTimeMillis();
+                sendNotice(ClientboundSlideNoticePayload.Kind.ARRIVAL, List.of(0xFFFFD35A),
+                        Component.translatable("navigation.superpipeslide.already_arrived", stationName(navigationPlan.destinationStationGroupId())),
+                        List.of());
+                return plan;
+            }
+            session = new NavigationSession(navigationPlan, NavigationPhase.FINAL_WALK_APPROACH);
+            session.walkStartDistance = navigationPlan.initialWalkDistance();
+            sendNotice(ClientboundSlideNoticePayload.Kind.STANDARD, navigationPlan.primaryColors(),
+                    Component.translatable("navigation.superpipeslide.walk_started", stationName(navigationPlan.destinationStationGroupId())),
+                    List.of(line(Component.translatable("navigation.superpipeslide.walk_started.body", stationName(navigationPlan.destinationStationGroupId())))));
+            return plan;
+        }
         if (navigationPlan.segments().isEmpty()) {
             if (!isPhysicallyAtDestination(player, navigationPlan.destinationStationGroupId())) {
                 sendNotice(ClientboundSlideNoticePayload.Kind.WARNING, List.of(0xFFFFB13B),
@@ -166,7 +186,10 @@ public final class ClientNavigationController {
         }
         boolean routeDataStale = ClientRouteDataCache.revision() != session.plan.routeRevision()
                 || ClientPipeNetworkCache.aggregateRevision() != session.plan.pipeRevision();
-        if (routeDataStale && !session.isRiding()) {
+        // Postpone rebuilds while the pipe data the sections were computed against is
+        // still on its way: planning on a partially synced pipe cache under-prices
+        // missing sections and flips plans in dense areas.
+        if (routeDataStale && !session.isRiding() && !ClientRouteDataCache.isWaitingForPipeRevision(ClientPipeNetworkCache.aggregateRevision())) {
             // Mid-ride rebuilds stay deferred: the stale condition persists until the
             // player detaches, and a later tick takes this same branch once they are no
             // longer riding, so no separate after-ride flag is needed.
@@ -319,6 +342,7 @@ public final class ClientNavigationController {
         session.enteredCurrentBoardingRange = false;
         session.ridingLivenessGraceTicks = 0;
         session.lastRouteHudStopContext = null;
+        session.pendingPlannedDismountConnectionId = null;
         sendNotice(ClientboundSlideNoticePayload.Kind.ENTER_ROUTE, segment.colors(),
                 Component.translatable("navigation.superpipeslide.boarded", segment.lineName()),
                 List.of(line(Component.translatable("navigation.superpipeslide.boarded.body", stationName(segment.alightingPlatformStopId())))));
@@ -364,6 +388,7 @@ public final class ClientNavigationController {
             return;
         }
         if (segment.finalWalkInstruction().isPresent()) {
+            session.pendingPlannedDismountConnectionId = dismountConnectionId(platformStopId);
             completeFinalWalkSegment(segment, false);
             return;
         }
@@ -372,6 +397,7 @@ public final class ClientNavigationController {
             return;
         }
         rememberRouteHudStopContext(segment, platformStopId);
+        session.pendingPlannedDismountConnectionId = dismountConnectionId(platformStopId);
         session.phase = NavigationPhase.TRANSFER_WALK;
         session.segmentIndex++;
         session.enteredCurrentBoardingRange = false;
@@ -382,11 +408,57 @@ public final class ClientNavigationController {
                 () -> sendTransferNotice(TransferInstruction.sameStationFallback(segment, next), next, false));
     }
 
+    /**
+     * Connection id of the platform the player is expected to dismount at after a
+     * station-entry checkpoint, or null when it cannot be resolved (which disables
+     * the planned-dismount fast path for this stop).
+     */
+    @Nullable
+    private static UUID dismountConnectionId(UUID platformStopId) {
+        return ClientRouteDataCache.platformStop(platformStopId)
+                .map(stop -> stop.connectionRef().connectionId())
+                .orElse(null);
+    }
+
+    /**
+     * Whether the connection a slide ended on belongs to the current segment's
+     * section paths. In dense clusters the player can be sliding on a parallel pipe
+     * of a neighbouring station whose platform projection is well within the early
+     * transfer range; without this check any detach there is mistaken for a planned
+     * early transfer. When section paths are missing from the client cache the check
+     * cannot prove anything and defers to the proximity heuristic (returns true).
+     */
+    private static boolean detachOnSegmentPath(NavigationSegment segment, PipeConnection connection) {
+        Set<UUID> pathConnectionIds = null;
+        for (NavigationSectionRef sectionRef : segment.routeSections()) {
+            Optional<RouteSectionPath> path = ClientRouteDataCache.routeSectionPath(sectionRef.routeSectionId());
+            if (path.isEmpty()) {
+                continue;
+            }
+            if (pathConnectionIds == null) {
+                pathConnectionIds = new HashSet<>();
+            }
+            List<PipeConnectionRef> refs = segment.routeDirection() < 0 ? path.get().reverseConnections() : path.get().forwardConnections();
+            for (PipeConnectionRef ref : refs) {
+                pathConnectionIds.add(ref.connectionId());
+            }
+        }
+        return pathConnectionIds == null || pathConnectionIds.contains(connection.id());
+    }
+
     public static void onSlideDetached(LocalPlayer player, ClientSlideState state, PipeConnection connection, DetachReason reason) {
         if (session == null) {
             return;
         }
         if (!session.isRiding()) {
+            UUID plannedDismount = session.pendingPlannedDismountConnectionId;
+            session.pendingPlannedDismountConnectionId = null;
+            if (plannedDismount != null && plannedDismount.equals(connection.id())) {
+                // Planned dismount at a transfer or final-walk stop: the plan already
+                // advanced past this segment at the station-entry checkpoint, so keep
+                // guiding the current leg instead of re-planning from scratch.
+                return;
+            }
             // Capture lock downgrade: off-plan pipe captures are allowed, so a slide
             // can end far from the planned boarding platform. Re-plan from wherever
             // the player ended up instead of dragging guidance back to the old start.
@@ -396,6 +468,13 @@ public final class ClientNavigationController {
             return;
         }
         NavigationSegment segment = session.currentSegment();
+        if (!detachOnSegmentPath(segment, connection)) {
+            // The slide ended on a pipe outside the current segment's section paths:
+            // off-plan deviation, not an early transfer.
+            overlayMessage(Component.translatable("navigation.superpipeslide.detached_continue"));
+            restartFromCurrentPosition(player);
+            return;
+        }
         if (segment.finalWalkInstruction().isPresent() && nearSegmentAlighting(player, state, connection, segment)) {
             completeFinalWalkSegment(segment, true);
             return;
@@ -421,7 +500,17 @@ public final class ClientNavigationController {
             return;
         }
         UUID destination = session.plan.destinationStationGroupId();
-        Optional<NavigationPlan> rebuilt = NavigationPlanner.buildPlan(player, destination);
+        Optional<NavigationPlan> rebuilt = NavigationPlanner.buildPlan(player, destination, session.plan);
+        if (rebuilt.isPresent()) {
+            Optional<NavigationPlan> continued = NavigationPlanner.continueIncumbent(player, session.plan, session.segmentIndex, rebuilt.get().estimatedTicks());
+            if (continued.isPresent()) {
+                // The remaining tail of the current plan is still rideable and not
+                // clearly worse than the rebuilt alternative: keep the session's
+                // progress and quietly adopt the revision-refreshed incumbent.
+                session.plan = continued.get();
+                return;
+            }
+        }
         if (rebuilt.isEmpty()) {
             session.phase = NavigationPhase.ROUTE_FAILED;
             session.completedAtMs = System.currentTimeMillis();
@@ -431,6 +520,11 @@ public final class ClientNavigationController {
             return;
         }
         NavigationPlan plan = rebuilt.get();
+        if (plan.walkOnly()) {
+            session = new NavigationSession(plan, NavigationPhase.FINAL_WALK_APPROACH);
+            session.walkStartDistance = plan.initialWalkDistance();
+            return;
+        }
         if (plan.segments().isEmpty()) {
             if (!isPhysicallyAtDestination(player, plan.destinationStationGroupId())) {
                 session.phase = NavigationPhase.ROUTE_FAILED;
@@ -476,6 +570,23 @@ public final class ClientNavigationController {
                     0,
                     session.plan.primaryColors(),
                     Optional.empty()));
+        }
+        if (session.plan.walkOnly()) {
+            // Walk-only sessions have no segments, so they are rendered here instead
+            // of through the segment-based layout below.
+            Optional<TargetInfo> walkTarget = currentWorldTarget(player);
+            String walkAction = Component.translatable("navigation.superpipeslide.hud.final_walk", stationName(session.plan.destinationStationGroupId()).getString()).getString();
+            int walkRemainingTicks = (int) Math.round(walkTarget.map(target -> target.distance() * NavigationPlanner.WALK_TICKS_PER_BLOCK).orElse(0.0D));
+            String walkDetail = Component.translatable("navigation.superpipeslide.hud.detail", 0, secondsText(walkRemainingTicks)).getString();
+            return Optional.of(new NavigationHudSnapshot(
+                    session.phase,
+                    stationName(session.plan.destinationStationGroupId()).getString(),
+                    walkAction,
+                    walkDetail,
+                    walkingPhaseProgress(player),
+                    1,
+                    session.plan.primaryColors(),
+                    walkTarget));
         }
         NavigationSegment segment = session.currentSegment();
         Optional<TargetInfo> target = currentWorldTarget(player);
@@ -645,9 +756,25 @@ public final class ClientNavigationController {
             return;
         }
         UUID destination = session.plan.destinationStationGroupId();
-        Optional<NavigationPlan> rebuilt = NavigationPlanner.buildPlan(player, destination);
+        Optional<NavigationPlan> rebuilt = NavigationPlanner.buildPlan(player, destination, session.plan);
         if (rebuilt.isPresent()) {
             NavigationPlan plan = rebuilt.get();
+            Optional<NavigationPlan> continued = NavigationPlanner.continueIncumbent(player, session.plan, session.segmentIndex, plan.estimatedTicks());
+            if (continued.isPresent()) {
+                // The data revision bump did not break the plan's remaining tail:
+                // keep the session's progress and quietly adopt the refreshed plan
+                // instead of resetting and notifying.
+                session.plan = continued.get();
+                return;
+            }
+            if (plan.walkOnly()) {
+                session = new NavigationSession(plan, NavigationPhase.FINAL_WALK_APPROACH);
+                session.walkStartDistance = plan.initialWalkDistance();
+                sendNotice(ClientboundSlideNoticePayload.Kind.STANDARD, plan.primaryColors(),
+                        Component.translatable("navigation.superpipeslide.route_updated"),
+                        List.of(line(Component.translatable("navigation.superpipeslide.route_updated.body"))));
+                return;
+            }
             if (plan.segments().isEmpty()) {
                 if (isPhysicallyAtDestination(player, plan.destinationStationGroupId())) {
                     session = new NavigationSession(plan, NavigationPhase.ARRIVED);
@@ -660,13 +787,6 @@ public final class ClientNavigationController {
                 failRouteInvalidated();
                 return;
             }
-            if (plansEquivalent(session.plan, plan)) {
-                // The data revision bump did not change the route's shape: keep the
-                // session's progress and quietly adopt the rebuilt plan (fresh
-                // revisions and cost estimates) instead of resetting and notifying.
-                session.plan = plan;
-                return;
-            }
             session = new NavigationSession(plan, NavigationPhase.WALK_TO_BOARDING_STATION);
             session.walkStartDistance = plan.initialWalkDistance();
             sendNotice(ClientboundSlideNoticePayload.Kind.STANDARD, plan.primaryColors(),
@@ -675,29 +795,6 @@ public final class ClientNavigationController {
             return;
         }
         failRouteInvalidated();
-    }
-
-    /**
-     * Two plans are equivalent when they head to the same destination through the
-     * same segment sequence (see NavigationSegment.contentEquals). Cost estimates,
-     * walk distances and embedded data revisions are deliberately ignored so that
-     * irrelevant data bumps do not reset an in-progress session.
-     */
-    private static boolean plansEquivalent(NavigationPlan current, NavigationPlan rebuilt) {
-        if (!current.destinationStationGroupId().equals(rebuilt.destinationStationGroupId())) {
-            return false;
-        }
-        List<NavigationSegment> currentSegments = current.segments();
-        List<NavigationSegment> rebuiltSegments = rebuilt.segments();
-        if (currentSegments.size() != rebuiltSegments.size()) {
-            return false;
-        }
-        for (int i = 0; i < currentSegments.size(); i++) {
-            if (!currentSegments.get(i).contentEquals(rebuiltSegments.get(i))) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**
@@ -784,15 +881,20 @@ public final class ClientNavigationController {
     }
 
     private static Optional<TargetInfo> currentWorldTarget(LocalPlayer player) {
-        if (session == null || session.plan.segments().isEmpty() || session.phase == NavigationPhase.ARRIVED || session.phase == NavigationPhase.ROUTE_FAILED) {
+        if (session == null || session.phase == NavigationPhase.ARRIVED || session.phase == NavigationPhase.ROUTE_FAILED) {
+            return Optional.empty();
+        }
+        // Checked before the empty-segment bail-out: walk-only plans stay in this
+        // phase for their whole lifetime and have no segments at all.
+        if (session.phase == NavigationPhase.FINAL_WALK_APPROACH) {
+            return finalWalkDestinationTarget(player);
+        }
+        if (session.plan.segments().isEmpty()) {
             return Optional.empty();
         }
         NavigationSegment segment = session.currentSegment();
         if (session.isRiding()) {
             return targetInfo(player, segment.alightingPlatformStopId(), segment.colors(), ridingTargetKind(segment));
-        }
-        if (session.phase == NavigationPhase.FINAL_WALK_APPROACH) {
-            return finalWalkDestinationTarget(player);
         }
         TargetKind kind = TargetKind.BOARDING;
         if (session.phase == NavigationPhase.TRANSFER_WALK || session.phase == NavigationPhase.TRANSFER_PROXIMITY) {
@@ -1153,10 +1255,33 @@ public final class ClientNavigationController {
             boolean finalWalk,
             boolean crossDimensionFinalWalk,
             double initialWalkDistance,
-            List<Integer> primaryColors) {
+            List<Integer> primaryColors,
+            boolean walkOnly) {
         public NavigationPlan {
             segments = List.copyOf(segments);
             primaryColors = List.copyOf(primaryColors);
+        }
+
+        /** Copy of this plan with fresh data revisions and an updated walk-only flag source unchanged. */
+        NavigationPlan withRevisions(long newRouteRevision, long newPipeRevision) {
+            return new NavigationPlan(
+                    this.id,
+                    newRouteRevision,
+                    newPipeRevision,
+                    this.startStationGroupId,
+                    this.destinationStationGroupId,
+                    this.startPlatformStopId,
+                    this.segments,
+                    this.estimatedTicks,
+                    this.transferCount,
+                    this.sameStationTransferCount,
+                    this.outOfStationTransferCount,
+                    this.crossDimensionTransferCount,
+                    this.finalWalk,
+                    this.crossDimensionFinalWalk,
+                    this.initialWalkDistance,
+                    this.primaryColors,
+                    this.walkOnly);
         }
     }
 
@@ -1188,24 +1313,6 @@ public final class ClientNavigationController {
 
         public boolean transferAfter() {
             return this.transferInstruction.isPresent();
-        }
-
-        /**
-         * Structural comparison used by automatic route rebuilds: two segments are
-         * equivalent when they ride the same layout in the same direction between
-         * the same platforms over the same section refs, with the same follow-up
-         * transfer/final-walk kind. Cost estimates and cosmetic fields (colors,
-         * line name) are ignored on purpose.
-         */
-        public boolean contentEquals(NavigationSegment other) {
-            return this.layoutId.equals(other.layoutId)
-                    && this.routeDirection == other.routeDirection
-                    && this.boardingPlatformStopId.equals(other.boardingPlatformStopId)
-                    && this.alightingPlatformStopId.equals(other.alightingPlatformStopId)
-                    && this.routeSections.equals(other.routeSections)
-                    && this.finalSegment == other.finalSegment
-                    && this.transferInstruction.map(TransferInstruction::kind).equals(other.transferInstruction.map(TransferInstruction::kind))
-                    && this.finalWalkInstruction.map(FinalWalkInstruction::kind).equals(other.finalWalkInstruction.map(FinalWalkInstruction::kind));
         }
     }
 
@@ -1352,6 +1459,14 @@ public final class ClientNavigationController {
         private double lastRidingSegmentProgress;
         /** Segment index lastRidingSegmentProgress belongs to; -1 when nothing was computed yet. */
         private int lastRidingProgressSegmentIndex = -1;
+        /**
+         * Connection id of the platform where the plan expects the player to dismount
+         * next (set at the station-entry checkpoint of a transfer or final-walk stop).
+         * The first detach on this connection afterwards is the planned dismount and
+         * must not trigger a re-plan; null disables the fast path.
+         */
+        @Nullable
+        private UUID pendingPlannedDismountConnectionId;
 
         private NavigationSession(NavigationPlan plan, NavigationPhase phase) {
             this.plan = plan;

@@ -166,6 +166,10 @@ public final class FullMapNavigationViewModel {
 
     private static String routeSummary(ClientNavigationController.NavigationPlan plan) {
         ArrayList<String> parts = new ArrayList<>();
+        if (plan.walkOnly()) {
+            parts.add(Component.translatable("screen.superpipeslide.navigation.badge.walk_only", timeText(plan.estimatedTicks())).getString());
+            return String.join(" / ", parts);
+        }
         if (plan.segments().isEmpty()) {
             parts.add(Component.translatable("screen.superpipeslide.navigation.badge.already_here").getString());
             return String.join(" / ", parts);
@@ -187,6 +191,38 @@ public final class FullMapNavigationViewModel {
     private static List<ItineraryStep> itinerary(ClientNavigationController.NavigationPlan plan) {
         ArrayList<ItineraryStep> steps = new ArrayList<>();
         int primary = primaryColor(plan.primaryColors());
+        if (plan.walkOnly()) {
+            steps.add(new ItineraryStep(
+                    ItineraryKind.ORIGIN,
+                    Component.translatable("screen.superpipeslide.navigation.itinerary.origin").getString(),
+                    "",
+                    "",
+                    List.of(),
+                    List.of(primary),
+                    false,
+                    false));
+            steps.add(new ItineraryStep(
+                    ItineraryKind.FINAL_WALK,
+                    Component.translatable("screen.superpipeslide.navigation.timeline.walk_to_destination").getString(),
+                    Component.translatable("screen.superpipeslide.navigation.timeline.walk_to_destination.detail",
+                            stationName(plan.destinationStationGroupId()),
+                            distanceText(plan.initialWalkDistance())).getString(),
+                    "",
+                    List.of(),
+                    List.of(primary),
+                    false,
+                    false));
+            steps.add(new ItineraryStep(
+                    ItineraryKind.DESTINATION,
+                    Component.translatable("screen.superpipeslide.navigation.timeline.destination").getString(),
+                    stationName(plan.destinationStationGroupId()),
+                    "",
+                    List.of(),
+                    List.of(primary),
+                    false,
+                    false));
+            return List.copyOf(steps);
+        }
         if (plan.segments().isEmpty()) {
             steps.add(new ItineraryStep(
                     ItineraryKind.DESTINATION,

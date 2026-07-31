@@ -69,6 +69,14 @@ public final class ClientConfig {
             .comment("Mouse wheel zoom sensitivity of the full route map. 1.0 is the default step, lower values zoom in smaller steps, higher values in larger steps.")
             .defineInRange("fullRouteMapZoomSensitivity", 1.0D, 0.5D, 2.0D);
 
+    public static final ModConfigSpec.DoubleValue NAVIGATION_WALK_TO_DESTINATION_RANGE = BUILDER
+            .comment("Maximum straight-line distance, in blocks, at which navigation may recommend walking directly to the destination (or finishing a ride with an unlinked on-foot leg) instead of boarding a pipe line.")
+            .defineInRange("navigationWalkToDestinationRange", 64.0D, 8.0D, 512.0D);
+
+    public static final ModConfigSpec.DoubleValue NAVIGATION_UNLINKED_WALK_COST_FACTOR = BUILDER
+            .comment("Conservative multiplier applied to straight-line walking time when estimating an on-foot leg that has no configured station transfer link. Values above 1.0 bias route planning towards linked or rideable routes.")
+            .defineInRange("navigationUnlinkedWalkCostFactor", 1.3D, 1.0D, 3.0D);
+
     public static final ModConfigSpec.DoubleValue HUD_ANIMATION_SCALE = BUILDER
             .comment("Speed multiplier for HUD animations (route HUD and navigation HUD pulses, flows, and transitions). 1.0 is full speed, 0.0 freezes all HUD animation.")
             .defineInRange("hudAnimationScale", 1.0D, 0.0D, 1.0D);

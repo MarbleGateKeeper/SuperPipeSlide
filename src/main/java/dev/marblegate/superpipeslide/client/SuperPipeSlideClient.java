@@ -92,7 +92,7 @@ public class SuperPipeSlideClient {
             InputConstants.Type.KEYSYM,
             InputConstants.KEY_C,
             KEY_CATEGORY);
-    /** Public so {@link ClientNavigationHudController} can render the bound key in its cancel hint. Unbound by default. */
+    /** Unbound by default. */
     public static final KeyMapping CANCEL_NAVIGATION = new KeyMapping(
             "key.superpipeslide.cancel_navigation",
             KeyConflictContext.IN_GAME,

@@ -14,6 +14,7 @@ import dev.marblegate.superpipeslide.common.core.route.model.station.StationGrou
 import dev.marblegate.superpipeslide.common.core.route.model.station.StationTransferLink;
 import dev.marblegate.superpipeslide.common.core.route.service.RouteLayoutNavigator;
 import dev.marblegate.superpipeslide.common.core.slide.ResolvedPipeSpeedRules;
+import dev.marblegate.superpipeslide.config.ClientConfig;
 import dev.marblegate.superpipeslide.config.Config;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -48,6 +49,12 @@ final class NavigationPlanner {
     static final double WALK_TICKS_PER_BLOCK = 8.0D;
     private static final double MIN_TRANSFER_WALK_TICKS = 40.0D;
     private static final double BOARDING_PENALTY_TICKS = 4.0D * 20.0D;
+    /** Cost of boarding again after a transfer: walking onto the pipe, getting captured and accelerating. */
+    private static final double RE_BOARDING_PENALTY_TICKS = 3.0D * 20.0D;
+    /** Incumbent plans win cost comparisons against rebuilt plans until they are this much worse. */
+    static final double KEEP_PLAN_DISCOUNT = 0.85D;
+    /** A ride plan must be this much cheaper than walking (and vice versa) before the plan type switches. */
+    static final double WALK_VS_RIDE_HYSTERESIS = 0.15D;
     /** Ride speed assumed when a section's connections (or their attributes) are not available on the client. */
     private static final double FALLBACK_RIDE_SPEED = 0.30D;
     private static final double SEARCH_COST_EPSILON = 1.0E-6D;
@@ -94,18 +101,34 @@ final class NavigationPlanner {
                 .toList();
     }
 
-    static Optional<ClientNavigationController.NavigationPlan> buildPlan(LocalPlayer player, UUID destinationStationGroupId) {
+    static Optional<ClientNavigationController.NavigationPlan> buildPlan(LocalPlayer player, UUID destinationStationGroupId, @Nullable ClientNavigationController.NavigationPlan incumbent) {
         NavigationGraph graph = graph();
         List<PlatformStop> destinationStops = ClientRouteDataCache.platformStopsInStation(destinationStationGroupId);
         Set<UUID> destinationStopIds = new HashSet<>();
         destinationStops.forEach(stop -> destinationStopIds.add(stop.id()));
         AccessDistances accessDistances = new AccessDistances(player.position());
         boolean allowDestinationAsStart = ClientNavigationController.isPhysicallyAtDestination(player, destinationStationGroupId);
+        Map<UUID, Double> terminalWalks = walkTerminals(destinationStationGroupId);
 
         List<PlatformStop> preferredStarts = preferredStartCandidates(player, destinationStationGroupId, accessDistances, allowDestinationAsStart);
-        CandidatePlan best = bestCandidatePlan(graph, preferredStarts, destinationStopIds, destinationStationGroupId, accessDistances);
+        CandidatePlan best = bestCandidatePlan(graph, preferredStarts, destinationStopIds, destinationStationGroupId, accessDistances, terminalWalks);
         if (best == null) {
-            best = bestCandidatePlan(graph, fallbackStartCandidates(player, destinationStationGroupId, accessDistances, allowDestinationAsStart), destinationStopIds, destinationStationGroupId, accessDistances);
+            best = bestCandidatePlan(graph, fallbackStartCandidates(player, destinationStationGroupId, accessDistances, allowDestinationAsStart), destinationStopIds, destinationStationGroupId, accessDistances, terminalWalks);
+        }
+
+        // Walking straight to the destination is a first-class candidate: when it is
+        // eligible it wins unless riding is clearly faster. The hysteresis factor keeps
+        // borderline comparisons from flapping between plan types on every re-plan, and
+        // is doubled while the incumbent plan is already a walk plan.
+        double directWalkDistance = directWalkDistance(player, destinationStationGroupId, accessDistances);
+        if (!Double.isNaN(directWalkDistance)) {
+            double walkCost = directWalkDistance * WALK_TICKS_PER_BLOCK;
+            double switchFactor = incumbent != null && incumbent.walkOnly()
+                    ? 1.0D - WALK_VS_RIDE_HYSTERESIS * 2.0D
+                    : 1.0D - WALK_VS_RIDE_HYSTERESIS;
+            if (best == null || best.cost() >= walkCost * switchFactor) {
+                return Optional.of(walkOnlyPlan(destinationStationGroupId, directWalkDistance, walkCost));
+            }
         }
         if (best == null) {
             return Optional.empty();
@@ -159,15 +182,88 @@ final class NavigationPlanner {
                 finalWalk,
                 crossDimensionFinalWalk,
                 best.walkDistance(),
-                primaryColors));
+                primaryColors,
+                false));
+    }
+
+    /**
+     * Straight-line distance to the destination station area when a direct on-foot
+     * plan is eligible (same dimension, within the configured walk range), NaN
+     * otherwise.
+     */
+    private static double directWalkDistance(LocalPlayer player, UUID destinationStationGroupId, AccessDistances accessDistances) {
+        Optional<StationGroup> destination = ClientRouteDataCache.stationGroup(destinationStationGroupId);
+        if (destination.isEmpty() || !destination.get().levelKey().equals(player.level().dimension())) {
+            return Double.NaN;
+        }
+        double distance = accessDistances.stationGroupDistance(destinationStationGroupId);
+        return distance <= ClientConfig.NAVIGATION_WALK_TO_DESTINATION_RANGE.getAsDouble() ? distance : Double.NaN;
+    }
+
+    private static ClientNavigationController.NavigationPlan walkOnlyPlan(UUID destinationStationGroupId, double walkDistance, double walkCost) {
+        return new ClientNavigationController.NavigationPlan(
+                UUID.randomUUID(),
+                ClientRouteDataCache.revision(),
+                ClientPipeNetworkCache.aggregateRevision(),
+                destinationStationGroupId,
+                destinationStationGroupId,
+                destinationStationGroupId,
+                List.of(),
+                (int) Math.round(walkCost),
+                0,
+                0,
+                0,
+                0,
+                false,
+                false,
+                walkDistance,
+                List.of(0xFF47A6FF),
+                true);
+    }
+
+    /**
+     * Stations close enough to the destination to finish the trip on foot without a
+     * configured transfer link, mapped to their conservative straight-line walk time.
+     * Stations that already have a configured link to the destination are excluded:
+     * those walks are routed through the graph's transfer edges at the link's own cost.
+     */
+    private static Map<UUID, Double> walkTerminals(UUID destinationStationGroupId) {
+        Optional<StationGroup> destination = ClientRouteDataCache.stationGroup(destinationStationGroupId);
+        if (destination.isEmpty()) {
+            return Map.of();
+        }
+        double range = ClientConfig.NAVIGATION_WALK_TO_DESTINATION_RANGE.getAsDouble();
+        double factor = ClientConfig.NAVIGATION_UNLINKED_WALK_COST_FACTOR.getAsDouble();
+        Vec3 destinationCenter = Vec3.atCenterOf(destination.get().stationBlockPos());
+        Map<UUID, Double> terminals = new HashMap<>();
+        for (StationGroup station : ClientRouteDataCache.stationGroups()) {
+            if (station.id().equals(destinationStationGroupId) || !station.levelKey().equals(destination.get().levelKey())) {
+                continue;
+            }
+            double distance = Vec3.atCenterOf(station.stationBlockPos()).distanceTo(destinationCenter);
+            if (distance > range || hasConfiguredTransferLink(station.id(), destinationStationGroupId)) {
+                continue;
+            }
+            terminals.put(station.id(), distance * WALK_TICKS_PER_BLOCK * factor);
+        }
+        return terminals;
+    }
+
+    private static boolean hasConfiguredTransferLink(UUID firstStationGroupId, UUID secondStationGroupId) {
+        for (StationTransferLink link : ClientRouteDataCache.stationTransferLinks()) {
+            if (link.connects(firstStationGroupId, secondStationGroupId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Nullable
-    private static CandidatePlan bestCandidatePlan(NavigationGraph graph, List<PlatformStop> candidates, Set<UUID> destinationStopIds, UUID destinationStationGroupId, AccessDistances accessDistances) {
+    private static CandidatePlan bestCandidatePlan(NavigationGraph graph, List<PlatformStop> candidates, Set<UUID> destinationStopIds, UUID destinationStationGroupId, AccessDistances accessDistances, Map<UUID, Double> walkTerminals) {
         if (candidates.isEmpty()) {
             return null;
         }
-        SearchResult search = solve(graph, candidates, destinationStopIds, destinationStationGroupId, accessDistances);
+        SearchResult search = solve(graph, candidates, destinationStopIds, destinationStationGroupId, accessDistances, walkTerminals);
         if (search.start().isEmpty()) {
             return null;
         }
@@ -280,7 +376,12 @@ final class NavigationPlanner {
     }
 
     private static double sameStationTransferTicks(PlatformStop from, PlatformStop to) {
-        return Math.max(MIN_TRANSFER_WALK_TICKS, platformPosition(from).distanceTo(platformPosition(to)) * WALK_TICKS_PER_BLOCK);
+        return Math.max(MIN_TRANSFER_WALK_TICKS, platformPosition(from).distanceTo(platformPosition(to)) * WALK_TICKS_PER_BLOCK) + transferStopOverheadTicks();
+    }
+
+    /** Fixed cost of one actual stop during a transfer: dwell while stopped plus re-boarding overhead. */
+    private static double transferStopOverheadTicks() {
+        return Config.NAVIGATION_STOP_DWELL_TICKS.getAsInt() + RE_BOARDING_PENALTY_TICKS;
     }
 
     private static double transferWalkTicks(StationGroup station, PlatformStop stop) {
@@ -309,7 +410,8 @@ final class NavigationPlanner {
      * station node, charged with the plain link walk); the fan-out edges reach every
      * ride-connected platform stop of the arrival station directly, charging the
      * link walk plus the actual on-foot distance from the arrival station block to
-     * the target platform (with a floor) instead of a flat re-board penalty.
+     * the target platform (with a floor) plus the stop overhead of alighting and
+     * re-boarding, instead of a flat re-board penalty.
      */
     private static void addTransferLinkArrivalEdges(Map<NodeKey, List<GraphEdge>> edges, StationTransferLink link, ClientNavigationController.TransferKind kind, StationGroup fromStation, StationGroup toStation, Set<UUID> rideConnectedStops) {
         NodeKey fromNode = NodeKey.stationTransfer(fromStation.id());
@@ -318,20 +420,23 @@ final class NavigationPlanner {
             if (!rideConnectedStops.contains(stop.id())) {
                 continue;
             }
-            double cost = link.estimatedWalkTicks() + transferWalkTicks(toStation, stop);
+            double cost = link.estimatedWalkTicks() + transferWalkTicks(toStation, stop) + transferStopOverheadTicks();
             edges.computeIfAbsent(fromNode, ignored -> new ArrayList<>()).add(GraphEdge.stationTransfer(cost, kind, link.id(), fromStation, toStation, stop));
         }
     }
 
     private static void addLayoutEdges(Map<NodeKey, List<GraphEdge>> edges, RouteLayout layout, int direction) {
-        double dwellTicks = Config.NAVIGATION_STOP_DWELL_TICKS.getAsInt();
         for (UUID platformStopId : layout.orderedPlatformStops()) {
             RouteLayoutNavigator.nextStep(layout, platformStopId, direction, ClientRouteDataCache::routeSection)
                     .filter(step -> step.section().statusForDirection(direction) == RouteSectionStatus.VALID)
                     .ifPresent(step -> {
                         RouteSection section = step.section();
                         double length = Math.max(1.0D, section.lengthForDirection(direction));
-                        double cost = rideCostTicks(section, direction, length) + dwellTicks;
+                        // No dwell here: riders slide through intermediate stops without
+                        // halting, and alighting at the destination is free. Stop time is
+                        // charged once per actual transfer stop (see sameStationTransferTicks
+                        // and addTransferLinkArrivalEdges).
+                        double cost = rideCostTicks(section, direction, length);
                         List<Integer> colors = ClientRouteDataCache.routeLine(layout.routeLineId())
                                 .map(RouteLine::themeColors)
                                 .filter(values -> !values.isEmpty())
@@ -356,33 +461,103 @@ final class NavigationPlanner {
      * Ride time of one section in ticks: per-connection length divided by the
      * connection's actual max speed from its resolved speed rules. Any section
      * length not covered by the synced section path (missing connections or a
-     * missing path) falls back to FALLBACK_RIDE_SPEED.
+     * missing path) falls back to FALLBACK_RIDE_SPEED. The uncovered-length
+     * baseline only counts middle connections because the section length stored
+     * server-side excludes the first and last connection (see PipePathfinder).
      */
     private static double rideCostTicks(RouteSection section, int direction, double sectionLength) {
         List<PipeConnectionRef> refs = ClientRouteDataCache.routeSectionPath(section.id())
                 .map(path -> direction < 0 ? path.reverseConnections() : path.forwardConnections())
                 .orElse(List.of());
         double cost = 0.0D;
-        double coveredLength = 0.0D;
-        for (PipeConnectionRef ref : refs) {
-            Optional<PipeConnection> connection = ClientPipeNetworkCache.connection(ref);
+        double coveredMiddleLength = 0.0D;
+        for (int i = 0; i < refs.size(); i++) {
+            Optional<PipeConnection> connection = ClientPipeNetworkCache.connection(refs.get(i));
             if (connection.isEmpty()) {
                 continue;
             }
             double length = connection.get().length();
             double speed = Math.max(0.05D, ResolvedPipeSpeedRules.from(connection.get().resolvedAttributes()).maxSpeed());
             cost += length / speed;
-            coveredLength += length;
+            if (i > 0 && i < refs.size() - 1) {
+                coveredMiddleLength += length;
+            }
         }
-        double uncoveredLength = Math.max(0.0D, sectionLength - coveredLength);
+        double uncoveredLength = Math.max(0.0D, sectionLength - coveredMiddleLength);
         return cost + uncoveredLength / FALLBACK_RIDE_SPEED;
+    }
+
+    /**
+     * Re-costs the remaining tail of an incumbent plan from the player's current
+     * position and compares it against a freshly rebuilt alternative. Returns the
+     * incumbent with refreshed data revisions when its tail is still rideable and
+     * not clearly worse (KEEP_PLAN_DISCOUNT) than the rebuild; empty when the tail
+     * broke or the rebuild is clearly better. Keeps re-planning events from throwing
+     * away in-progress plans over marginal cost differences.
+     */
+    static Optional<ClientNavigationController.NavigationPlan> continueIncumbent(LocalPlayer player, ClientNavigationController.NavigationPlan incumbent, int fromSegmentIndex, double rebuiltCostTicks) {
+        AccessDistances distances = new AccessDistances(player.position());
+        if (incumbent.walkOnly()) {
+            double walkDistance = directWalkDistance(player, incumbent.destinationStationGroupId(), distances);
+            if (Double.isNaN(walkDistance)) {
+                return Optional.empty();
+            }
+            double walkCost = walkDistance * WALK_TICKS_PER_BLOCK;
+            if (walkCost * (1.0D - WALK_VS_RIDE_HYSTERESIS * 2.0D) > rebuiltCostTicks) {
+                return Optional.empty();
+            }
+            return Optional.of(incumbent.withRevisions(ClientRouteDataCache.revision(), ClientPipeNetworkCache.aggregateRevision()));
+        }
+        if (fromSegmentIndex >= incumbent.segments().size()) {
+            return Optional.empty();
+        }
+        double tailCost = 0.0D;
+        for (int i = fromSegmentIndex; i < incumbent.segments().size(); i++) {
+            ClientNavigationController.NavigationSegment segment = incumbent.segments().get(i);
+            Optional<RouteLayout> layout = ClientRouteDataCache.routeLayout(segment.layoutId());
+            if (layout.isEmpty() || RouteLayoutNavigator.normalizeDirection(layout.get(), segment.routeDirection()).isEmpty()) {
+                return Optional.empty();
+            }
+            for (ClientNavigationController.NavigationSectionRef sectionRef : segment.routeSections()) {
+                Optional<RouteSection> section = ClientRouteDataCache.routeSection(sectionRef.routeSectionId());
+                if (section.isEmpty() || section.get().statusForDirection(segment.routeDirection()) != RouteSectionStatus.VALID) {
+                    return Optional.empty();
+                }
+            }
+            Optional<PlatformStop> boarding = ClientRouteDataCache.platformStop(segment.boardingPlatformStopId());
+            if (boarding.isEmpty() || routeEdgesFrom(boarding.get().id()).isEmpty()) {
+                return Optional.empty();
+            }
+            if (ClientRouteDataCache.platformStop(segment.alightingPlatformStopId()).isEmpty()) {
+                return Optional.empty();
+            }
+            if (i == fromSegmentIndex) {
+                tailCost += distances.platformDistance(boarding.get()) * WALK_TICKS_PER_BLOCK
+                        + (fromSegmentIndex == 0 ? BOARDING_PENALTY_TICKS : RE_BOARDING_PENALTY_TICKS);
+            } else {
+                tailCost += MIN_TRANSFER_WALK_TICKS + transferStopOverheadTicks();
+            }
+            tailCost += segment.estimatedTicks();
+        }
+        if (tailCost * KEEP_PLAN_DISCOUNT > rebuiltCostTicks) {
+            return Optional.empty();
+        }
+        return Optional.of(incumbent.withRevisions(ClientRouteDataCache.revision(), ClientPipeNetworkCache.aggregateRevision()));
     }
 
     private static List<GraphEdge> routeEdgesFrom(UUID platformStopId) {
         return graph().edgesFrom(NodeKey.platform(platformStopId)).stream().filter(edge -> edge.kind() == EdgeKind.RIDE).toList();
     }
 
-    private static SearchResult solve(NavigationGraph graph, List<PlatformStop> starts, Set<UUID> destinations, UUID destinationStationGroupId, AccessDistances accessDistances) {
+    /**
+     * Multi-source, multi-target Dijkstra. Terminals are the destination platforms,
+     * the destination station node (reached through a configured transfer link), and
+     * every walk-terminal station node (finish on foot without a link). Because walk
+     * terminals surcharge the popped cost with the on-foot remainder, the search
+     * cannot stop at the first terminal popped: it tracks the cheapest terminal seen
+     * and stops once the queue minimum can no longer beat it.
+     */
+    private static SearchResult solve(NavigationGraph graph, List<PlatformStop> starts, Set<UUID> destinations, UUID destinationStationGroupId, AccessDistances accessDistances, Map<UUID, Double> walkTerminals) {
         PriorityQueue<SearchNode> open = new PriorityQueue<>();
         Map<SearchState, Double> bestCost = new HashMap<>();
         Map<SearchState, PathBackref> backrefs = new HashMap<>();
@@ -399,14 +574,34 @@ final class NavigationPlanner {
             open.add(new SearchNode(state, cost, stableStateKey(state)));
         }
         SearchState reached = null;
+        double bestTerminalCost = Double.MAX_VALUE;
+        @Nullable
+        TransferEdge terminalWalkEdge = null;
         while (!open.isEmpty()) {
             SearchNode current = open.poll();
             if (current.cost() > bestCost.getOrDefault(current.state(), Double.MAX_VALUE) + SEARCH_COST_EPSILON) {
                 continue;
             }
+            if (current.cost() >= bestTerminalCost - SEARCH_COST_EPSILON) {
+                break;
+            }
             if (isTargetState(current.state(), destinations, destinationStationGroupId)) {
                 reached = current.state();
-                break;
+                bestTerminalCost = current.cost();
+                terminalWalkEdge = null;
+                continue;
+            }
+            Double walkTicks = current.state().hasRide() && current.state().node().type() == NodeType.STATION_TRANSFER
+                    ? walkTerminals.get(current.state().node().id())
+                    : null;
+            if (walkTicks != null && current.cost() + walkTicks < bestTerminalCost - SEARCH_COST_EPSILON) {
+                Optional<StationGroup> fromStation = ClientRouteDataCache.stationGroup(current.state().node().id());
+                Optional<StationGroup> destination = ClientRouteDataCache.stationGroup(destinationStationGroupId);
+                if (fromStation.isPresent() && destination.isPresent()) {
+                    reached = current.state();
+                    bestTerminalCost = current.cost() + walkTicks;
+                    terminalWalkEdge = GraphEdge.unlinkedFinalWalk(walkTicks, fromStation.get(), destination.get());
+                }
             }
             for (GraphEdge edge : graph.edgesFrom(current.state().node())) {
                 if (!current.state().hasRide() && edge.kind() != EdgeKind.RIDE) {
@@ -440,7 +635,10 @@ final class NavigationPlanner {
             path.add(0, backref.edge());
             cursor = backref.previous();
         }
-        return new SearchResult(path, bestCost.getOrDefault(reached, Double.MAX_VALUE), Optional.ofNullable(sourceByState.get(reached)));
+        if (terminalWalkEdge != null) {
+            path.add(terminalWalkEdge);
+        }
+        return new SearchResult(path, bestTerminalCost, Optional.ofNullable(sourceByState.get(reached)));
     }
 
     /**
@@ -530,18 +728,13 @@ final class NavigationPlanner {
                 .map(TransferEdge.class::cast)
                 .filter(edge -> edge.transferKind() == ClientNavigationController.TransferKind.OUT_OF_STATION || edge.transferKind() == ClientNavigationController.TransferKind.CROSS_DIMENSION_OUT_OF_STATION)
                 .reduce((ignored, edge) -> edge)
-                .flatMap(edge -> {
-                    if (edge.transferLinkId().isEmpty()) {
-                        return Optional.empty();
-                    }
-                    return Optional.of(new ClientNavigationController.FinalWalkInstruction(
-                            edge.transferKind(),
-                            edge.fromStationGroupId(),
-                            edge.toStationGroupId(),
-                            edge.transferLinkId(),
-                            edge.fromLevelKey(),
-                            edge.toLevelKey()));
-                });
+                .map(edge -> new ClientNavigationController.FinalWalkInstruction(
+                        edge.transferKind(),
+                        edge.fromStationGroupId(),
+                        edge.toStationGroupId(),
+                        edge.transferLinkId(),
+                        edge.fromLevelKey(),
+                        edge.toLevelKey()));
     }
 
     private static Optional<TransferEdge> transferSemanticEdge(List<GraphEdge> transferEdges) {
@@ -821,6 +1014,20 @@ final class NavigationPlanner {
                     cost,
                     transferKind,
                     Optional.of(transferLinkId),
+                    fromStation.id(),
+                    toStation.id(),
+                    fromStation.levelKey(),
+                    toStation.levelKey());
+        }
+
+        /** Synthetic terminal edge appended by solve(): finish the trip walking to the destination without a configured transfer link. */
+        static TransferEdge unlinkedFinalWalk(double cost, StationGroup fromStation, StationGroup toStation) {
+            return new TransferEdge(
+                    NodeKey.stationTransfer(fromStation.id()),
+                    NodeKey.stationTransfer(toStation.id()),
+                    cost,
+                    ClientNavigationController.TransferKind.OUT_OF_STATION,
+                    Optional.empty(),
                     fromStation.id(),
                     toStation.id(),
                     fromStation.levelKey(),
