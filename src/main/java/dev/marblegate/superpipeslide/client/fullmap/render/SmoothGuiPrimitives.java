@@ -177,11 +177,13 @@ public final class SmoothGuiPrimitives {
     }
 
     /**
-     * Batched dashed stroke: walks the polyline segment by segment with the dash pattern
-     * restarting at every segment (matching the historical behavior of drawing each dash
-     * through a separate {@link #line} call) and emits every dash as a rounded capsule
-     * with the same anti-aliased halo, all inside a single primitive batch and submitted
-     * as one render state.
+     * Batched dashed stroke: the dash pattern accumulates continuously along the whole
+     * polyline's arc length instead of restarting at every segment, so dashes flow around
+     * corners and keep a constant phase no matter how the path is tessellated. Each dash
+     * is emitted as one non-overlapping stroke (see {@code PrimitiveBuilder#stroke}) with
+     * round caps at its true ends only — a dash spanning a corner becomes a single stroke
+     * with a round join rather than stacked capsules — plus the same anti-aliased halo,
+     * all inside a single primitive batch and submitted as one render state.
      */
     public static void dashedPolyline(GuiGraphicsExtractor graphics, List<Vec2> points, double width, int color, double dashLength, double gapLength) {
         if (alpha(color) <= 0) {
@@ -193,15 +195,22 @@ public final class SmoothGuiPrimitives {
     /**
      * Same as {@link #dashedPolyline(GuiGraphicsExtractor, List, double, int, double, double)}
      * but resolves the dash color from its ordinal along the polyline, which allows fading
-     * dash patterns without splitting the batch into one render state per dash. Dashes
-     * whose resolved color has a zero alpha channel are skipped.
+     * dash patterns without splitting the batch into one render state per dash. The ordinal
+     * increments once per dash period; dashes whose resolved color has a zero alpha channel
+     * are skipped.
      */
     public static void dashedPolyline(GuiGraphicsExtractor graphics, List<Vec2> points, double width, double dashLength, double gapLength, IntUnaryOperator colorForDashIndex) {
         if (points == null || points.size() < 2 || colorForDashIndex == null || width <= 0.0D || dashLength <= 0.0D || gapLength < 0.0D) {
             return;
         }
         PrimitiveBuilder builder = new PrimitiveBuilder();
+        double pattern = dashLength + gapLength;
+        double walked = 0.0D;
+        double nextDashStart = 0.0D;
         int dashIndex = 0;
+        boolean dashOpen = false;
+        int dashColor = 0;
+        List<Vec2> dashPoints = new ArrayList<>();
         for (int i = 0; i + 1 < points.size(); i++) {
             Vec2 a = points.get(i);
             Vec2 b = points.get(i + 1);
@@ -211,22 +220,47 @@ public final class SmoothGuiPrimitives {
             double dx = b.x() - a.x();
             double dy = b.y() - a.y();
             double length = Math.hypot(dx, dy);
-            if (length <= 0.0D) {
+            if (length <= 0.001D) {
                 continue;
             }
             double ux = dx / length;
             double uy = dy / length;
-            for (double start = 0.0D; start < length; start += dashLength + gapLength) {
-                double end = Math.min(length, start + dashLength);
-                int dashColor = colorForDashIndex.applyAsInt(dashIndex++);
-                if (alpha(dashColor) <= 0) {
-                    continue;
+            double segmentEnd = walked + length;
+            while (nextDashStart < segmentEnd - 0.0005D) {
+                double dashEnd = nextDashStart + dashLength;
+                if (!dashOpen) {
+                    dashColor = colorForDashIndex.applyAsInt(dashIndex);
+                    dashOpen = true;
+                    if (alpha(dashColor) > 0) {
+                        double start = Math.max(0.0D, Math.min(length, nextDashStart - walked));
+                        dashPoints.add(new Vec2(a.x() + ux * start, a.y() + uy * start));
+                    }
                 }
-                Vec2 dashStart = new Vec2(a.x() + ux * start, a.y() + uy * start);
-                Vec2 dashEnd = new Vec2(a.x() + ux * end, a.y() + uy * end);
-                builder.capsule(dashStart, dashEnd, width + EDGE_AA_PX, withScaledAlpha(dashColor, 0.32D));
-                builder.capsule(dashStart, dashEnd, width, dashColor);
+                if (dashEnd < segmentEnd - 0.0005D) {
+                    if (!dashPoints.isEmpty()) {
+                        double end = Math.max(0.0D, Math.min(length, dashEnd - walked));
+                        dashPoints.add(new Vec2(a.x() + ux * end, a.y() + uy * end));
+                        builder.stroke(dashPoints, width + EDGE_AA_PX, withScaledAlpha(dashColor, 0.32D), true, true);
+                        builder.stroke(dashPoints, width, dashColor, true, true);
+                        dashPoints.clear();
+                    }
+                    dashOpen = false;
+                    dashIndex++;
+                    nextDashStart += pattern;
+                } else {
+                    // The dash reaches this segment's end: it continues around the corner.
+                    if (!dashPoints.isEmpty()) {
+                        dashPoints.add(b);
+                    }
+                    break;
+                }
             }
+            walked = segmentEnd;
+        }
+        // A dash still open at the path's end is drawn truncated, capped at the last point.
+        if (!dashPoints.isEmpty()) {
+            builder.stroke(dashPoints, width + EDGE_AA_PX, withScaledAlpha(dashColor, 0.32D), true, true);
+            builder.stroke(dashPoints, width, dashColor, true, true);
         }
         builder.submit(graphics);
     }
@@ -236,6 +270,18 @@ public final class SmoothGuiPrimitives {
     }
 
     public static void polyline(GuiGraphicsExtractor graphics, List<Vec2> points, double width, int color, boolean roundCaps) {
+        polyline(graphics, points, width, color, roundCaps, width);
+    }
+
+    /**
+     * Same as {@link #polyline(GuiGraphicsExtractor, List, double, int, boolean)} but derives
+     * the corner-cut radius of the centerline from {@code roundingReferenceWidth} instead of
+     * the stroked width: the path is rounded exactly like a line of that width drawn on the
+     * same points while the stroke itself uses {@code width}. Highlight halos drawn wider
+     * than the line they surround pass the base line's width here, so halo and line share
+     * the same corner rounding and the halo no longer deviates at turns.
+     */
+    public static void polyline(GuiGraphicsExtractor graphics, List<Vec2> points, double width, int color, boolean roundCaps, double roundingReferenceWidth) {
         if (points == null || points.size() < 2 || alpha(color) <= 0 || width <= 0.0D) {
             return;
         }
@@ -243,7 +289,7 @@ public final class SmoothGuiPrimitives {
         if (cleaned.size() < 2) {
             return;
         }
-        List<Vec2> path = roundedPolyline(cleaned, width);
+        List<Vec2> path = roundedPolyline(cleaned, roundingReferenceWidth);
         PrimitiveBuilder builder = new PrimitiveBuilder();
         builder.stroke(path, width + EDGE_AA_PX, withScaledAlpha(color, 0.32D), roundCaps, roundCaps);
         builder.stroke(path, width, color, roundCaps, roundCaps);
@@ -533,6 +579,13 @@ public final class SmoothGuiPrimitives {
         private double maxX = Double.NEGATIVE_INFINITY;
         private double maxY = Double.NEGATIVE_INFINITY;
 
+        /**
+         * Round-ended capsule tessellated as NON-overlapping geometry: the rectangle quad
+         * plus one outward semicircle fan per endpoint (same construction as the caps in
+         * {@link #stroke}). Each cap fan shares only the diameter edge with the quad, so
+         * translucent colors blend uniformly — the previous version drew a FULL circle over
+         * each quad end, double-blending half of every cap into a visibly darker band.
+         */
         void capsule(Vec2 a, Vec2 b, double width, int color) {
             double dx = b.x() - a.x();
             double dy = b.y() - a.y();
@@ -549,48 +602,192 @@ public final class SmoothGuiPrimitives {
                     b.x() + nx, b.y() + ny, color,
                     b.x() - nx, b.y() - ny, color,
                     a.x() - nx, a.y() - ny, color);
-            this.circle(a, radius, color);
-            this.circle(b, radius, color);
+            this.arcFan(a.x(), a.y(), radius, Math.atan2(ny, nx), Math.PI, 6, 48, color);
+            this.arcFan(b.x(), b.y(), radius, Math.atan2(-ny, -nx), Math.PI, 6, 48, color);
         }
 
+        /**
+         * Tessellates a polyline stroke as self-contained, NON-overlapping geometry: one
+         * quad per segment, a shared-edge triangle fan approximating a round join on the
+         * outer side of every turn (centered at the polyline vertex), a single shared miter
+         * point on the inner side (collapsed to the vertex itself on sharp turns so the
+         * strip never folds over itself), two gap-filler triangles closing the kite between
+         * segment quads, vertex and join fan, and semicircle cap fans extending outward from
+         * the endpoints only. Because no two emitted quads cover the same pixel, translucent
+         * colors blend uniformly at joints and caps — the previous implementation (one quad
+         * per segment plus a FULL circle at every vertex) double-blended every overlap into
+         * visible dark blobs. For opaque colors the union outline is the same round-joined,
+         * round-capped stroke as before.
+         */
         void stroke(List<Vec2> points, double width, int color, boolean startCap, boolean endCap) {
             if (points.size() < 2 || width <= 0.0D || alpha(color) <= 0) {
                 return;
             }
             double radius = width * 0.5D;
-            boolean drewSegment = false;
-            for (int i = 0; i + 1 < points.size(); i++) {
-                Vec2 a = points.get(i);
-                Vec2 b = points.get(i + 1);
-                double dx = b.x() - a.x();
-                double dy = b.y() - a.y();
-                double length = Math.hypot(dx, dy);
-                if (length <= 0.001D) {
-                    continue;
+            // Drop zero-length segments; their vertices carry no direction information.
+            List<Vec2> path = new ArrayList<>(points.size());
+            for (Vec2 point : points) {
+                if (point != null && (path.isEmpty() || path.getLast().distanceTo(point) > 0.001D)) {
+                    path.add(point);
                 }
-                double nx = -dy / length * radius;
-                double ny = dx / length * radius;
-                this.quad(
-                        a.x() + nx, a.y() + ny, color,
-                        b.x() + nx, b.y() + ny, color,
-                        b.x() - nx, b.y() - ny, color,
-                        a.x() - nx, a.y() - ny, color);
-                drewSegment = true;
             }
-            if (!drewSegment) {
-                if (startCap || endCap) {
-                    this.circle(points.getFirst(), radius, color);
+            if (path.size() < 2) {
+                if (!path.isEmpty() && (startCap || endCap)) {
+                    this.circle(path.getFirst(), radius, color);
                 }
                 return;
             }
-            for (int i = 1; i + 1 < points.size(); i++) {
-                this.circle(points.get(i), radius, color);
+            int count = path.size();
+            double[] segLength = new double[count - 1];
+            double[] normalX = new double[count - 1];
+            double[] normalY = new double[count - 1];
+            for (int i = 0; i + 1 < count; i++) {
+                Vec2 a = path.get(i);
+                Vec2 b = path.get(i + 1);
+                double dx = b.x() - a.x();
+                double dy = b.y() - a.y();
+                double length = Math.hypot(dx, dy);
+                segLength[i] = length;
+                normalX[i] = -dy / length;
+                normalY[i] = dx / length;
+            }
+            // Joint description per interior vertex: the shared inner strip point, the
+            // outer offset points where the previous/next segment quads end (the join fan
+            // bridges them along the arc), and which side of the vertex is the outer one.
+            double[] innerX = new double[count];
+            double[] innerY = new double[count];
+            double[] outerPrevX = new double[count];
+            double[] outerPrevY = new double[count];
+            double[] outerNextX = new double[count];
+            double[] outerNextY = new double[count];
+            double[] turnSide = new double[count];
+            boolean[] roundJoin = new boolean[count];
+            for (int i = 1; i + 1 < count; i++) {
+                Vec2 p = path.get(i);
+                // Segment unit directions recovered from the stored left normals.
+                double dirX0 = normalY[i - 1];
+                double dirY0 = -normalX[i - 1];
+                double dirX1 = normalY[i];
+                double dirY1 = -normalX[i];
+                double cross = dirX0 * dirY1 - dirY0 * dirX1;
+                double miterX = normalX[i - 1] + normalX[i];
+                double miterY = normalY[i - 1] + normalY[i];
+                double miterNorm = Math.hypot(miterX, miterY);
+                if (Math.abs(cross) < 0.0005D && miterNorm > 0.01D) {
+                    // Nearly straight joint: averaged normal on both sides, no join fan.
+                    double mx = miterX / miterNorm;
+                    double my = miterY / miterNorm;
+                    innerX[i] = p.x() + mx * radius;
+                    innerY[i] = p.y() + mx * radius;
+                    outerPrevX[i] = p.x() - mx * radius;
+                    outerPrevY[i] = p.y() - mx * radius;
+                    outerNextX[i] = outerPrevX[i];
+                    outerNextY[i] = outerPrevY[i];
+                    turnSide[i] = 1.0D;
+                    continue;
+                }
+                double side = cross < 0.0D ? -1.0D : 1.0D;
+                turnSide[i] = side;
+                roundJoin[i] = true;
+                // Inner point: intersection of the two inner offset lines along the miter
+                // direction. Turns sharp enough to push the miter beyond 2.5x the half
+                // width collapse the inner point to the vertex itself, and a shorter
+                // adjacent segment pulls it back along the miter — both keep the strip
+                // from folding over itself.
+                double ix = p.x();
+                double iy = p.y();
+                if (miterNorm > 0.01D) {
+                    double mx = miterX / miterNorm;
+                    double my = miterY / miterNorm;
+                    double cosHalf = Math.max(0.001D, mx * normalX[i - 1] + my * normalY[i - 1]);
+                    double miterLength = radius / cosHalf;
+                    if (miterLength <= radius * 2.5D) {
+                        double sinHalf = Math.abs(cross) / (2.0D * cosHalf);
+                        double segmentClamp = 0.5D * Math.min(segLength[i - 1], segLength[i]) / Math.max(0.05D, sinHalf);
+                        miterLength = Math.min(miterLength, segmentClamp);
+                        ix = p.x() + side * mx * miterLength;
+                        iy = p.y() + side * my * miterLength;
+                    }
+                }
+                innerX[i] = ix;
+                innerY[i] = iy;
+                outerPrevX[i] = p.x() - side * normalX[i - 1] * radius;
+                outerPrevY[i] = p.y() - side * normalY[i - 1] * radius;
+                outerNextX[i] = p.x() - side * normalX[i] * radius;
+                outerNextY[i] = p.y() - side * normalY[i] * radius;
+            }
+            for (int j = 0; j + 1 < count; j++) {
+                Vec2 a = path.get(j);
+                Vec2 b = path.get(j + 1);
+                double startLeftX;
+                double startLeftY;
+                double startRightX;
+                double startRightY;
+                if (j == 0) {
+                    startLeftX = a.x() + normalX[0] * radius;
+                    startLeftY = a.y() + normalY[0] * radius;
+                    startRightX = a.x() - normalX[0] * radius;
+                    startRightY = a.y() - normalY[0] * radius;
+                } else if (turnSide[j] > 0.0D) {
+                    startLeftX = innerX[j];
+                    startLeftY = innerY[j];
+                    startRightX = outerNextX[j];
+                    startRightY = outerNextY[j];
+                } else {
+                    startLeftX = outerNextX[j];
+                    startLeftY = outerNextY[j];
+                    startRightX = innerX[j];
+                    startRightY = innerY[j];
+                }
+                double endLeftX;
+                double endLeftY;
+                double endRightX;
+                double endRightY;
+                if (j + 1 == count - 1) {
+                    endLeftX = b.x() + normalX[count - 2] * radius;
+                    endLeftY = b.y() + normalY[count - 2] * radius;
+                    endRightX = b.x() - normalX[count - 2] * radius;
+                    endRightY = b.y() - normalY[count - 2] * radius;
+                } else if (turnSide[j + 1] > 0.0D) {
+                    endLeftX = innerX[j + 1];
+                    endLeftY = innerY[j + 1];
+                    endRightX = outerPrevX[j + 1];
+                    endRightY = outerPrevY[j + 1];
+                } else {
+                    endLeftX = outerPrevX[j + 1];
+                    endLeftY = outerPrevY[j + 1];
+                    endRightX = innerX[j + 1];
+                    endRightY = innerY[j + 1];
+                }
+                this.quad(startLeftX, startLeftY, color, endLeftX, endLeftY, color, endRightX, endRightY, color, startRightX, startRightY, color);
+            }
+            for (int i = 1; i + 1 < count; i++) {
+                if (!roundJoin[i]) {
+                    continue;
+                }
+                Vec2 p = path.get(i);
+                // Round join: arc fan on the outer side from the previous segment's outer
+                // offset point to the next segment's, centered at the vertex, plus the two
+                // filler triangles that close the kite (outerPrev, inner, outerNext, vertex)
+                // between the segment quads and the fan. Shared edges only — no overlap.
+                double v0x = outerPrevX[i] - p.x();
+                double v0y = outerPrevY[i] - p.y();
+                double v1x = outerNextX[i] - p.x();
+                double v1y = outerNextY[i] - p.y();
+                double sweep = turnSide[i] * Math.abs(Math.atan2(v0x * v1y - v0y * v1x, v0x * v1x + v0y * v1y));
+                this.arcFan(p.x(), p.y(), radius, Math.atan2(v0y, v0x), sweep, 3, 6, color);
+                this.triangle(p.x(), p.y(), outerPrevX[i], outerPrevY[i], innerX[i], innerY[i], color);
+                this.triangle(p.x(), p.y(), innerX[i], innerY[i], outerNextX[i], outerNextY[i], color);
             }
             if (startCap) {
-                this.circle(points.getFirst(), radius, color);
+                // Semicircle fan outward from the first point: the first quad ends exactly
+                // at the endpoint, so the cap shares only the diameter edge.
+                Vec2 first = path.getFirst();
+                this.arcFan(first.x(), first.y(), radius, Math.atan2(normalY[0], normalX[0]), Math.PI, 6, 48, color);
             }
             if (endCap) {
-                this.circle(points.getLast(), radius, color);
+                Vec2 last = path.getLast();
+                this.arcFan(last.x(), last.y(), radius, Math.atan2(-normalY[count - 2], -normalX[count - 2]), Math.PI, 6, 48, color);
             }
         }
 
@@ -615,6 +812,13 @@ public final class SmoothGuiPrimitives {
             }
         }
 
+        /**
+         * Axis-aligned capsule: central quad plus one outward semicircle fan per side, each
+         * sharing only the diameter edge with the quad (same fan construction as the caps in
+         * {@link #stroke}). No two emitted primitives cover the same pixel, so translucent
+         * colors blend uniformly — the previous version overlaid a FULL circle on each quad
+         * end, double-blending half of every cap into a visibly darker band.
+         */
         void capsuleShape(Vec2 center, double width, double height, int color) {
             if (width <= height) {
                 this.circle(center, Math.max(width, height) * 0.5D, color);
@@ -624,8 +828,8 @@ public final class SmoothGuiPrimitives {
             double left = center.x() - width * 0.5D + radius;
             double right = center.x() + width * 0.5D - radius;
             this.quad(left, center.y() - radius, color, right, center.y() - radius, color, right, center.y() + radius, color, left, center.y() + radius, color);
-            this.circle(new Vec2(left, center.y()), radius, color);
-            this.circle(new Vec2(right, center.y()), radius, color);
+            this.arcFan(left, center.y(), radius, Math.PI * 0.5D, Math.PI, 6, 48, color);
+            this.arcFan(right, center.y(), radius, -Math.PI * 0.5D, Math.PI, 6, 48, color);
         }
 
         void circle(Vec2 center, double radius, int color) {
@@ -642,6 +846,33 @@ public final class SmoothGuiPrimitives {
                         center.x() + x1, center.y() + y1, color,
                         center.x() + x0, center.y() + y0, color);
             }
+        }
+
+        /**
+         * Shared-edge triangle fan approximating an arc of {@code radius} centered at
+         * ({@code centerX}, {@code centerY}), starting at {@code startAngle} and sweeping
+         * {@code sweep} radians. The slice count follows the arc length (about 1.6px per
+         * slice, matching {@link #circle}'s density) clamped to
+         * {@code minSlices}..{@code maxSlices}. Every triangle shares its edges with its
+         * neighbors, so translucent fills never double-blend inside the fan.
+         */
+        void arcFan(double centerX, double centerY, double radius, double startAngle, double sweep, int minSlices, int maxSlices, int color) {
+            int slices = Math.max(minSlices, Math.min(maxSlices, (int) Math.ceil(Math.abs(sweep) * radius / 1.57D)));
+            double prevX = centerX + Math.cos(startAngle) * radius;
+            double prevY = centerY + Math.sin(startAngle) * radius;
+            for (int k = 1; k <= slices; k++) {
+                double angle = startAngle + sweep * k / slices;
+                double nextX = centerX + Math.cos(angle) * radius;
+                double nextY = centerY + Math.sin(angle) * radius;
+                this.triangle(centerX, centerY, prevX, prevY, nextX, nextY, color);
+                prevX = nextX;
+                prevY = nextY;
+            }
+        }
+
+        /** Triangle emitted as a degenerate quad (the fourth corner duplicates the third). */
+        void triangle(double ax, double ay, double bx, double by, double cx, double cy, int color) {
+            this.quad(ax, ay, color, bx, by, color, cx, cy, color, cx, cy, color);
         }
 
         void ring(Vec2 center, double outerRadius, double innerRadius, int color) {

@@ -141,7 +141,7 @@ public final class RouteLineCardRenderer {
         if (viewMode == RouteCardViewMode.PHYSICAL) {
             this.drawStationPlatformFrames(graphics, font, semanticGraph, screenGraph, viewport.zoom());
         }
-        this.drawEdges(graphics, screenGraph, hover);
+        this.drawEdges(graphics, screenGraph, hover, viewport.zoom());
         this.drawNodes(graphics, font, semanticGraph, screenGraph, hover, viewport.zoom());
         String cardMemoryKey = line.id() + ":" + selectedLayout.id() + ":" + viewMode.name();
         List<SPSGui.Rect> labelRects = this.drawLabels(graphics, font, screenGraph, viewport.zoom(), map, this.labelSlotMemory.computeIfAbsent(cardMemoryKey, key -> new HashMap<>()));
@@ -153,9 +153,7 @@ public final class RouteLineCardRenderer {
             SPSGui.centeredText(graphics, font, Component.translatable("screen.superpipeslide.full_map.route_card.map_empty"), map.x() + map.width() / 2, map.y() + map.height() / 2 - 4, FullMapTheme.TEXT_MUTED);
         }
         List<ViewModeChipHit> viewModeChips = this.renderViewModeStrip(graphics, font, map, viewMode, active, mouseX, mouseY);
-        Optional<Component> tooltipOverride = active && legendBounds(map).contains(mouseX, mouseY)
-                ? Optional.of(legendTooltip())
-                : dimensionTooltip;
+        Optional<Component> tooltipOverride = dimensionTooltip;
 
         int summaryY = bounds.bottom() - 18;
         String summary = Component.translatable(
@@ -362,13 +360,6 @@ public final class RouteLineCardRenderer {
             chips.add(new ViewModeChipHit(mode, chip));
             x += size + gap;
         }
-        // Legend "?" chip at the end of the strip; hover text is surfaced through the
-        // render result's tooltip override channel.
-        SPSGui.Rect legend = legendBounds(map);
-        boolean legendHovered = active && legend.contains(mouseX, mouseY);
-        graphics.fill(legend.x(), legend.y(), legend.right(), legend.bottom(), legendHovered ? FullMapTheme.SURFACE_CONTROL_HOVER : FullMapTheme.SURFACE_CONTROL);
-        graphics.outline(legend.x(), legend.y(), legend.width(), legend.height(), FullMapTheme.BORDER);
-        SPSGui.centeredText(graphics, font, Component.literal("?"), legend.x() + legend.width() / 2, legend.y() + (legend.height() - 8) / 2, legendHovered ? SPSGui.INFO : FullMapTheme.TEXT_SECONDARY);
         return chips;
     }
 
@@ -376,28 +367,11 @@ public final class RouteLineCardRenderer {
         RouteCardViewMode[] modes = RouteCardViewMode.values();
         int size = FullMapTheme.ICON_BUTTON;
         int gap = 2;
-        // One extra chip slot after the view modes hosts the map legend button.
-        int panelWidth = (modes.length + 1) * size + modes.length * gap + 6;
+        int panelWidth = modes.length * size + (modes.length - 1) * gap + 6;
         int margin = 6;
         int x = map.x() + margin;
         int y = map.bottom() - margin - size - 6;
         return new SPSGui.Rect(x, y, panelWidth, size + 6);
-    }
-
-    private static SPSGui.Rect legendBounds(SPSGui.Rect map) {
-        SPSGui.Rect panel = viewModeStripBounds(map);
-        int size = FullMapTheme.ICON_BUTTON;
-        return new SPSGui.Rect(panel.right() - 3 - size, panel.y() + 3, size, size);
-    }
-
-    private static Component legendTooltip() {
-        return Component.literal(String.join("\n",
-                Component.translatable("screen.superpipeslide.full_map.route_card.legend.station").getString(),
-                Component.translatable("screen.superpipeslide.full_map.route_card.legend.transfer").getString(),
-                Component.translatable("screen.superpipeslide.full_map.route_card.legend.fold_boundary").getString(),
-                Component.translatable("screen.superpipeslide.full_map.route_card.legend.portal_boundary").getString(),
-                Component.translatable("screen.superpipeslide.full_map.route_card.legend.missing_path").getString(),
-                Component.translatable("screen.superpipeslide.full_map.route_card.legend.edges").getString()));
     }
 
     private static SPSGui.Icon viewModeGlyph(RouteCardViewMode mode) {
@@ -555,7 +529,8 @@ public final class RouteLineCardRenderer {
         SPSGui.smallText(graphics, font, text, rect.x() + 3, rect.y() + Math.max(1, (rect.height() - 7) / 2), FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_TINY);
     }
 
-    private void drawEdges(GuiGraphicsExtractor graphics, RouteCardVisualGraph visualGraph, RouteLineCardHit hover) {
+    private void drawEdges(GuiGraphicsExtractor graphics, RouteCardVisualGraph visualGraph, RouteLineCardHit hover, double zoom) {
+        double haloScale = iconScale(zoom);
         Set<RouteCardNodeId> highlightedMissingBoundaries = highlightedMissingPathBoundaries(visualGraph, hover);
         for (RouteCardVisualEdge visualEdge : visualGraph.edges()) {
             if (visualEdge.points().isEmpty()) {
@@ -573,7 +548,7 @@ public final class RouteLineCardRenderer {
                 // without hovering; the focus halo still wins on hover.
                 drawDashedPolyline(graphics, visualEdge.points(), 1.3D, SPSGui.withAlpha(foldPairColor(visualGraph, edge), 0x30), 1.2D, 3.2D);
                 if (hovered) {
-                    drawPolyline(graphics, visualEdge.points(), width + 4.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
+                    drawPolyline(graphics, visualEdge.points(), width + 4.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO, width);
                     drawPolyline(graphics, visualEdge.points(), width, FullRouteMapConfig.MAP_FOCUS_RING);
                 }
                 continue;
@@ -581,7 +556,7 @@ public final class RouteLineCardRenderer {
             if (missingBoundaryLink) {
                 boolean peerHovered = hovered || highlightedMissingBoundaries.contains(edge.from()) || highlightedMissingBoundaries.contains(edge.to());
                 if (peerHovered) {
-                    drawPolyline(graphics, visualEdge.points(), width + 4.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
+                    drawPolyline(graphics, visualEdge.points(), width + 4.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO, width);
                     drawDashedPolyline(graphics, visualEdge.points(), Math.max(1.4D, width - 0.4D), FullRouteMapConfig.MAP_FOCUS_RING, 7.0D, 5.0D);
                 }
                 continue;
@@ -589,7 +564,7 @@ public final class RouteLineCardRenderer {
             if (missingPathBoundary) {
                 boolean pairHovered = hovered || missingBoundaryEndpoint(visualGraph, edge).filter(highlightedMissingBoundaries::contains).isPresent();
                 if (pairHovered) {
-                    drawFadingDashedRouteLine(graphics, visualEdge.points(), width + 5.0D, List.of(FullRouteMapConfig.MAP_FOCUS_HALO));
+                    drawFadingDashedRouteLine(graphics, visualEdge.points(), width + 5.0D * haloScale, List.of(FullRouteMapConfig.MAP_FOCUS_HALO));
                     drawFadingDashedRouteLine(graphics, visualEdge.points(), width + 1.0D, List.of(FullRouteMapConfig.MAP_FOCUS_RING));
                 }
                 drawFadingDashedRouteLine(graphics, visualEdge.points(), Math.max(2.0D, width - 0.2D), edge.themeColors());
@@ -597,13 +572,13 @@ public final class RouteLineCardRenderer {
             }
             if (edge.kind() == SemanticEdgeKind.STATION_INTERNAL) {
                 if (hovered) {
-                    drawPolyline(graphics, visualEdge.points(), width + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
+                    drawPolyline(graphics, visualEdge.points(), width + 5.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO, width);
                 }
                 drawDashedColorLanePath(graphics, visualEdge.points(), Math.max(2.2D, width - 0.2D), edge.themeColors(), 6.0D, 4.0D);
                 continue;
             }
             if (hovered) {
-                drawPolyline(graphics, visualEdge.points(), width + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
+                drawPolyline(graphics, visualEdge.points(), width + 5.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO, width);
             }
             if (edge.status() != RouteSectionStatus.VALID) {
                 drawPolyline(graphics, visualEdge.points(), width + 2.0D, SPSGui.withAlpha(SPSGui.WARNING, 0x55));
@@ -838,7 +813,7 @@ public final class RouteLineCardRenderer {
             boolean hovered = nodeHoveredByRouteCardHit(node, hover) || foldPeerHighlighted(semanticGraph, hover, node);
             int radius = (int) Math.round(nodeRadius(node, zoom));
             if (hovered) {
-                this.drawNodeFocus(graphics, node, position, radius);
+                this.drawNodeFocus(graphics, node, position, radius, zoom);
             }
             switch (node.kind()) {
                 case STATION -> {
@@ -852,9 +827,16 @@ public final class RouteLineCardRenderer {
     }
 
     private List<SPSGui.Rect> drawLabels(GuiGraphicsExtractor graphics, Font font, RouteCardVisualGraph visualGraph, double zoom, SPSGui.Rect map, Map<RouteCardNodeId, Integer> slotMemory) {
-        if (zoom < 0.45D) {
+        // Low-zoom trunk tier: the floor drops from 0.45 to 0.30; between 0.30 and the
+        // old 0.65 LOD cutoff only trunk-tier nodes are labelled (see
+        // shouldConsiderLabel), with alpha fading in across 0.30 -> 0.45 instead of
+        // popping at the old hard cutoff.
+        if (zoom < 0.30D) {
             return List.of();
         }
+        double labelFade = trunkLabelFade(zoom);
+        int primaryColor = fadedLabelColor(FullRouteMapConfig.MAP_CARD_LABEL, labelFade);
+        int secondaryColor = fadedLabelColor(FullMapTheme.TEXT_MUTED, labelFade);
         List<LabelBlocker> blockers = new ArrayList<>();
         for (RouteCardVisualNode visualNode : visualGraph.nodes()) {
             blockers.add(new LabelBlocker(visualNode.node().id(), iconBounds(visualNode.node(), visualNode.position(), zoom)));
@@ -881,7 +863,7 @@ public final class RouteLineCardRenderer {
             }
             SPSGui.Rect rect = selected.get();
             placed.add(rect);
-            FullMapUi.drawNameStack(graphics, font, name, rect.x(), rect.y(), rect.width(), FullRouteMapConfig.MAP_CARD_LABEL, FullMapTheme.TEXT_MUTED, scale, secondaryScale, 0);
+            FullMapUi.drawNameStack(graphics, font, name, rect.x(), rect.y(), rect.width(), primaryColor, secondaryColor, scale, secondaryScale, 0);
             rendered++;
         }
         return placed;
@@ -1138,7 +1120,10 @@ public final class RouteLineCardRenderer {
             return false;
         }
         if (zoom < 0.65D) {
-            return false;
+            // Trunk tier down to the 0.30 floor (enforced by drawLabels): multi-line
+            // stations plus the boundary (non-station) nodes that the 0.65 -> 1.0 tier
+            // already treats as major.
+            return node.kind() != RouteCardNodeKind.STATION || node.routeLineIds().size() >= 2;
         }
         if (zoom < 1.0D) {
             return node.kind() != RouteCardNodeKind.STATION || node.routeLineIds().size() >= 2;
@@ -1147,6 +1132,24 @@ public final class RouteLineCardRenderer {
             return node.kind() != RouteCardNodeKind.STATION || node.routeLineIds().size() >= 2 || node.layoutOccurrence() % 2 == 0;
         }
         return true;
+    }
+
+    // Trunk-tier fade band for the route card: full opacity at and above 0.45, ramping
+    // linearly to 0 at the 0.30 floor (the 0.45 -> 0.65 trunk tier stays at full alpha).
+    private static double trunkLabelFade(double zoom) {
+        if (zoom >= 0.45D) {
+            return 1.0D;
+        }
+        return Math.max(0.0D, (zoom - 0.30D) / 0.15D);
+    }
+
+    // Scales the alpha channel of an ARGB color by fade (0..1), preserving the color's
+    // own base alpha; fade >= 1 returns the color unchanged.
+    private static int fadedLabelColor(int color, double fade) {
+        if (fade >= 1.0D) {
+            return color;
+        }
+        return SPSGui.withAlpha(color, (int) Math.round((color >>> 24) * fade));
     }
 
     private static float labelScale(RouteCardNode node, double zoom) {
@@ -1334,23 +1337,24 @@ public final class RouteLineCardRenderer {
         return Math.max(0.35D, Math.min(1.0D, zoom));
     }
 
-    private static void drawNodeFocus(GuiGraphicsExtractor graphics, RouteCardNode node, Vec2 center, int radius) {
+    private static void drawNodeFocus(GuiGraphicsExtractor graphics, RouteCardNode node, Vec2 center, int radius, double zoom) {
+        double haloScale = iconScale(zoom);
         switch (node.kind()) {
             case PORTAL_BOUNDARY -> {
-                SmoothGuiPrimitives.circle(graphics, center, radius + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
-                SmoothGuiPrimitives.circle(graphics, center, radius + 2.0D, FullRouteMapConfig.MAP_FOCUS_RING);
+                SmoothGuiPrimitives.circle(graphics, center, radius + 5.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO);
+                SmoothGuiPrimitives.circle(graphics, center, radius + 2.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
             }
             case FOLD_BOUNDARY -> {
-                SmoothGuiPrimitives.diamond(graphics, center, radius + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
-                SmoothGuiPrimitives.diamond(graphics, center, radius + 2.0D, FullRouteMapConfig.MAP_FOCUS_RING);
+                SmoothGuiPrimitives.diamond(graphics, center, radius + 5.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO);
+                SmoothGuiPrimitives.diamond(graphics, center, radius + 2.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
             }
             case STATION -> {
-                SmoothGuiPrimitives.circle(graphics, center, radius + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
-                SmoothGuiPrimitives.circle(graphics, center, radius + 2.0D, FullRouteMapConfig.MAP_FOCUS_RING);
+                SmoothGuiPrimitives.circle(graphics, center, radius + 5.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO);
+                SmoothGuiPrimitives.circle(graphics, center, radius + 2.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
             }
             case MISSING_PATH_BOUNDARY -> {
-                drawPolyline(graphics, warningTrianglePoints(center, radius + 5.0D), 1.6D, FullRouteMapConfig.MAP_FOCUS_HALO);
-                drawPolyline(graphics, warningTrianglePoints(center, radius + 2.0D), 1.2D, FullRouteMapConfig.MAP_FOCUS_RING);
+                drawPolyline(graphics, warningTrianglePoints(center, radius + 5.0D * haloScale), 1.6D, FullRouteMapConfig.MAP_FOCUS_HALO);
+                drawPolyline(graphics, warningTrianglePoints(center, radius + 2.0D * haloScale), 1.2D, FullRouteMapConfig.MAP_FOCUS_RING);
             }
         }
     }
@@ -1504,22 +1508,20 @@ public final class RouteLineCardRenderer {
         }
     }
 
+    /**
+     * Dashed station-group frame: the ellipse outline is tessellated once and drawn as a
+     * single continuous-phase dashed polyline, so dashes keep a constant phase all around
+     * the ring instead of being quantized per chord (which produced ragged gaps and
+     * overlapping round caps at every chord joint).
+     */
     private static void drawDashedEllipse(GuiGraphicsExtractor graphics, Vec2 center, double radiusX, double radiusY, double width, int color, double dash, double gap) {
-        double circumference = Math.PI * (3.0D * (radiusX + radiusY) - Math.sqrt((3.0D * radiusX + radiusY) * (radiusX + 3.0D * radiusY)));
-        int steps = Math.max(36, (int) Math.ceil(circumference / 4.0D));
-        double phase = 0.0D;
-        Vec2 previous = new Vec2(center.x() + radiusX, center.y());
-        for (int i = 1; i <= steps; i++) {
+        int steps = Math.max(24, Math.min(64, (int) Math.ceil(Math.max(radiusX, radiusY) * 1.2D)));
+        List<Vec2> points = new ArrayList<>(steps + 1);
+        for (int i = 0; i <= steps; i++) {
             double angle = Math.PI * 2.0D * i / steps;
-            Vec2 current = new Vec2(center.x() + Math.cos(angle) * radiusX, center.y() + Math.sin(angle) * radiusY);
-            double length = previous.distanceTo(current);
-            double midpoint = phase + length * 0.5D;
-            if (Math.floorMod((int) Math.floor(midpoint), (int) Math.max(1.0D, dash + gap)) < dash) {
-                drawPolyline(graphics, List.of(previous, current), width, color);
-            }
-            phase += length;
-            previous = current;
+            points.add(new Vec2(center.x() + Math.cos(angle) * radiusX, center.y() + Math.sin(angle) * radiusY));
         }
+        SmoothGuiPrimitives.dashedPolyline(graphics, points, width, color, dash, gap);
     }
 
     private static List<Vec2> offsetPath(List<Vec2> points, double offset) {
@@ -1558,6 +1560,15 @@ public final class RouteLineCardRenderer {
 
     private static void drawPolyline(GuiGraphicsExtractor graphics, List<Vec2> points, double width, int color) {
         SmoothGuiPrimitives.polyline(graphics, points, width, color);
+    }
+
+    /**
+     * Highlight widening drawn over a base line of width {@code roundingReferenceWidth} on
+     * the same path: the widening's centerline is corner-rounded like the base line, not
+     * like the wider highlight, so the two stay aligned at turns.
+     */
+    private static void drawPolyline(GuiGraphicsExtractor graphics, List<Vec2> points, double width, int color, double roundingReferenceWidth) {
+        SmoothGuiPrimitives.polyline(graphics, points, width, color, true, roundingReferenceWidth);
     }
 
     /**

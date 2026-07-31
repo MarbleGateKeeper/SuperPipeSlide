@@ -12,6 +12,7 @@ import dev.marblegate.superpipeslide.client.fullmap.cluster.visual.ClusterCardVi
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
 import dev.marblegate.superpipeslide.client.fullmap.model.MapNode;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
+import dev.marblegate.superpipeslide.client.fullmap.model.geom.CoordinateSnapper;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -72,6 +73,12 @@ public final class ClusterCardLayoutSolver {
         }
 
         relaxMemberCollisions(members, positions, anchors, profile);
+        // Snap near-equal axis coordinates after the collision relaxation: kills
+        // sub-spacing drift so members meant to line up share an exact x/y before ports
+        // and edges are derived from these positions, keeping straight lines straight.
+        // replaceAll keeps the map identity: positions is captured by the lambdas below.
+        Map<String, Vec2> snappedPositions = CoordinateSnapper.mergeNearEqualAxes(positions, memberMinGap * 0.05D);
+        positions.replaceAll((id, position) -> snappedPositions.get(id));
         placeExternalPorts(graph, positions);
 
         List<ClusterCardVisualNode> visualNodes = graph.nodes().stream()

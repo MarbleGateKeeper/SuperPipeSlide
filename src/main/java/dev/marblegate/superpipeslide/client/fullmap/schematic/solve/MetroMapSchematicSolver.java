@@ -5,6 +5,7 @@ import dev.marblegate.superpipeslide.client.fullmap.model.MapEdgeOccurrence;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeKind;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
+import dev.marblegate.superpipeslide.client.fullmap.model.geom.CoordinateSnapper;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.SchematicLayoutConfig;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.LabelWidthMeasurer;
@@ -159,6 +160,13 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
         // translation-plus-uniform-scale fit keeps every axis ordering intact while stations
         // that existed before stay visually put across incremental edits.
         boolean usedPrevious = previous.map(snapshot -> alignToPrevious(positions, snapshot)).orElse(false);
+        // Snap near-equal axis coordinates after the last positional mutation of the
+        // embedding (duplicate separation, alignment fit): kills sub-spacing drift so
+        // stations meant to line up share an exact x/y before routing glues edge
+        // endpoints to these coordinates, keeping straight segments exactly straight.
+        // replaceAll keeps the map identity: positions is captured by the lambda above.
+        Map<NodeId, Vec2> snappedPositions = CoordinateSnapper.mergeNearEqualAxes(positions, profile.stationSpacing() * 0.05D);
+        positions.replaceAll((id, position) -> snappedPositions.get(id));
         Map<String, CorridorHint> corridorHints = this.corridorHints(topology, positions);
         CorridorPlan corridors = this.buildCorridorPlan(topology, positions, profile);
         ConstraintStats constraints = this.measureGlobalConstraints(topology, positions, profile);
@@ -2040,7 +2048,9 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
         }
         Vec2 direction = nearestDirection(dx, dy);
         double dot = Math.abs(dx / length * direction.x() + dy / length * direction.y());
-        return dot > 0.999D;
+        // After coordinate snapping, genuinely straight station pairs compare exact, so a
+        // tight threshold (~0.81 degrees) keeps tilted segments from passing as straights.
+        return dot > 0.9999D;
     }
 
     private static List<Vec2> dedupePath(List<Vec2> points) {

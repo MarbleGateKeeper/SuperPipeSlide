@@ -36,10 +36,12 @@ import dev.marblegate.superpipeslide.common.core.route.model.station.StationGrou
 import dev.marblegate.superpipeslide.config.ClientConfig;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -51,6 +53,7 @@ import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
@@ -218,7 +221,9 @@ public final class FullRouteMapCache {
      * Assembles the source snapshot and hands the build to the background executor. Must
      * run on the render thread: the snapshot reads the mutable client caches, which are
      * only ever written from this same thread, while the returned snapshot is immutable
-     * and exclusively read by the builder thread afterwards.
+     * and exclusively read by the builder thread afterwards. The render thread is also the
+     * only thread where the label glyph pre-bake below is legal, because a first-time glyph
+     * measurement may upload the glyph bitmap to a GL texture.
      */
     private static void submitBuild(long routeRevision, long pipeRevision) {
         cancelInFlightBuild();
@@ -239,13 +244,47 @@ public final class FullRouteMapCache {
                 List.copyOf(ClientPipeNetworkCache.foldAnchors()),
                 connections);
         // Capture the font here, on the render thread: the builder thread must not dereference
-        // the Minecraft singleton itself. Font.width is a pure read of glyph metrics that stays
-        // valid between resource reloads, so measuring through this captured reference from the
-        // builder thread is safe. CJK station names are roughly twice as wide as the old Latin
-        // estimate assumed, which is why the solvers need the real measurement.
+        // the Minecraft singleton itself. The first Font.width call on a glyph that has not been
+        // baked yet lazily uploads its bitmap to a GL texture (UnihexProvider glyphs for CJK
+        // station names are the known case), and that upload is a render-thread-only operation --
+        // it throws IllegalStateException when the solver measures such a label on the builder
+        // thread. Pre-baking every label string the solver may measure makes the lambda below a
+        // genuine pure read of the baked glyph cache. CJK station names are roughly twice as wide
+        // as the old Latin estimate assumed, which is why the solvers need the real measurement.
         Font font = Minecraft.getInstance().font;
+        preBakeLabelGlyphs(font, source);
         LabelWidthMeasurer labelWidthMeasurer = (text, scale) -> font.width(text) * scale;
         inFlightBuild = new BuildTask(source, layoutMode, cachedVisualGraphs, labelWidthMeasurer);
+    }
+
+    /**
+     * Measures, on the render thread, every string the schematic solver may later measure on the
+     * map builder thread, forcing the lazy glyph upload to happen here where GL access is legal.
+     * The set mirrors every source of {@code MapNode.label()}: station primary names
+     * ({@link StationGroup#primaryName}), fold anchor display names
+     * ({@link FoldAnchorNode#displayName} -- the counterpart fallback reads a name from the same
+     * snapshot list, so it is covered too), and the static cluster-name translation wrappers. The
+     * derived cluster names themselves are assembled from primary-name glyphs (a common prefix, or
+     * the first name embedded in the "and N more" wrapper), so baking the names and wrappers
+     * covers them glyph by glyph. Portal labels are dimension identifiers and the fold-label
+     * block-position fallback is "x, y, z" -- pure ASCII, eagerly baked at font reload -- so they
+     * need no pre-bake.
+     */
+    private static void preBakeLabelGlyphs(Font font, FullRouteMapSourceSnapshot source) {
+        Set<String> labelTexts = new HashSet<>();
+        for (StationGroup station : source.stationGroups()) {
+            labelTexts.add(station.primaryName());
+        }
+        for (FoldAnchorNode foldAnchor : source.foldAnchors()) {
+            labelTexts.add(foldAnchor.displayName());
+        }
+        labelTexts.add(Component.translatable("screen.superpipeslide.full_map.cluster_fallback_name").getString());
+        labelTexts.add(Component.translatable("screen.superpipeslide.full_map.cluster_more", "", 0).getString());
+        for (String text : labelTexts) {
+            if (!text.isBlank()) {
+                font.width(text);
+            }
+        }
     }
 
     /**

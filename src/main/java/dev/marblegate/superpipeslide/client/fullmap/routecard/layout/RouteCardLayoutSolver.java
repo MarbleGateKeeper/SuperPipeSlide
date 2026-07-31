@@ -2,6 +2,7 @@ package dev.marblegate.superpipeslide.client.fullmap.routecard.layout;
 
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
+import dev.marblegate.superpipeslide.client.fullmap.model.geom.CoordinateSnapper;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.RouteCardGeometry;
 import dev.marblegate.superpipeslide.client.fullmap.routecard.model.RouteCardEdge;
@@ -200,6 +201,10 @@ public final class RouteCardLayoutSolver {
         }
         Map<RouteCardNodeId, Vec2> positions = this.metroLocalNodePositions(anchoredNodes, edges, spacing);
         this.relaxLocalNodes(anchoredNodes, positions, spacing);
+        // Snap near-equal axis coordinates after relaxation: kills sub-spacing drift so
+        // stations meant to line up share an exact x/y before edges and footprints are
+        // derived from these positions, keeping straight segments exactly straight.
+        positions = CoordinateSnapper.mergeNearEqualAxes(positions, spacing.stationSpacing() * 0.05D);
         this.placeFoldBoundaryPorts(nodes, edges, positions, spacing);
         return positions;
     }

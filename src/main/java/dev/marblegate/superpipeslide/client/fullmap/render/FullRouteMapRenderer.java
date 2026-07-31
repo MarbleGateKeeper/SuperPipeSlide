@@ -659,8 +659,11 @@ public final class FullRouteMapRenderer {
             double padWorld = Math.max(8.0D, (physicalNodeRadius(PhysicalNodeKind.PLATFORM, viewport.zoom()) + 7.0D) / Math.max(0.001D, scale(viewport)));
             double radiusX = Math.max(padWorld, (frame.worldBounds().maxX() - frame.worldBounds().minX()) * 0.5D + padWorld * 0.35D);
             double radiusZ = Math.max(padWorld, (frame.worldBounds().maxY() - frame.worldBounds().minY()) * 0.5D + padWorld * 0.35D);
-            StationFrameScreenShape shape = stationFrameScreenShape(frame.centerX(), frame.centerZ(), radiusX, radiusZ, viewport, rect);
-            List<Vec2> points = capsuleOutlinePoints(shape.center(), shape.axis(), shape.length(), shape.height());
+            // The outline is tessellated in world space and only then projected, so the
+            // ring deforms smoothly and continuously while the map rotates.
+            List<Vec2> points = stationFrameWorldOutline(frame.centerX(), frame.centerZ(), radiusX, radiusZ, viewport).stream()
+                    .map(point -> worldToScreen(point.x(), point.y(), viewport, rect))
+                    .toList();
             List<GuiElementRenderState> normal = SmoothGuiPrimitives.captureBranch(() -> drawDashedPolyline(graphics, points, 1.2D, 0xAA1B2633, 7.0D, 5.0D));
             List<GuiElementRenderState> focused = SmoothGuiPrimitives.captureBranch(() -> drawDashedPolyline(graphics, points, 1.2D, FullRouteMapConfig.MAP_FOCUS_RING, 7.0D, 5.0D));
             UUID stationGroupId = frame.stationGroupId();
@@ -668,54 +671,38 @@ public final class FullRouteMapRenderer {
         }
     }
 
-    private static StationFrameScreenShape stationFrameScreenShape(double centerX, double centerZ, double radiusX, double radiusZ, ViewportState viewport, SPSGui.Rect rect) {
-        Vec2 center = worldToScreen(centerX, centerZ, viewport, rect);
+    /**
+     * Station-frame outline tessellated in WORLD space: a stadium whose major axis is the
+     * world axis with the larger radius — a rotation-invariant choice, unlike the old
+     * screen-projected axes whose lengths crossed and flipped the capsule 90° at certain
+     * bearings — with semicircle caps of the smaller radius, degenerating to a world
+     * circle once the straight segment all but vanishes. The arc segment count depends
+     * only on the world radius and the zoom (never on camera bearing or pitch), so the
+     * outline suffers no axis flip, no capsule↔circle jump and no LOD pop while rotating.
+     * Project every returned point through {@link #worldToScreen} for the screen polyline.
+     */
+    private static List<Vec2> stationFrameWorldOutline(double centerX, double centerZ, double radiusX, double radiusZ, ViewportState viewport) {
         boolean xMajor = radiusX >= radiusZ;
-        double majorWorld = Math.max(radiusX, radiusZ);
-        double minorWorld = Math.max(1.0D, Math.min(radiusX, radiusZ));
-        Vec2 majorA = worldToScreen(centerX + (xMajor ? majorWorld : 0.0D), centerZ + (xMajor ? 0.0D : majorWorld), viewport, rect);
-        Vec2 majorB = worldToScreen(centerX - (xMajor ? majorWorld : 0.0D), centerZ - (xMajor ? 0.0D : majorWorld), viewport, rect);
-        Vec2 minorA = worldToScreen(centerX + (xMajor ? 0.0D : minorWorld), centerZ + (xMajor ? minorWorld : 0.0D), viewport, rect);
-        Vec2 minorB = worldToScreen(centerX - (xMajor ? 0.0D : minorWorld), centerZ - (xMajor ? minorWorld : 0.0D), viewport, rect);
-        Vec2 major = new Vec2(majorA.x() - majorB.x(), majorA.y() - majorB.y());
-        Vec2 minor = new Vec2(minorA.x() - minorB.x(), minorA.y() - minorB.y());
-        double majorLength = Math.max(1.0D, Math.hypot(major.x(), major.y()));
-        double minorLength = Math.max(1.0D, Math.hypot(minor.x(), minor.y()));
-        Vec2 axis = majorLength >= minorLength ? major : minor;
-        double length = Math.max(12.0D, Math.max(majorLength, minorLength));
-        double height = Math.max(8.0D, Math.min(length * 0.82D, Math.min(majorLength, minorLength)));
-        return new StationFrameScreenShape(center, axis, length, height);
-    }
-
-    private static List<Vec2> capsuleOutlinePoints(Vec2 center, Vec2 axis, double length, double height) {
-        double axisLength = Math.hypot(axis.x(), axis.y());
-        if (axisLength <= 0.001D || length <= height * 1.04D) {
-            return circleOutlinePoints(center, Math.max(length, height) * 0.5D);
+        double major = Math.max(radiusX, radiusZ);
+        double minor = Math.max(1.0D, Math.min(radiusX, radiusZ));
+        double halfSegment = Math.max(0.0D, major - minor);
+        if (halfSegment <= minor * 0.04D) {
+            // Nearly square bounds: a stable world-space circle instead of a capsule
+            // whose axis choice would flip with the noise.
+            halfSegment = 0.0D;
         }
-        double ux = axis.x() / axisLength;
-        double uy = axis.y() / axisLength;
-        double nx = -uy;
-        double ny = ux;
-        double radius = height * 0.5D;
-        double halfSegment = Math.max(0.0D, (length - height) * 0.5D);
-        Vec2 a = new Vec2(center.x() - ux * halfSegment, center.y() - uy * halfSegment);
-        Vec2 b = new Vec2(center.x() + ux * halfSegment, center.y() + uy * halfSegment);
-        int arcSegments = Math.max(10, Math.min(32, (int) Math.ceil(radius * 0.85D)));
+        // Approximate the minor axis screen length from zoom alone; rotation must not
+        // feed back into the tessellation density.
+        int arcSegments = Math.max(16, Math.min(64, (int) Math.ceil(minor * scale(viewport) * 0.9D)));
+        double ux = xMajor ? 1.0D : 0.0D;
+        double uz = xMajor ? 0.0D : 1.0D;
+        Vec2 capCenterA = new Vec2(centerX + ux * halfSegment, centerZ + uz * halfSegment);
+        Vec2 capCenterB = new Vec2(centerX - ux * halfSegment, centerZ - uz * halfSegment);
+        double baseAngle = xMajor ? -Math.PI * 0.5D : 0.0D;
         List<Vec2> points = new ArrayList<>(arcSegments * 2 + 3);
-        double axisAngle = Math.atan2(uy, ux);
-        appendArc(points, b, radius, axisAngle - Math.PI * 0.5D, axisAngle + Math.PI * 0.5D, arcSegments);
-        appendArc(points, a, radius, axisAngle + Math.PI * 0.5D, axisAngle + Math.PI * 1.5D, arcSegments);
+        appendArc(points, capCenterA, minor, baseAngle, baseAngle + Math.PI, arcSegments);
+        appendArc(points, capCenterB, minor, baseAngle + Math.PI, baseAngle + Math.PI * 2.0D, arcSegments);
         points.add(points.getFirst());
-        return points;
-    }
-
-    private static List<Vec2> circleOutlinePoints(Vec2 center, double radius) {
-        int segments = Math.max(24, Math.min(64, (int) Math.ceil(radius * 0.9D)));
-        List<Vec2> points = new ArrayList<>(segments + 1);
-        for (int i = 0; i <= segments; i++) {
-            double angle = Math.PI * 2.0D * i / segments;
-            points.add(new Vec2(center.x() + Math.cos(angle) * radius, center.y() + Math.sin(angle) * radius));
-        }
         return points;
     }
 
@@ -750,13 +737,14 @@ public final class FullRouteMapRenderer {
                 groupEdgeIds.add(edge.id());
             }
             double laneWidth = FullRouteMapConfig.LINE_WIDTH_PX;
+            double haloScale = physicalNodeScale(viewport.zoom());
             if (lanes.size() >= FullRouteMapConfig.TRUNK_THRESHOLD) {
                 // Hover halo slot: re-evaluated against the live hover at replay time and
                 // tessellated only while actually hovered; drawn before the trunk so the
                 // halo stays underneath, exactly as the uncached render ordered it.
                 SmoothGuiPrimitives.recordOrReplay(graphics, g -> {
                     if (liveHover.target() instanceof HitTarget.PhysicalEdgeHit(var hoveredEdgeId) && groupEdgeIds.contains(hoveredEdgeId)) {
-                        drawPolyline(g, screenPath, 9.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
+                        drawPolyline(g, screenPath, 5.0D + 4.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO, true, 5.0D);
                     }
                 });
                 drawPolyline(graphics, screenPath, 5.0D, FullRouteMapConfig.MAP_TRUNK);
@@ -765,10 +753,10 @@ public final class FullRouteMapRenderer {
                 }
                 continue;
             }
-            double haloWidth = routeBundleWidth(lanes.stream().map(lane -> new EdgeLane(List.of(FullRouteMapConfig.MAP_TRUNK))).toList(), laneWidth) + 5.0D;
+            double haloWidth = routeBundleWidth(lanes.stream().map(lane -> new EdgeLane(List.of(FullRouteMapConfig.MAP_TRUNK))).toList(), laneWidth) + 5.0D * haloScale;
             SmoothGuiPrimitives.recordOrReplay(graphics, g -> {
                 if (liveHover.target() instanceof HitTarget.PhysicalEdgeHit(var hoveredEdgeId) && groupEdgeIds.contains(hoveredEdgeId)) {
-                    drawPolyline(g, screenPath, haloWidth, FullRouteMapConfig.MAP_FOCUS_HALO);
+                    drawPolyline(g, screenPath, haloWidth, FullRouteMapConfig.MAP_FOCUS_HALO, true, laneWidth);
                 }
             });
             double step = laneWidth + 1.0D;
@@ -781,7 +769,7 @@ public final class FullRouteMapRenderer {
                 Set<String> laneEdgeIds = lane.edgeIds();
                 SmoothGuiPrimitives.recordOrReplay(graphics, g -> {
                     if (liveHover.target() instanceof HitTarget.PhysicalEdgeHit(var hoveredEdgeId) && laneEdgeIds.contains(hoveredEdgeId)) {
-                        drawPolyline(g, lanePath, width + 1.2D, FullRouteMapConfig.MAP_FOCUS_RING);
+                        drawPolyline(g, lanePath, width + 1.2D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
                     }
                 });
                 if (lane.fallback()) {
@@ -872,7 +860,9 @@ public final class FullRouteMapRenderer {
                 continue;
             }
             Vec2 screen = worldToScreen(node.worldX(), node.worldZ(), viewport, rect);
-            double radius = physicalNodeRadius(node.kind(), perspectiveElementZoom(viewport, rect, screen));
+            double elementZoom = perspectiveElementZoom(viewport, rect, screen);
+            double radius = physicalNodeRadius(node.kind(), elementZoom);
+            double haloScale = physicalNodeScale(elementZoom);
             String nodeId = node.id();
             Optional<UUID> nodeStationGroup = node.stationGroupId();
             Optional<PipeAnchorId> nodeFoldAnchor = node.foldAnchorId();
@@ -884,11 +874,11 @@ public final class FullRouteMapRenderer {
                         || nodeFoldAnchor.flatMap(anchor -> liveHover.physicalFoldPeer().filter(anchor::equals)).isPresent();
                 if (hovered) {
                     if (node.kind() == PhysicalNodeKind.FOLD_ANCHOR) {
-                        SmoothGuiPrimitives.diamond(g, screen, radius + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
-                        SmoothGuiPrimitives.diamond(g, screen, radius + 2.0D, FullRouteMapConfig.MAP_FOCUS_RING);
+                        SmoothGuiPrimitives.diamond(g, screen, radius + 5.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO);
+                        SmoothGuiPrimitives.diamond(g, screen, radius + 2.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
                     } else {
-                        SmoothGuiPrimitives.circle(g, screen, radius + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
-                        SmoothGuiPrimitives.circle(g, screen, radius + 2.0D, FullRouteMapConfig.MAP_FOCUS_RING);
+                        SmoothGuiPrimitives.circle(g, screen, radius + 5.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO);
+                        SmoothGuiPrimitives.circle(g, screen, radius + 2.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
                     }
                 }
             });
@@ -904,7 +894,10 @@ public final class FullRouteMapRenderer {
     }
 
     private void drawPhysicalLabels(GuiGraphicsExtractor graphics, Font font, PhysicalRouteMapGraph graph, ViewportState viewport, SPSGui.Rect rect, Aabb2 worldView) {
-        if (viewport.zoom() < 0.34D) {
+        // Low-zoom trunk tier: the floor drops from 0.34 to 0.24; between the two only
+        // station-frame labels exist here (platform labels already require zoom >= 1.15)
+        // and they fade in linearly instead of popping at the old hard cutoff.
+        if (viewport.zoom() < 0.24D) {
             return;
         }
         int rendered = 0;
@@ -914,9 +907,13 @@ public final class FullRouteMapRenderer {
             }
             Vec2 screen = worldToScreen(frame.centerX(), frame.centerZ(), viewport, rect);
             double elementZoom = perspectiveElementZoom(viewport, rect, screen);
-            if (elementZoom < 0.34D) {
+            if (elementZoom < 0.24D) {
                 continue;
             }
+            // Trunk-tier fade band: alpha ramps 0 -> 1 across element zoom 0.24 -> 0.34.
+            double labelFade = physicalTrunkLabelFade(elementZoom);
+            int primaryColor = fadedLabelColor(FullRouteMapConfig.MAP_LABEL, labelFade);
+            int secondaryColor = fadedLabelColor(FullRouteMapConfig.MAP_LABEL_MUTED, labelFade);
             DisplayNameStack frameLabel = ClientRouteDataCache.stationGroup(frame.stationGroupId()).map(FullMapText::displayNameStack).orElse(DisplayNameStack.of(frame.label()));
             if (elementZoom < 1.1D) {
                 frameLabel = frameLabel.withoutSecondary();
@@ -929,7 +926,7 @@ public final class FullRouteMapRenderer {
             // Label placement and text are resolved at capture time; the draw itself is
             // recorded and re-issued verbatim on replay (text is deterministic per frame).
             DisplayNameStack labelText = frameLabel;
-            SmoothGuiPrimitives.recordOrReplay(graphics, g -> FullMapUi.drawNameStack(g, font, labelText, labelX, labelY, width, FullRouteMapConfig.MAP_LABEL, FullRouteMapConfig.MAP_LABEL_MUTED, primaryScale, secondaryScale, 0));
+            SmoothGuiPrimitives.recordOrReplay(graphics, g -> FullMapUi.drawNameStack(g, font, labelText, labelX, labelY, width, primaryColor, secondaryColor, primaryScale, secondaryScale, 0));
             rendered++;
         }
         if (viewport.zoom() < 1.15D) {
@@ -1191,7 +1188,7 @@ public final class FullRouteMapRenderer {
                 drawPedestrianIcon(graphics, mid, normalIconSize, FullRouteMapConfig.MAP_TRANSFER_HINT);
             });
             List<GuiElementRenderState> focused = SmoothGuiPrimitives.captureBranch(() -> {
-                drawDashedLine(graphics, a, b, 4, FullRouteMapConfig.MAP_FOCUS_HALO, 4.0D, 4.0D);
+                drawDashedLine(graphics, a, b, 2.0D + 2.0D * iconScale(viewport.zoom()), FullRouteMapConfig.MAP_FOCUS_HALO, 4.0D, 4.0D);
                 drawDashedLine(graphics, a, b, 2, FullRouteMapConfig.MAP_TRANSFER_HINT, 4.0D, 4.0D);
                 drawPedestrianIcon(graphics, mid, focusedIconSize, FullRouteMapConfig.MAP_TRANSFER_HINT);
             });
@@ -1232,7 +1229,7 @@ public final class FullRouteMapRenderer {
             Vec2 b = segment.get().b();
             List<GuiElementRenderState> normal = SmoothGuiPrimitives.captureBranch(() -> drawFadingDashedRouteLine(graphics, a, b, Math.max(2.0D, FullRouteMapConfig.LINE_WIDTH_PX - 0.2D), colors));
             List<GuiElementRenderState> focused = SmoothGuiPrimitives.captureBranch(() -> {
-                drawFadingDashedRouteLine(graphics, a, b, FullRouteMapConfig.LINE_WIDTH_PX + 5.0D, List.of(FullRouteMapConfig.MAP_FOCUS_HALO));
+                drawFadingDashedRouteLine(graphics, a, b, FullRouteMapConfig.LINE_WIDTH_PX + 5.0D * iconScale(viewport.zoom()), List.of(FullRouteMapConfig.MAP_FOCUS_HALO));
                 drawFadingDashedRouteLine(graphics, a, b, Math.max(2.0D, FullRouteMapConfig.LINE_WIDTH_PX - 0.2D), colors);
             });
             String hintId = hint.id();
@@ -1272,7 +1269,7 @@ public final class FullRouteMapRenderer {
             Vec2 b = segment.get().b();
             List<GuiElementRenderState> normal = SmoothGuiPrimitives.captureBranch(() -> drawFadingDashedRouteLine(graphics, a, b, Math.max(2.0D, FullRouteMapConfig.LINE_WIDTH_PX - 0.2D), colors));
             List<GuiElementRenderState> focused = SmoothGuiPrimitives.captureBranch(() -> {
-                drawFadingDashedRouteLine(graphics, a, b, FullRouteMapConfig.LINE_WIDTH_PX + 5.0D, List.of(FullRouteMapConfig.MAP_FOCUS_HALO));
+                drawFadingDashedRouteLine(graphics, a, b, FullRouteMapConfig.LINE_WIDTH_PX + 5.0D * iconScale(viewport.zoom()), List.of(FullRouteMapConfig.MAP_FOCUS_HALO));
                 drawFadingDashedRouteLine(graphics, a, b, Math.max(2.0D, FullRouteMapConfig.LINE_WIDTH_PX - 0.2D), colors);
             });
             String hintId = hint.id();
@@ -1332,16 +1329,18 @@ public final class FullRouteMapRenderer {
             BooleanSupplier hovered = () -> liveHover.target() instanceof HitTarget.EdgeHit(var hoveredEdgeId) && hoveredEdgeId.equals(edgeId);
             List<RouteLine> lines = routeLinesForIds(path.routeLineIds());
             if (lines.size() >= FullRouteMapConfig.TRUNK_THRESHOLD) {
+                double trunkWidth = Math.max(1.6D, 5.0D * lineWidthScale(viewport.zoom()));
+                double trunkHaloWidth = trunkWidth + 4.0D * iconScale(viewport.zoom());
                 SmoothGuiPrimitives.recordOrReplay(graphics, g -> {
                     if (hovered.getAsBoolean()) {
-                        drawPolyline(g, screenPath, 9.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
+                        drawPolyline(g, screenPath, trunkHaloWidth, FullRouteMapConfig.MAP_FOCUS_HALO, true, trunkWidth);
                     }
                 });
-                drawPolyline(graphics, screenPath, 5.0D, FullRouteMapConfig.MAP_TRUNK);
+                drawPolyline(graphics, screenPath, trunkWidth, FullRouteMapConfig.MAP_TRUNK);
                 addEdgeBlockerPath(edgeBlockers, screenPath, 2.5D);
                 this.drawTrunkDots(graphics, screenPath, lines, viewport.zoom());
             } else {
-                this.drawVisualEdgeRouteBundle(graphics, screenPath, lines, hovered, path.kind(), edgeBlockers);
+                this.drawVisualEdgeRouteBundle(graphics, screenPath, lines, hovered, path.kind(), viewport.zoom(), edgeBlockers);
             }
         }
         return edgeBlockers;
@@ -1372,9 +1371,9 @@ public final class FullRouteMapRenderer {
                         || liveHover.foldPeerHighlightId().filter(nodeId::equals).isPresent();
                 if (hovered) {
                     if (transferAxis.isPresent()) {
-                        drawDirectedTransferFocus(g, screen, radius, transferAxis.get());
+                        drawDirectedTransferFocus(g, screen, radius, transferAxis.get(), elementZoom);
                     } else {
-                        drawNodeFocus(g, node, screen, radius);
+                        drawNodeFocus(g, node, screen, radius, elementZoom);
                     }
                 }
             });
@@ -1415,9 +1414,15 @@ public final class FullRouteMapRenderer {
     }
 
     private void drawVisualLabels(GuiGraphicsExtractor graphics, Font font, MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport, SPSGui.Rect rect, Aabb2 visualView, EdgeBlockerIndex edgeBlockers) {
-        if (viewport.zoom() < 0.45D) {
+        // Low-zoom trunk tier: the floor drops from 0.45 to 0.30; between the two only
+        // trunk-tier nodes are labelled (see shouldConsiderLabel) and their alpha fades
+        // in linearly instead of popping at the old hard cutoff.
+        if (viewport.zoom() < 0.30D) {
             return;
         }
+        double labelFade = trunkLabelFade(viewport.zoom());
+        int labelPrimaryColor = fadedLabelColor(FullRouteMapConfig.MAP_LABEL, labelFade);
+        int labelSecondaryColor = fadedLabelColor(FullRouteMapConfig.MAP_LABEL_MUTED, labelFade);
         List<IconBlocker> iconBlockers = new ArrayList<>();
         for (MapNode node : graph.nodes()) {
             if (!isVisibleNode(node, viewport.zoom())) {
@@ -1460,6 +1465,12 @@ public final class FullRouteMapRenderer {
             int width = Math.max(1, FullMapUi.nameStackWidth(font, text, scale, secondaryScale));
             int height = Math.max(7, FullMapUi.nameStackHeight(text, scale, secondaryScale, 0));
             Vec2 screen = worldToScreen(label.x(), label.z(), viewport, rect);
+            // The solver's node-to-label offset is a layout-space constant, so the
+            // on-screen gap would otherwise grow linearly with zoom while the font size
+            // stays capped. Clamp the screen-space distance to the node, keeping the
+            // solver's chosen side/direction; the clamped anchor then flows through the
+            // regular bounds/collision solving unchanged.
+            screen = clampLabelAnchorToNode(screen, nodeScreen, nodeCollisionRadius(node, elementZoom) + 20.0D);
             SPSGui.Rect bounds = new SPSGui.Rect((int) Math.round(screen.x()), (int) Math.round(screen.y()), width, height);
             SPSGui.Rect selected = null;
             if (rectsOverlap(bounds, rect) && !labelBlockedByPlaced(bounds, placed) && !labelBlockedByIcons(label.nodeId(), bounds, iconBlockers) && !labelBlockedByEdges(bounds, edgeBlockers)) {
@@ -1481,7 +1492,7 @@ public final class FullRouteMapRenderer {
             DisplayNameStack labelText = text;
             float labelScaleValue = scale;
             float labelSecondaryScale = secondaryScale;
-            SmoothGuiPrimitives.recordOrReplay(graphics, g -> FullMapUi.drawNameStack(g, font, labelText, labelPosition.x(), labelPosition.y(), labelPosition.width(), FullRouteMapConfig.MAP_LABEL, FullRouteMapConfig.MAP_LABEL_MUTED, labelScaleValue, labelSecondaryScale, 0));
+            SmoothGuiPrimitives.recordOrReplay(graphics, g -> FullMapUi.drawNameStack(g, font, labelText, labelPosition.x(), labelPosition.y(), labelPosition.width(), labelPrimaryColor, labelSecondaryColor, labelScaleValue, labelSecondaryScale, 0));
             rendered++;
         }
     }
@@ -1502,15 +1513,17 @@ public final class FullRouteMapRenderer {
                     || liveHover.highlightedRouteLineId().filter(routeLineIds::contains).isPresent();
             List<RouteLine> lines = routeLinesForIds(path.routeLineIds());
             if (lines.size() >= FullRouteMapConfig.TRUNK_THRESHOLD) {
+                double trunkWidth = Math.max(1.6D, 5.0D * lineWidthScale(viewport.zoom()));
+                double trunkHaloWidth = trunkWidth + 4.0D * iconScale(viewport.zoom());
                 SmoothGuiPrimitives.recordOrReplay(graphics, g -> {
                     if (hovered.getAsBoolean()) {
-                        drawPolyline(g, screenPath, 9.0D, FullRouteMapConfig.MAP_FOCUS_HALO, false);
+                        drawPolyline(g, screenPath, trunkHaloWidth, FullRouteMapConfig.MAP_FOCUS_HALO, false, trunkWidth);
                     }
                 });
-                drawPolyline(graphics, screenPath, 5.0D, FullRouteMapConfig.MAP_TRUNK, false);
+                drawPolyline(graphics, screenPath, trunkWidth, FullRouteMapConfig.MAP_TRUNK, false);
                 this.drawTrunkDots(graphics, screenPath, lines, viewport.zoom());
             } else {
-                this.drawPureSchematicEdgeRouteBundle(graphics, screenPath, path, hovered);
+                this.drawPureSchematicEdgeRouteBundle(graphics, screenPath, path, hovered, viewport.zoom());
             }
         }
     }
@@ -1533,7 +1546,7 @@ public final class FullRouteMapRenderer {
                 int radius = visualNodeRadius(visualNode, graph, elementZoom);
                 SmoothGuiPrimitives.recordOrReplay(graphics, g -> {
                     if (hovered.getAsBoolean()) {
-                        drawPortalFocus(g, screen, radius);
+                        drawPortalFocus(g, screen, radius, elementZoom);
                     }
                 });
                 drawPortalIcon(graphics, screen, radius, visualNode);
@@ -1548,9 +1561,9 @@ public final class FullRouteMapRenderer {
             SmoothGuiPrimitives.recordOrReplay(graphics, g -> {
                 if (hovered.getAsBoolean()) {
                     if (transferAxis.isPresent()) {
-                        drawDirectedTransferFocus(g, screen, radius, transferAxis.get());
+                        drawDirectedTransferFocus(g, screen, radius, transferAxis.get(), elementZoom);
                     } else {
-                        drawNodeFocus(g, raw, screen, radius);
+                        drawNodeFocus(g, raw, screen, radius, elementZoom);
                     }
                 }
             });
@@ -1563,9 +1576,15 @@ public final class FullRouteMapRenderer {
     }
 
     private List<SPSGui.Rect> drawPureSchematicLabels(GuiGraphicsExtractor graphics, Font font, MapDimensionGraph graph, VisualRouteMapGraph visualGraph, ViewportState viewport, SPSGui.Rect rect, Aabb2 visualView) {
-        if (viewport.zoom() < 0.45D) {
+        // Low-zoom trunk tier: the floor drops from 0.45 to 0.30; between the two only
+        // trunk-tier stations are labelled and their alpha fades in linearly instead of
+        // popping at the old hard cutoff.
+        if (viewport.zoom() < 0.30D) {
             return List.of();
         }
+        double labelFade = trunkLabelFade(viewport.zoom());
+        int labelPrimaryColor = fadedLabelColor(FullRouteMapConfig.MAP_LABEL, labelFade);
+        int labelSecondaryColor = fadedLabelColor(FullRouteMapConfig.MAP_LABEL_MUTED, labelFade);
         List<IconBlocker> iconBlockers = new ArrayList<>();
         for (VisualNode visualNode : visualGraph.nodes()) {
             if (!visualView.contains(visualNode.x(), visualNode.z())) {
@@ -1589,6 +1608,11 @@ public final class FullRouteMapRenderer {
             if (visualNode == null || raw == null || visualNode.kind() != NodeKind.STATION || label.text().isBlank()) {
                 continue;
             }
+            // Trunk tier between the 0.30 floor and the full 0.45 cutoff: transfer
+            // stations only (cluster kinds never reach this STATION-only path).
+            if (viewport.zoom() < 0.45D && !isTrunkTierLabel(raw)) {
+                continue;
+            }
             if (!visualView.contains(label.x(), label.z()) && !visualView.contains(visualNode.x(), visualNode.z())) {
                 continue;
             }
@@ -1598,12 +1622,16 @@ public final class FullRouteMapRenderer {
             int width = Math.max(1, FullMapUi.nameStackWidth(font, text, scale, secondaryScale));
             int height = Math.max(7, FullMapUi.nameStackHeight(text, scale, secondaryScale, 0));
             Vec2 screen = worldToScreen(label.x(), label.z(), viewport, rect);
+            Vec2 nodeScreen = worldToScreen(visualNode.x(), visualNode.z(), viewport, rect);
+            // Same zoom-drift guard as the visual path: the solver's node-to-label
+            // offset is a layout-space constant, so the screen-space distance to the
+            // node is clamped (keeping the solver's chosen side) before bounds solving.
+            screen = clampLabelAnchorToNode(screen, nodeScreen, visualNodeCollisionRadius(visualNode, graph, viewport.zoom()) + 20.0D);
             SPSGui.Rect bounds = new SPSGui.Rect((int) Math.round(screen.x()), (int) Math.round(screen.y()), width, height);
             SPSGui.Rect selected = null;
             if (rectsOverlap(bounds, rect) && !labelBlockedByPlaced(bounds, placed) && !labelBlockedByIcons(label.nodeId(), bounds, iconBlockers)) {
                 selected = bounds;
             } else {
-                Vec2 nodeScreen = worldToScreen(visualNode.x(), visualNode.z(), viewport, rect);
                 LabelCandidate fallback = new LabelCandidate(raw, text, labelBounds(raw, nodeScreen, viewport.zoom(), rect, width, height), label.priority(), scale);
                 selected = chooseDenseVisualLabelBounds(fallback, placed, iconBlockers, edgeBlockers).orElse(null);
             }
@@ -1617,7 +1645,7 @@ public final class FullRouteMapRenderer {
             DisplayNameStack labelText = text;
             float labelScaleValue = scale;
             float labelSecondaryScale = secondaryScale;
-            SmoothGuiPrimitives.recordOrReplay(graphics, g -> FullMapUi.drawNameStack(g, font, labelText, labelPosition.x(), labelPosition.y(), labelPosition.width(), FullRouteMapConfig.MAP_LABEL, FullRouteMapConfig.MAP_LABEL_MUTED, labelScaleValue, labelSecondaryScale, 0));
+            SmoothGuiPrimitives.recordOrReplay(graphics, g -> FullMapUi.drawNameStack(g, font, labelText, labelPosition.x(), labelPosition.y(), labelPosition.width(), labelPrimaryColor, labelSecondaryColor, labelScaleValue, labelSecondaryScale, 0));
             rendered++;
         }
         return placed;
@@ -1649,7 +1677,7 @@ public final class FullRouteMapRenderer {
                 drawPedestrianIcon(graphics, mid, normalIconSize, FullRouteMapConfig.MAP_TRANSFER_HINT);
             });
             List<GuiElementRenderState> focused = SmoothGuiPrimitives.captureBranch(() -> {
-                drawDashedLine(graphics, a, b, 4, FullRouteMapConfig.MAP_FOCUS_HALO, 4.0D, 4.0D);
+                drawDashedLine(graphics, a, b, 2.0D + 2.0D * iconScale(viewport.zoom()), FullRouteMapConfig.MAP_FOCUS_HALO, 4.0D, 4.0D);
                 drawDashedLine(graphics, a, b, 2, FullRouteMapConfig.MAP_TRANSFER_HINT, 4.0D, 4.0D);
                 drawPedestrianIcon(graphics, mid, focusedIconSize, FullRouteMapConfig.MAP_TRANSFER_HINT);
             });
@@ -1706,16 +1734,18 @@ public final class FullRouteMapRenderer {
             List<RouteLine> lines = routeLinesForEdge(edge);
             if (lines.size() >= FullRouteMapConfig.TRUNK_THRESHOLD) {
                 SegmentScreen trunkSegment = offset(a, b, baseOffset);
+                double trunkWidth = Math.max(1.6D, 5.0D * lineWidthScale(viewport.zoom()));
+                double trunkHaloWidth = trunkWidth + 4.0D * iconScale(viewport.zoom());
                 SmoothGuiPrimitives.recordOrReplay(graphics, g -> {
                     if (hovered.getAsBoolean()) {
-                        drawLine(g, trunkSegment.a(), trunkSegment.b(), 9, FullRouteMapConfig.MAP_FOCUS_HALO);
+                        drawLine(g, trunkSegment.a(), trunkSegment.b(), trunkHaloWidth, FullRouteMapConfig.MAP_FOCUS_HALO);
                     }
                 });
-                drawLine(graphics, trunkSegment.a(), trunkSegment.b(), 5, FullRouteMapConfig.MAP_TRUNK);
+                drawLine(graphics, trunkSegment.a(), trunkSegment.b(), trunkWidth, FullRouteMapConfig.MAP_TRUNK);
                 addEdgeBlockerPath(edgeBlockers, List.of(trunkSegment.a(), trunkSegment.b()), 2.5D);
                 this.drawTrunkDots(graphics, trunkSegment.a(), trunkSegment.b(), lines, viewport.zoom());
             } else {
-                this.drawEdgeRouteBundles(graphics, edge, a, b, lines, baseOffset, hovered, FullRouteMapConfig.LINE_WIDTH_PX, edgeBlockers);
+                this.drawEdgeRouteBundles(graphics, edge, a, b, lines, baseOffset, hovered, Math.max(1.2D, FullRouteMapConfig.LINE_WIDTH_PX * lineWidthScale(viewport.zoom())), viewport.zoom(), edgeBlockers);
             }
         }
         return edgeBlockers;
@@ -1738,7 +1768,7 @@ public final class FullRouteMapRenderer {
                         || liveHover.transferHighlightNodes().contains(displayId)
                         || liveHover.foldPeerHighlightId().filter(nodeId::equals).isPresent();
                 if (hovered) {
-                    drawNodeFocus(g, node, screen, radius);
+                    drawNodeFocus(g, node, screen, radius, elementZoom);
                 }
             });
             switch (node.kind()) {
@@ -1778,9 +1808,15 @@ public final class FullRouteMapRenderer {
     }
 
     private void drawLabels(GuiGraphicsExtractor graphics, Font font, MapDimensionGraph graph, ViewportState viewport, SPSGui.Rect rect, Aabb2 worldView, EdgeBlockerIndex edgeBlockers) {
-        if (viewport.zoom() < 0.45D) {
+        // Low-zoom trunk tier: the floor drops from 0.45 to 0.30; between the two only
+        // trunk-tier nodes are labelled (see shouldConsiderLabel) and their alpha fades
+        // in linearly instead of popping at the old hard cutoff.
+        if (viewport.zoom() < 0.30D) {
             return;
         }
+        double labelFade = trunkLabelFade(viewport.zoom());
+        int labelPrimaryColor = fadedLabelColor(FullRouteMapConfig.MAP_LABEL, labelFade);
+        int labelSecondaryColor = fadedLabelColor(FullRouteMapConfig.MAP_LABEL_MUTED, labelFade);
         List<IconBlocker> iconBlockers = new ArrayList<>();
         List<LabelCandidate> candidates = new ArrayList<>();
         for (MapNode node : graph.nodes()) {
@@ -1824,12 +1860,18 @@ public final class FullRouteMapRenderer {
             // draw is re-issued on replay.
             DisplayNameStack labelText = candidate.label();
             float labelScaleValue = candidate.scale();
-            SmoothGuiPrimitives.recordOrReplay(graphics, g -> FullMapUi.drawNameStack(g, font, labelText, bounds.x(), bounds.y(), bounds.width(), FullRouteMapConfig.MAP_LABEL, FullRouteMapConfig.MAP_LABEL_MUTED, labelScaleValue, secondaryScale, 0));
+            SmoothGuiPrimitives.recordOrReplay(graphics, g -> FullMapUi.drawNameStack(g, font, labelText, bounds.x(), bounds.y(), bounds.width(), labelPrimaryColor, labelSecondaryColor, labelScaleValue, secondaryScale, 0));
             rendered++;
         }
     }
 
     private static boolean shouldConsiderLabel(MapNode node, double zoom) {
+        if (zoom < 0.45D) {
+            // Trunk tier between the low-zoom floor (0.30, enforced at the call sites)
+            // and the full label cutoff: cluster aggregates and transfer/interchange
+            // stations only.
+            return isTrunkTierLabel(node);
+        }
         if (zoom < 0.65D) {
             return node.kind() == NodeKind.CLUSTER || node.kind() == NodeKind.DEEP_CLUSTER;
         }
@@ -1840,6 +1882,53 @@ public final class FullRouteMapRenderer {
             return node.kind() != NodeKind.STATION || node.isTransferStation();
         }
         return true;
+    }
+
+    // Trunk-tier predicate shared by the low-zoom band of every main-map label path:
+    // cluster aggregates plus transfer/interchange stations (routeLineIds >= 2).
+    private static boolean isTrunkTierLabel(MapNode node) {
+        return node.kind() == NodeKind.CLUSTER || node.kind() == NodeKind.DEEP_CLUSTER || node.isTransferStation();
+    }
+
+    // Main-map trunk-tier fade band: full opacity at and above the original 0.45
+    // cutoff, ramping linearly to 0 at the 0.30 floor so low-zoom labels ease in
+    // instead of popping.
+    private static double trunkLabelFade(double zoom) {
+        if (zoom >= 0.45D) {
+            return 1.0D;
+        }
+        return Math.max(0.0D, (zoom - 0.30D) / 0.15D);
+    }
+
+    // Physical-mode trunk-tier fade band: full opacity at and above the original 0.34
+    // element-zoom cutoff, ramping linearly to 0 at the 0.24 floor.
+    private static double physicalTrunkLabelFade(double elementZoom) {
+        if (elementZoom >= 0.34D) {
+            return 1.0D;
+        }
+        return Math.max(0.0D, (elementZoom - 0.24D) / 0.10D);
+    }
+
+    // Scales the alpha channel of an ARGB color by fade (0..1), preserving the color's
+    // own base alpha; fade >= 1 returns the color unchanged.
+    private static int fadedLabelColor(int color, double fade) {
+        if (fade >= 1.0D) {
+            return color;
+        }
+        return SPSGui.withAlpha(color, (int) Math.round((color >>> 24) * fade));
+    }
+
+    // Pulls a solver-placed label anchor back towards its node when the screen-space
+    // distance exceeds cap, preserving the direction (side) the solver picked.
+    private static Vec2 clampLabelAnchorToNode(Vec2 labelScreen, Vec2 nodeScreen, double cap) {
+        double dx = labelScreen.x() - nodeScreen.x();
+        double dy = labelScreen.y() - nodeScreen.y();
+        double distance = Math.hypot(dx, dy);
+        if (distance <= cap) {
+            return labelScreen;
+        }
+        double factor = cap / distance;
+        return new Vec2(nodeScreen.x() + dx * factor, nodeScreen.y() + dy * factor);
     }
 
     private static float labelScale(MapNode node, double zoom) {
@@ -2299,7 +2388,7 @@ public final class FullRouteMapRenderer {
                 ? FullRouteMapConfig.CLUSTER_RADIUS_PX
                 : FullRouteMapConfig.NODE_RADIUS_PX;
         if (FullRouteMapCache.layoutMode() == FullRouteMapLayoutMode.SCHEMATIC && node.kind() == NodeKind.FOLD_ANCHOR) {
-            return Math.max(3, (int) Math.round(base * 0.70D * iconScale(zoom)));
+            return Math.max(2, (int) Math.round(base * 0.70D * iconScale(zoom)));
         }
         return Math.max(2, (int) Math.round(base * iconScale(zoom)));
     }
@@ -2374,10 +2463,22 @@ public final class FullRouteMapRenderer {
         return Math.max(0.35D, Math.min(1.0D, zoom));
     }
 
+    // Lane/trunk widths follow the same sub-linear zoom curve as node icons so lines
+    // keep thinning when zooming out instead of ending up thicker than station glyphs.
+    private static double lineWidthScale(double zoom) {
+        return iconScale(zoom);
+    }
+
     private static double physicalNodeRadius(PhysicalNodeKind kind, double zoom) {
-        double scale = Math.max(0.48D, Math.min(1.45D, 0.62D + zoom * 0.12D));
+        double scale = physicalNodeScale(zoom);
         double base = kind == PhysicalNodeKind.FOLD_ANCHOR ? FullRouteMapConfig.NODE_RADIUS_PX + 1.0D : FullRouteMapConfig.NODE_RADIUS_PX - 1.0D;
         return Math.max(3.0D, base * scale);
+    }
+
+    // The physical mode's own sub-linear zoom curve, shared by focus-halo paddings so
+    // they track physical node sizing instead of staying at a fixed screen size.
+    private static double physicalNodeScale(double zoom) {
+        return Math.max(0.48D, Math.min(1.45D, 0.62D + zoom * 0.12D));
     }
 
     private static double physicalEdgeHitRadius(double zoom) {
@@ -2986,45 +3087,51 @@ public final class FullRouteMapRenderer {
 
     private record TransferSpoke(int directionIndex, int axisIndex, double ux, double uy, double weight, double routeWeight, Set<UUID> routeLineIds) {}
 
-    private static void drawNodeFocus(GuiGraphicsExtractor graphics, MapNode node, Vec2 center, int radius) {
+    private static void drawNodeFocus(GuiGraphicsExtractor graphics, MapNode node, Vec2 center, int radius, double zoom) {
+        double haloScale = iconScale(zoom);
         switch (node.kind()) {
             case FOLD_ANCHOR -> {
-                SmoothGuiPrimitives.diamond(graphics, center, radius + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
-                SmoothGuiPrimitives.diamond(graphics, center, radius + 2.0D, FullRouteMapConfig.MAP_FOCUS_RING);
+                SmoothGuiPrimitives.diamond(graphics, center, radius + 5.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO);
+                SmoothGuiPrimitives.diamond(graphics, center, radius + 2.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
             }
             case STATION -> {
                 if (node.isTransferStation()) {
-                    SmoothGuiPrimitives.capsule(graphics, center, radius * 3.0D + 10.0D, radius * 2.0D + 10.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
-                    SmoothGuiPrimitives.capsule(graphics, center, radius * 3.0D + 4.0D, radius * 2.0D + 4.0D, FullRouteMapConfig.MAP_FOCUS_RING);
+                    SmoothGuiPrimitives.capsule(graphics, center, radius * 3.0D + 10.0D * haloScale, radius * 2.0D + 10.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO);
+                    SmoothGuiPrimitives.capsule(graphics, center, radius * 3.0D + 4.0D * haloScale, radius * 2.0D + 4.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
                 } else {
-                    SmoothGuiPrimitives.circle(graphics, center, radius + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
-                    SmoothGuiPrimitives.circle(graphics, center, radius + 2.0D, FullRouteMapConfig.MAP_FOCUS_RING);
+                    SmoothGuiPrimitives.circle(graphics, center, radius + 5.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO);
+                    SmoothGuiPrimitives.circle(graphics, center, radius + 2.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
                 }
             }
             case CLUSTER, DEEP_CLUSTER -> {
-                SmoothGuiPrimitives.circle(graphics, center, radius + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
-                SmoothGuiPrimitives.circle(graphics, center, radius + 2.0D, FullRouteMapConfig.MAP_FOCUS_RING);
+                SmoothGuiPrimitives.circle(graphics, center, radius + 5.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO);
+                SmoothGuiPrimitives.circle(graphics, center, radius + 2.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
             }
         }
     }
 
-    private static void drawDirectedTransferFocus(GuiGraphicsExtractor graphics, Vec2 center, int radius, Vec2 axis) {
-        SmoothGuiPrimitives.capsule(graphics, center, axis, radius * 3.0D + 10.0D, radius * 2.0D + 10.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
-        SmoothGuiPrimitives.capsule(graphics, center, axis, radius * 3.0D + 4.0D, radius * 2.0D + 4.0D, FullRouteMapConfig.MAP_FOCUS_RING);
+    private static void drawDirectedTransferFocus(GuiGraphicsExtractor graphics, Vec2 center, int radius, Vec2 axis, double zoom) {
+        double haloScale = iconScale(zoom);
+        SmoothGuiPrimitives.capsule(graphics, center, axis, radius * 3.0D + 10.0D * haloScale, radius * 2.0D + 10.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO);
+        SmoothGuiPrimitives.capsule(graphics, center, axis, radius * 3.0D + 4.0D * haloScale, radius * 2.0D + 4.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
     }
 
-    private static void drawPortalFocus(GuiGraphicsExtractor graphics, Vec2 center, int radius) {
-        SmoothGuiPrimitives.capsule(graphics, center, radius * 1.8D + 10.0D, radius * 2.5D + 10.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
-        SmoothGuiPrimitives.capsule(graphics, center, radius * 1.8D + 4.0D, radius * 2.5D + 4.0D, FullRouteMapConfig.MAP_FOCUS_RING);
+    private static void drawPortalFocus(GuiGraphicsExtractor graphics, Vec2 center, int radius, double zoom) {
+        double haloScale = iconScale(zoom);
+        SmoothGuiPrimitives.capsule(graphics, center, radius * 1.8D + 10.0D * haloScale, radius * 2.5D + 10.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO);
+        SmoothGuiPrimitives.capsule(graphics, center, radius * 1.8D + 4.0D * haloScale, radius * 2.5D + 4.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
     }
 
     private static void drawPortalIcon(GuiGraphicsExtractor graphics, Vec2 center, int radius, VisualNode node) {
         List<RouteLine> lines = routeLinesForIds(node.routeLineIds());
         List<Integer> colors = portalColors(lines);
         int outline = portalOutlineColor(lines, colors);
-        double outerW = Math.max(6.0D, radius * 1.65D);
-        double outerH = Math.max(9.0D, radius * 2.35D);
-        SmoothGuiPrimitives.capsule(graphics, center, outerW + 3.0D, outerH + 3.0D, outline);
+        // Proportional footprint (was clamped to 6x9 minimum) so the portal glyph keeps
+        // shrinking with zoom and never outgrows the station glyph at minimum zoom.
+        double outerW = radius * 1.5D;
+        double outerH = radius * 2.2D;
+        double outlinePad = Math.max(1.0D, radius * 0.75D);
+        SmoothGuiPrimitives.capsule(graphics, center, outerW + outlinePad, outerH + outlinePad, outline);
         SmoothGuiPrimitives.capsule(graphics, center, outerW, outerH, FullRouteMapConfig.MAP_NODE_FILL);
         if (colors.size() == 1) {
             SmoothGuiPrimitives.capsule(graphics, center, Math.max(3.0D, outerW * 0.42D), Math.max(5.0D, outerH * 0.60D), SPSGui.withAlpha(colors.getFirst(), 0xDD));
@@ -3067,21 +3174,21 @@ public final class FullRouteMapRenderer {
         return FullRouteMapConfig.MAP_NODE_OUTLINE;
     }
 
-    private void drawEdgeRouteBundles(GuiGraphicsExtractor graphics, MapEdge edge, Vec2 a, Vec2 b, List<RouteLine> allLines, double baseOffset, BooleanSupplier hovered, double laneWidth, EdgeBlockerIndex edgeBlockers) {
-        drawRouteBundle(graphics, a, b, edgeLanes(allLines), laneWidth, baseOffset, hovered, edgeBlockers);
+    private void drawEdgeRouteBundles(GuiGraphicsExtractor graphics, MapEdge edge, Vec2 a, Vec2 b, List<RouteLine> allLines, double baseOffset, BooleanSupplier hovered, double laneWidth, double zoom, EdgeBlockerIndex edgeBlockers) {
+        drawRouteBundle(graphics, a, b, edgeLanes(allLines), laneWidth, baseOffset, hovered, zoom, edgeBlockers);
     }
 
-    private static void drawRouteBundle(GuiGraphicsExtractor graphics, Vec2 a, Vec2 b, List<EdgeLane> lanes, double laneWidth, double baseOffset, BooleanSupplier hovered, EdgeBlockerIndex edgeBlockers) {
+    private static void drawRouteBundle(GuiGraphicsExtractor graphics, Vec2 a, Vec2 b, List<EdgeLane> lanes, double laneWidth, double baseOffset, BooleanSupplier hovered, double zoom, EdgeBlockerIndex edgeBlockers) {
         if (lanes.isEmpty()) {
             return;
         }
         List<Vec2> basePath = offsetScreenPathAnchored(List.of(a, b), baseOffset);
-        double haloWidth = routeBundleWidth(lanes, laneWidth) + 5.0D;
+        double haloWidth = routeBundleWidth(lanes, laneWidth) + 5.0D * iconScale(zoom);
         // Hover halo slot: re-evaluated against the live hover at replay time and kept
         // underneath the lanes, exactly as the uncached render ordered it.
         SmoothGuiPrimitives.recordOrReplay(graphics, g -> {
             if (hovered.getAsBoolean()) {
-                drawPolyline(g, basePath, haloWidth, FullRouteMapConfig.MAP_FOCUS_HALO);
+                drawPolyline(g, basePath, haloWidth, FullRouteMapConfig.MAP_FOCUS_HALO, true, laneWidth);
             }
         });
         double step = laneWidth + 1.0D;
@@ -3237,17 +3344,27 @@ public final class FullRouteMapRenderer {
         SmoothGuiPrimitives.polyline(graphics, points, width, color, roundCaps);
     }
 
-    private void drawVisualEdgeRouteBundle(GuiGraphicsExtractor graphics, List<Vec2> screenPath, List<RouteLine> allLines, BooleanSupplier hovered, SemanticEdgeKind kind, EdgeBlockerIndex edgeBlockers) {
+    /**
+     * Hover halo drawn wider than the line it surrounds, on the same centerline: the
+     * halo's corner rounding is derived from the base line's width
+     * ({@code roundingReferenceWidth}) instead of the halo width, so halo and line share
+     * the same corner cutting and the halo no longer deviates at turns.
+     */
+    private static void drawPolyline(GuiGraphicsExtractor graphics, List<Vec2> points, double width, int color, boolean roundCaps, double roundingReferenceWidth) {
+        SmoothGuiPrimitives.polyline(graphics, points, width, color, roundCaps, roundingReferenceWidth);
+    }
+
+    private void drawVisualEdgeRouteBundle(GuiGraphicsExtractor graphics, List<Vec2> screenPath, List<RouteLine> allLines, BooleanSupplier hovered, SemanticEdgeKind kind, double zoom, EdgeBlockerIndex edgeBlockers) {
         List<EdgeLane> lanes = edgeLanes(allLines);
         if (lanes.isEmpty()) {
             return;
         }
-        double laneWidth = FullRouteMapConfig.LINE_WIDTH_PX;
-        double haloWidth = routeBundleWidth(lanes, laneWidth) + 5.0D;
+        double laneWidth = Math.max(1.2D, FullRouteMapConfig.LINE_WIDTH_PX * lineWidthScale(zoom));
+        double haloWidth = routeBundleWidth(lanes, laneWidth) + 5.0D * iconScale(zoom);
         // Hover halo slot: re-evaluated against the live hover at replay time.
         SmoothGuiPrimitives.recordOrReplay(graphics, g -> {
             if (hovered.getAsBoolean()) {
-                drawPolyline(g, screenPath, haloWidth, FullRouteMapConfig.MAP_FOCUS_HALO);
+                drawPolyline(g, screenPath, haloWidth, FullRouteMapConfig.MAP_FOCUS_HALO, true, laneWidth);
             }
         });
         if (kind == SemanticEdgeKind.FOLD_ADJACENT && allLines.isEmpty()) {
@@ -3264,8 +3381,8 @@ public final class FullRouteMapRenderer {
         }
     }
 
-    private void drawPureSchematicEdgeRouteBundle(GuiGraphicsExtractor graphics, List<Vec2> screenPath, VisualEdgePath path, BooleanSupplier hovered) {
-        double laneWidth = FullRouteMapConfig.LINE_WIDTH_PX;
+    private void drawPureSchematicEdgeRouteBundle(GuiGraphicsExtractor graphics, List<Vec2> screenPath, VisualEdgePath path, BooleanSupplier hovered, double zoom) {
+        double laneWidth = Math.max(1.2D, FullRouteMapConfig.LINE_WIDTH_PX * lineWidthScale(zoom));
         if (path.kind() == SemanticEdgeKind.FOLD_ADJACENT && path.routeLineIds().isEmpty()) {
             drawPolyline(graphics, screenPath, laneWidth, FullRouteMapConfig.MAP_FOLD_MULTI_LINE, false);
             return;
@@ -3273,11 +3390,11 @@ public final class FullRouteMapRenderer {
         List<VisualLane> visualLanes = path.lanes();
         if (visualLanes.isEmpty()) {
             List<EdgeLane> lanes = edgeLanes(routeLinesForIds(path.routeLineIds()));
-            double haloWidth = routeBundleWidth(lanes, laneWidth) + 5.0D;
+            double haloWidth = routeBundleWidth(lanes, laneWidth) + 5.0D * iconScale(zoom);
             // Hover halo slot: re-evaluated against the live hover at replay time.
             SmoothGuiPrimitives.recordOrReplay(graphics, g -> {
                 if (hovered.getAsBoolean()) {
-                    drawPolyline(g, screenPath, haloWidth, FullRouteMapConfig.MAP_FOCUS_HALO, false);
+                    drawPolyline(g, screenPath, haloWidth, FullRouteMapConfig.MAP_FOCUS_HALO, false, laneWidth);
                 }
             });
             double step = laneWidth + 1.0D;
@@ -3287,15 +3404,24 @@ public final class FullRouteMapRenderer {
             }
             return;
         }
-        double haloWidth = visualLanes.size() * laneWidth + Math.max(0, visualLanes.size() - 1) + 5.0D;
+        // Solver lane offsets are fixed layout units, so they must follow the lane-width zoom
+        // curve: scaling the offset by lineWidthScale(zoom) keeps the zoom=1 packing ratio and
+        // collinear lanes stay packed instead of opening gaps when zoomed out.
+        double laneOffsetScale = FullRouteMapConfig.BASE_SCALE * lineWidthScale(zoom);
+        double maxAbsOffset = 0.0D;
+        for (VisualLane lane : visualLanes) {
+            maxAbsOffset = Math.max(maxAbsOffset, Math.abs(lane.offsetBlocks()) * laneOffsetScale);
+        }
+        // The halo spans exactly the spread lanes: twice the outermost lane offset plus one lane width.
+        double haloWidth = 2.0D * maxAbsOffset + laneWidth + 5.0D * iconScale(zoom);
         // Hover halo slot: re-evaluated against the live hover at replay time.
         SmoothGuiPrimitives.recordOrReplay(graphics, g -> {
             if (hovered.getAsBoolean()) {
-                drawPolyline(g, screenPath, haloWidth, FullRouteMapConfig.MAP_FOCUS_HALO, false);
+                drawPolyline(g, screenPath, haloWidth, FullRouteMapConfig.MAP_FOCUS_HALO, false, laneWidth);
             }
         });
         for (VisualLane lane : visualLanes) {
-            List<Vec2> lanePath = offsetScreenPath(screenPath, lane.offsetBlocks() * FullRouteMapConfig.BASE_SCALE);
+            List<Vec2> lanePath = offsetScreenPath(screenPath, lane.offsetBlocks() * laneOffsetScale);
             drawColorLanePath(graphics, lanePath, laneWidth, colorsForVisualLane(lane), false);
         }
     }
@@ -3842,8 +3968,6 @@ public final class FullRouteMapRenderer {
 
     /** Anchor node screen position and body radius for a low-zoom missing-hint warning badge. */
     private record MissingHintAnchor(Vec2 screen, double nodeRadiusPx) {}
-
-    private record StationFrameScreenShape(Vec2 center, Vec2 axis, double length, double height) {}
 
     private record VisibleEdge(MapEdge edge, Vec2 a, Vec2 b) {}
 

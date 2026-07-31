@@ -152,7 +152,7 @@ public final class ClusterCardRenderer {
                 boolean highlighted = highlightedFoldNodes.contains(edge.from()) || highlightedFoldNodes.contains(edge.to())
                         || hover.edgeId().filter(edge.id()::equals).isPresent();
                 if (highlighted) {
-                    drawPolyline(graphics, visualEdge.points(), 7.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
+                    drawPolyline(graphics, visualEdge.points(), 1.7D + 5.3D * nodeScale(zoom), FullRouteMapConfig.MAP_FOCUS_HALO);
                     drawPolyline(graphics, visualEdge.points(), 1.7D, FullRouteMapConfig.MAP_FOLD_MULTI_LINE);
                 } else {
                     // Always-on whisper of the fold-peer link so the pairing stays
@@ -169,14 +169,14 @@ public final class ClusterCardRenderer {
                     : FullRouteMapConfig.LINE_WIDTH_PX;
             if (lines.size() >= FullRouteMapConfig.TRUNK_THRESHOLD) {
                 if (hovered) {
-                    drawPolyline(graphics, visualEdge.points(), 9.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
+                    drawPolyline(graphics, visualEdge.points(), 5.0D + 4.0D * nodeScale(zoom), FullRouteMapConfig.MAP_FOCUS_HALO);
                 }
                 drawPolyline(graphics, visualEdge.points(), 5.0D, FullRouteMapConfig.MAP_TRUNK);
                 if (zoom >= FullRouteMapConfig.TRUNK_DOT_MIN_ZOOM) {
                     this.drawTrunkDots(graphics, visualEdge.points(), lines);
                 }
             } else {
-                this.drawRouteBundle(graphics, visualEdge.points(), edgeLanes(lines), width, hovered);
+                this.drawRouteBundle(graphics, visualEdge.points(), edgeLanes(lines), width, hovered, zoom);
             }
         }
     }
@@ -189,7 +189,7 @@ public final class ClusterCardRenderer {
             double radius = nodeRadius(node, zoom, profile);
             boolean hovered = hover.nodeId().filter(node.id()::equals).isPresent() || highlightedFoldNodes.contains(node.id());
             if (hovered) {
-                drawNodeFocus(graphics, node, center, radius);
+                drawNodeFocus(graphics, node, center, radius, zoom);
             }
             switch (node.kind()) {
                 case MEMBER_DEEP_CLUSTER -> {
@@ -227,9 +227,16 @@ public final class ClusterCardRenderer {
     }
 
     private void drawLabels(GuiGraphicsExtractor graphics, Font font, ClusterCardVisualGraph graph, ClusterCardHit hover, double zoom, SPSGui.Rect map, ClusterCardProfile profile) {
-        if (zoom < (profile == ClusterCardProfile.DEEP ? 0.5D : 0.42D)) {
+        double fullCutoff = profile == ClusterCardProfile.DEEP ? 0.5D : 0.42D;
+        // Low-zoom trunk tier: the floor drops from the profile cutoff to 0.30; between
+        // the two only transfer stations are labelled, fading in linearly instead of
+        // popping at the old hard cutoff.
+        if (zoom < 0.30D) {
             return;
         }
+        double labelFade = trunkLabelFade(zoom, fullCutoff);
+        int primaryColor = fadedLabelColor(FullRouteMapConfig.MAP_CARD_LABEL, labelFade);
+        int secondaryColor = fadedLabelColor(FullMapTheme.TEXT_MUTED, labelFade);
         List<LabelBlocker> blockers = new ArrayList<>();
         for (ClusterCardVisualNode visualNode : graph.nodes()) {
             blockers.add(new LabelBlocker(visualNode.node().id(), iconBounds(visualNode.node(), visualNode.position(), zoom, profile)));
@@ -245,10 +252,17 @@ public final class ClusterCardRenderer {
             }
             ClusterCardNode node = visualNode.node();
             boolean hovered = hover.nodeId().filter(node.id()::equals).isPresent();
+            // Trunk tier below the original cutoff: transfer stations only, mirroring
+            // the card's existing kind-based filters (hover still bypasses).
+            if (zoom < fullCutoff && !hovered && !(node.kind() == ClusterCardNodeKind.MEMBER_STATION && node.mapNode().filter(MapNode::isTransferStation).isPresent())) {
+                continue;
+            }
             if (node.kind() == ClusterCardNodeKind.MEMBER_FOLD_ANCHOR && !hovered && zoom < (profile == ClusterCardProfile.DEEP ? 1.08D : 1.0D)) {
                 continue;
             }
-            if (profile == ClusterCardProfile.DEEP && !hovered) {
+            // DEEP density gates apply only above the trunk band; inside it the trunk
+            // filter alone decides, so transfer stations stay visible down to the floor.
+            if (profile == ClusterCardProfile.DEEP && !hovered && zoom >= fullCutoff) {
                 if (node.kind() == ClusterCardNodeKind.EXTERNAL_PORT && zoom < 0.85D) {
                     continue;
                 }
@@ -276,9 +290,27 @@ public final class ClusterCardRenderer {
             }
             SPSGui.Rect rect = selected.get();
             placed.add(rect);
-            FullMapUi.drawNameStack(graphics, font, name, rect.x(), rect.y(), rect.width(), FullRouteMapConfig.MAP_CARD_LABEL, FullMapTheme.TEXT_MUTED, scale, secondaryScale, 0);
+            FullMapUi.drawNameStack(graphics, font, name, rect.x(), rect.y(), rect.width(), primaryColor, secondaryColor, scale, secondaryScale, 0);
             rendered++;
         }
+    }
+
+    // Trunk-tier fade band for the cluster card: alpha ramps 0 -> 1 from the 0.30 floor
+    // to the profile's original label cutoff; full opacity at and above the cutoff.
+    private static double trunkLabelFade(double zoom, double fullCutoff) {
+        if (zoom >= fullCutoff) {
+            return 1.0D;
+        }
+        return Math.max(0.0D, (zoom - 0.30D) / (fullCutoff - 0.30D));
+    }
+
+    // Scales the alpha channel of an ARGB color by fade (0..1), preserving the color's
+    // own base alpha; fade >= 1 returns the color unchanged.
+    private static int fadedLabelColor(int color, double fade) {
+        if (fade >= 1.0D) {
+            return color;
+        }
+        return SPSGui.withAlpha(color, (int) Math.round((color >>> 24) * fade));
     }
 
     private Optional<ClusterCardHit> hitTest(ClusterCardVisualGraph graph, SPSGui.Rect map, double mouseX, double mouseY, double zoom, ClusterCardProfile profile) {
@@ -537,19 +569,25 @@ public final class ClusterCardRenderer {
             case MEMBER_STATION, MEMBER_FOLD_ANCHOR -> FullRouteMapConfig.NODE_RADIUS_PX;
             case EXTERNAL_PORT -> Math.max(4.2D, FullRouteMapConfig.NODE_RADIUS_PX - 1.5D);
         };
-        double scale = Math.max(0.72D, Math.min(1.25D, 0.78D + zoom * 0.12D));
+        double scale = nodeScale(zoom);
         if (profile == ClusterCardProfile.DEEP) {
             scale *= 0.88D;
         }
         return base * scale;
     }
 
-    private void drawRouteBundle(GuiGraphicsExtractor graphics, List<Vec2> points, List<EdgeLane> lanes, double width, boolean hovered) {
+    // The cluster card's own sub-linear zoom curve, shared by focus-halo paddings so
+    // they track node sizing instead of staying at a fixed screen size.
+    private static double nodeScale(double zoom) {
+        return Math.max(0.72D, Math.min(1.25D, 0.78D + zoom * 0.12D));
+    }
+
+    private void drawRouteBundle(GuiGraphicsExtractor graphics, List<Vec2> points, List<EdgeLane> lanes, double width, boolean hovered, double zoom) {
         if (lanes.isEmpty() || points.size() < 2) {
             return;
         }
         if (hovered) {
-            drawPolyline(graphics, points, routeBundleWidth(lanes, width) + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
+            drawPolyline(graphics, points, routeBundleWidth(lanes, width) + 5.0D * nodeScale(zoom), FullRouteMapConfig.MAP_FOCUS_HALO);
         }
         double step = width + 1.0D;
         double center = (lanes.size() - 1) * 0.5D;
@@ -613,19 +651,20 @@ public final class ClusterCardRenderer {
         }
     }
 
-    private static void drawNodeFocus(GuiGraphicsExtractor graphics, ClusterCardNode node, Vec2 center, double radius) {
+    private static void drawNodeFocus(GuiGraphicsExtractor graphics, ClusterCardNode node, Vec2 center, double radius, double zoom) {
+        double haloScale = nodeScale(zoom);
         if (node.kind() == ClusterCardNodeKind.MEMBER_FOLD_ANCHOR) {
-            SmoothGuiPrimitives.diamond(graphics, center, radius + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
-            SmoothGuiPrimitives.diamond(graphics, center, radius + 2.0D, FullRouteMapConfig.MAP_FOCUS_RING);
+            SmoothGuiPrimitives.diamond(graphics, center, radius + 5.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO);
+            SmoothGuiPrimitives.diamond(graphics, center, radius + 2.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
             return;
         }
         if (node.kind() == ClusterCardNodeKind.MEMBER_STATION && node.mapNode().filter(MapNode::isTransferStation).isPresent()) {
-            SmoothGuiPrimitives.capsule(graphics, center, radius * 3.15D + 10.0D, radius * 2.0D + 10.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
-            SmoothGuiPrimitives.capsule(graphics, center, radius * 3.15D + 4.0D, radius * 2.0D + 4.0D, FullRouteMapConfig.MAP_FOCUS_RING);
+            SmoothGuiPrimitives.capsule(graphics, center, radius * 3.15D + 10.0D * haloScale, radius * 2.0D + 10.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO);
+            SmoothGuiPrimitives.capsule(graphics, center, radius * 3.15D + 4.0D * haloScale, radius * 2.0D + 4.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
             return;
         }
-        SmoothGuiPrimitives.circle(graphics, center, radius + 5.0D, FullRouteMapConfig.MAP_FOCUS_HALO);
-        SmoothGuiPrimitives.circle(graphics, center, radius + 2.0D, FullRouteMapConfig.MAP_FOCUS_RING);
+        SmoothGuiPrimitives.circle(graphics, center, radius + 5.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_HALO);
+        SmoothGuiPrimitives.circle(graphics, center, radius + 2.0D * haloScale, FullRouteMapConfig.MAP_FOCUS_RING);
     }
 
     private static void drawStationInternalMarker(GuiGraphicsExtractor graphics, Vec2 center, double radius) {

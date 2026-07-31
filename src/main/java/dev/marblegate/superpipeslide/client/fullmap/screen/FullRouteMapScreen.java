@@ -295,6 +295,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     private double lastMapClickReleaseY;
     @Nullable
     private ViewportTween viewportTween;
+    // Set by selectLayoutMode: re-fit the viewport once the mode switch's rebuild has
+    // landed, because only then does displayBounds() reflect the new layout's bounds.
+    private boolean refitViewportAfterBuild;
     private boolean panningMap;
     private long lastPanSampleMillis;
     private double panVelocityX;
@@ -390,6 +393,13 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         FullRouteMapCache.refresh(false);
         this.refreshSelectedNavigationPlanIfStale(ClientRouteDataCache.revision(), ClientPipeNetworkCache.aggregateRevision());
         this.ensureActiveDimension();
+        // Layout-mode switches re-fit the viewport once their rebuild has landed: only
+        // then does displayBounds() reflect the new layout. Data-refresh rebuilds never
+        // set the flag, and a failed or superseded build just refits to the fallback bounds.
+        if (this.refitViewportAfterBuild && !FullRouteMapCache.building()) {
+            this.refitViewportAfterBuild = false;
+            this.resetViewport();
+        }
         this.tickViewportDynamics();
         this.cardManager.updateWindowBounds(this.width, this.height);
         this.updateMapChromeBounds();
@@ -400,7 +410,23 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         boolean mapChromeBlocksHover = this.mapChromeBlocks(mouseX, mouseY);
         boolean contextPickerBlocksHover = this.contextPicker.isPresent();
         this.schematicLegendHoverRouteLineId = Optional.empty();
-        if (FullRouteMapCache.layoutMode().physical() && physicalGraph.isPresent()) {
+        if (FullRouteMapCache.building()) {
+            // An asynchronous build is in flight (e.g. right after a layout-mode switch
+            // cleared the cached visual/physical graphs): rendering map content now would
+            // degenerate to raw world-coordinate straight lines. Draw only the background
+            // grid until the build lands; the building indicator below reports progress.
+            // This gates strictly on building() -- steady-state modes legitimately render
+            // without a visual graph (physical mode uses its physical graph instead).
+            if (graph.isPresent()) {
+                FullRouteMapRenderer.drawMapBackground(graphics, this.mapRect, this.displayViewport(graph.get()), FullRouteMapCache.layoutMode());
+            } else {
+                FullRouteMapRenderer.drawMapBackground(graphics, this.mapRect, 0.0D, 0.0D, FullRouteMapConfig.BASE_SCALE, FullRouteMapCache.layoutMode());
+            }
+            this.hover = HitTarget.none();
+            this.trackHoverFocusChange();
+            this.hoverFocusRings = List.of();
+            this.hoverFocusAlpha = 1.0F;
+        } else if (FullRouteMapCache.layoutMode().physical() && physicalGraph.isPresent()) {
             ViewportState viewport = this.viewportFor(physicalGraph.get());
             this.hover = this.cardManager.topmostCardAt(mouseX, mouseY).isPresent() || mapChromeBlocksHover || contextPickerBlocksHover
                     ? HitTarget.none()
@@ -434,8 +460,9 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                     plan,
                     this.navigationActiveSegmentIndex(plan)));
             // A dimension with nothing to draw usually means broken data: surface the
-            // first diagnostic instead of leaving a blank map (ghost dimension).
-            if (graph.get().nodes().isEmpty() && !graph.get().diagnostics().isEmpty()) {
+            // first diagnostic instead of leaving a blank map (ghost dimension). Like the
+            // badge this is a debug aid, so it follows the F3 debug overlay.
+            if (diagnosticsOverlayEnabled() && graph.get().nodes().isEmpty() && !graph.get().diagnostics().isEmpty()) {
                 MapBuildDiagnostic first = graph.get().diagnostics().getFirst();
                 SPSGui.centeredText(graphics, this.font, Component.translatable(diagnosticNameKey(first.type())), this.width / 2, this.height / 2 - 8, FullMapTheme.WARNING);
                 SPSGui.centeredText(graphics, this.font, Component.translatable(diagnosticGuideKey(first.type())), this.width / 2, this.height / 2 + 6, FullMapTheme.TEXT_MUTED);
@@ -556,7 +583,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
             return this.hover;
         }
         Vec2 visual = FullRouteMapRenderer.visualPosition(graph, visualGraph, hovered);
-        this.hoverFocusRings = List.of(new HoverFocusRing(FullRouteMapRenderer.worldToScreen(visual.x(), visual.y(), viewport, this.mapRect), mapNodeRingRadius(hovered, viewport.zoom()), false));
+        this.hoverFocusRings = List.of(new HoverFocusRing(FullRouteMapRenderer.worldToScreen(visual.x(), visual.y(), viewport, this.mapRect), mapNodeRingRadius(hovered, viewport.zoom()), mapNodeFocusPadScale(viewport.zoom()), false));
         this.hoverFocusAlpha = alpha;
         // The node id is the whole payload of a NodeHit, so the stripped target is "no hit".
         return HitTarget.none();
@@ -592,6 +619,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 rings.add(new HoverFocusRing(
                         FullRouteMapRenderer.worldToScreen(node.worldX(), node.worldZ(), viewport, this.mapRect),
                         physicalNodeRingRadius(node.kind(), viewport.zoom()),
+                        physicalNodeFocusPadScale(viewport.zoom()),
                         node.kind() == PhysicalNodeKind.FOLD_ANCHOR));
             }
         }
@@ -610,11 +638,11 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         int ring = fadeAlpha(FullRouteMapConfig.MAP_FOCUS_RING, this.hoverFocusAlpha);
         for (HoverFocusRing focus : this.hoverFocusRings) {
             if (focus.diamond()) {
-                SmoothGuiPrimitives.diamond(graphics, focus.center(), focus.radius() + 5.0D, halo);
-                SmoothGuiPrimitives.diamond(graphics, focus.center(), focus.radius() + 2.0D, ring);
+                SmoothGuiPrimitives.diamond(graphics, focus.center(), focus.radius() + 5.0D * focus.padScale(), halo);
+                SmoothGuiPrimitives.diamond(graphics, focus.center(), focus.radius() + 2.0D * focus.padScale(), ring);
             } else {
-                SmoothGuiPrimitives.circle(graphics, focus.center(), focus.radius() + 5.0D, halo);
-                SmoothGuiPrimitives.circle(graphics, focus.center(), focus.radius() + 2.0D, ring);
+                SmoothGuiPrimitives.circle(graphics, focus.center(), focus.radius() + 5.0D * focus.padScale(), halo);
+                SmoothGuiPrimitives.circle(graphics, focus.center(), focus.radius() + 2.0D * focus.padScale(), ring);
             }
         }
     }
@@ -674,7 +702,19 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         return Math.max(3.0D, base * scale);
     }
 
-    private record HoverFocusRing(Vec2 center, double radius, boolean diamond) {}
+    // Ring padding scale, mirroring FullRouteMapRenderer.iconScale so the fade-in halos
+    // shrink with the same sub-linear curve as the renderer's node focus halos.
+    private static double mapNodeFocusPadScale(double zoom) {
+        return Math.max(0.35D, Math.min(1.0D, zoom));
+    }
+
+    // Physical-mode padding scale, mirroring the factor inside
+    // FullRouteMapRenderer.physicalNodeRadius.
+    private static double physicalNodeFocusPadScale(double zoom) {
+        return Math.max(0.48D, Math.min(1.45D, 0.62D + zoom * 0.12D));
+    }
+
+    private record HoverFocusRing(Vec2 center, double radius, double padScale, boolean diamond) {}
 
     private void renderDeferredCardOverlays() {
         for (Runnable overlay : this.deferredCardOverlays) {
@@ -695,6 +735,11 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     private void updateMapChromeBounds() {
         this.mapChromeBounds.clear();
+        if (!diagnosticsOverlayEnabled()) {
+            // F3 was toggled off while the panel was open: drop the stale open state so it
+            // cannot linger (or keep capturing wheel/ESC input) while hidden.
+            this.diagnosticsPanelOpen = false;
+        }
         this.cameraCompassBounds = this.computeCameraCompassBounds();
         this.schematicLegendBounds = this.computeSchematicLegendBounds();
         this.layoutModeStripBounds = this.computeLayoutModeStripBounds();
@@ -766,19 +811,31 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         return result;
     }
 
+    /**
+     * The diagnostics badge, its detail panel and the ghost-dimension hint are debug aids:
+     * they only exist while the vanilla debug overlay (F3) is visible.
+     */
+    private static boolean diagnosticsOverlayEnabled() {
+        return Minecraft.getInstance().getDebugOverlay().showDebugScreen();
+    }
+
     private SPSGui.Rect computeDiagnosticsBadgeBounds() {
-        if (this.activeDiagnostics().isEmpty() || this.dimensionChipBounds.width() <= 0) {
+        if (!diagnosticsOverlayEnabled() || this.activeDiagnostics().isEmpty() || this.dimensionChipBounds.width() <= 0) {
             return new SPSGui.Rect(0, 0, 0, 0);
         }
-        return new SPSGui.Rect(this.dimensionChipBounds.right() + 4, this.dimensionChipBounds.y(), 40, this.dimensionChipBounds.height());
+        // Top-right corner of the screen (it used to sit next to the dimension chip, where
+        // it overlapped the search box); the chip height is reused for a uniform look.
+        return new SPSGui.Rect(this.width - 40 - 8, 8, 40, this.dimensionChipBounds.height());
     }
 
     private SPSGui.Rect computeDiagnosticsPanelBounds() {
-        if (!this.diagnosticsPanelOpen || this.activeDiagnostics().isEmpty()) {
+        if (!diagnosticsOverlayEnabled() || !this.diagnosticsPanelOpen || this.activeDiagnostics().isEmpty()) {
             return new SPSGui.Rect(0, 0, 0, 0);
         }
         int height = Math.min(280, 30 + this.diagnosticsGroups().size() * DIAGNOSTIC_GROUP_HEIGHT + 8);
-        return new SPSGui.Rect(this.dimensionChipBounds.x(), this.dimensionChipBounds.bottom() + 4, 280, height);
+        // Drops down from the badge with the right edges aligned; updateMapChromeBounds
+        // computes the badge bounds first, so they are current here.
+        return new SPSGui.Rect(this.diagnosticsBadgeBounds.right() - 280, this.diagnosticsBadgeBounds.bottom() + 4, 280, height);
     }
 
     private List<DiagnosticGroup> diagnosticsGroups() {
@@ -810,7 +867,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
 
     private void renderDiagnosticsControl(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         List<MapBuildDiagnostic> diagnostics = this.activeDiagnostics();
-        if (diagnostics.isEmpty()) {
+        if (!diagnosticsOverlayEnabled() || diagnostics.isEmpty()) {
             return;
         }
         SPSGui.Rect bounds = this.diagnosticsBadgeBounds;
@@ -824,7 +881,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
     }
 
     private void renderDiagnosticsPanel(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-        if (!this.diagnosticsPanelOpen || this.diagnosticsPanelBounds.width() <= 0 || this.diagnosticsPanelBounds.height() <= 0) {
+        if (!diagnosticsOverlayEnabled() || !this.diagnosticsPanelOpen || this.diagnosticsPanelBounds.width() <= 0 || this.diagnosticsPanelBounds.height() <= 0) {
             return;
         }
         SPSGui.Rect bounds = this.diagnosticsPanelBounds;
@@ -2259,11 +2316,23 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         return new SPSGui.Rect(x - 3, y - 3, FullRouteMapLayoutMode.values().length * size + (FullRouteMapLayoutMode.values().length - 1) * gap + 6, size + 6);
     }
 
+    /**
+     * Large auto-scaled notice centered on the map area while an asynchronous build is in
+     * flight (map content is blanked in that window, see above). The font scale grows with
+     * the window size, clamped to 1.0..2.5, and a dark halo keeps the text readable over
+     * the background grid.
+     */
     private void renderBuildingIndicator(GuiGraphicsExtractor graphics) {
         if (!FullRouteMapCache.building()) {
             return;
         }
-        SPSGui.smallText(graphics, this.font, Component.literal("Building map…").getString(), this.layoutModeStripBounds.right() + 8, this.layoutModeStripBounds.y() + 7, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);
+        String text = Component.translatable("screen.superpipeslide.full_map.building").getString();
+        float scale = (float) Math.max(1.0D, Math.min(2.5D, Math.min(this.width, this.height) / 240.0D));
+        int centerX = this.mapRect.x() + this.mapRect.width() / 2;
+        int centerY = this.mapRect.y() + this.mapRect.height() / 2;
+        int x = centerX - (int) (this.font.width(text) * scale / 2);
+        int y = centerY - (int) (this.font.lineHeight * scale / 2);
+        SPSGui.smallText(graphics, this.font, text, x, y, FullMapTheme.TEXT_SECONDARY, scale, FullMapTheme.SHADOW);
     }
 
     /**
@@ -2701,6 +2770,10 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         FullRouteMapCache.setLayoutMode(next);
         FullRouteMapCache.refresh(true);
         this.resetViewport();
+        // The reset above fits the placeholder (world-bounds) background shown while the
+        // rebuild runs; ask extractRenderState to re-fit to the new layout's real bounds
+        // once the build lands.
+        this.refitViewportAfterBuild = true;
         this.toast(Component.translatable("screen.superpipeslide.full_map.layout_mode.changed", layoutModeName(next)).getString());
     }
 

@@ -4,6 +4,7 @@ import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapConfig;
 import dev.marblegate.superpipeslide.client.fullmap.config.FullRouteMapLayoutMode;
 import dev.marblegate.superpipeslide.client.fullmap.model.NodeId;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Aabb2;
+import dev.marblegate.superpipeslide.client.fullmap.model.geom.CoordinateSnapper;
 import dev.marblegate.superpipeslide.client.fullmap.model.geom.Vec2;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.SchematicLayoutConfig;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.LabelWidthMeasurer;
@@ -78,6 +79,18 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
                 iterations++;
                 break;
             }
+        }
+
+        // Snap near-equal axis coordinates once relaxation settles: kills sub-spacing drift
+        // so stations meant to line up share an exact x/z, keeping straight edges exactly
+        // straight for the corridor offsetting, routing, and visual nodes below.
+        Map<NodeId, Vec2> settled = states.stream()
+                .collect(Collectors.toMap(state -> state.node.id(), state -> new Vec2(state.x, state.z), (a, b) -> a, LinkedHashMap::new));
+        Map<NodeId, Vec2> snappedPositions = CoordinateSnapper.mergeNearEqualAxes(settled, config.minEdgeLengthBlocks() * 0.05D);
+        for (NodeState state : states) {
+            Vec2 snapped = snappedPositions.get(state.node.id());
+            state.x = snapped.x();
+            state.z = snapped.y();
         }
 
         List<VisualNode> visualNodes = states.stream()
