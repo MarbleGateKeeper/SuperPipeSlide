@@ -14,6 +14,7 @@ import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicInp
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicNode;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicQualityReport;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SemanticEdgeKind;
+import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.LabelSlot;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualEdgePath;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualHitShape;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualLabel;
@@ -32,6 +33,7 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -47,11 +49,13 @@ import java.util.stream.Collectors;
  * attempt; the loop stops early once an attempt is defect-free or the wall-clock
  * budget is spent.</p>
  *
- * <p>After the initial routing pass, two deterministic improvement stages refine the
- * layout of every profile: a rip-up-and-reroute pass that re-routes crossing edges with
- * a tripled crossing penalty, and -- for the winning profile only -- a time-boxed
- * simulated-annealing pass that nudges nodes while preserving the axis ordering above.
- * Both stages share the wall-clock deadline of {@code solve}.</p>
+ * <p>After the initial routing pass, three deterministic improvement stages refine the
+ * layout: a rip-up-and-reroute pass that re-routes crossing edges with a tripled crossing
+ * penalty for every profile, and -- for the winning profile only -- a time-boxed
+ * simulated-annealing pass that nudges nodes while preserving the axis ordering above,
+ * followed by an axis-compaction pass that shrinks embedding voids and rebuilds routing on
+ * the compacted positions (rolling back on any defect regression). All stages share the
+ * wall-clock deadline of {@code solve}.</p>
  */
 public final class MetroMapSchematicSolver implements SchematicSolverBackend {
     private static final double EPSILON = 1.0E-6D;
@@ -59,6 +63,11 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
     // Rip-up-and-reroute: full passes over the crossing-edge set. Strict per-edge crossing
     // improvement keeps every pass productive, so a small cap is enough in practice.
     private static final int MAX_REROUTE_ROUNDS = 4;
+    // Bend-reduction sweeps after crossing elimination: non-crossing edges with 2+ bends are
+    // re-routed and kept only when the replacement has strictly fewer bends, no crossings of
+    // its own, and no more node conflicts than before. Two sweeps catch most straightenings
+    // without threatening the routing budget.
+    private static final int BEND_REROUTE_ROUNDS = 2;
     // Crossing penalty multiplier while re-routing a ripped-up edge, relative to the base
     // crossing term in routeScore: ripped edges pay triple for every remaining crossing.
     private static final double REROUTE_CROSSING_SCALE = 3.0D;
@@ -72,6 +81,23 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
     // stage before the wall-clock budget is spent, so already-good layouts do not burn it all.
     private static final int ANNEAL_CONVERGENCE_ROUNDS = 96;
     private static final long ANNEAL_MIN_BUDGET_NANOS = 25_000_000L;
+    // Per-line label side consistency: score discounts for slots matching the station's own
+    // line preference (see linePreferredSlots). Kept well below the label-label conflict
+    // penalties (120/520) so they only break ties towards the preferred side.
+    private static final double LABEL_LINE_SIDE_PRIMARY_BONUS = 8.0D;
+    private static final double LABEL_LINE_SIDE_SECONDARY_BONUS = 4.0D;
+    // Label placement improvement: deterministic local-search sweeps after the greedy pass,
+    // time-boxed so per-profile label layout stays a small fraction of the solve budget.
+    private static final long LABEL_IMPROVE_BUDGET_NANOS = 12_000_000L;
+    private static final int LABEL_IMPROVE_MAX_SWEEPS = 6;
+    // Line straightness: per-joint weight for route runs bending at intermediate stations,
+    // applied to the joint turn amount in [0,1] (0 = straight through, 1 = full reversal).
+    // Deliberately below the defect weights (4000+) but far above the per-bend weight (18),
+    // so straightening lines never trades away defect fixes.
+    private static final double LINE_TURN_WEIGHT = 60.0D;
+    // Axis compaction: skipped when less than this wall-clock budget (nanoseconds) remains,
+    // since the pass pays for a full re-route of the compacted positions.
+    private static final long COMPACTION_MIN_BUDGET_NANOS = 80_000_000L;
     private static final List<Vec2> DIRECTIONS = List.of(
             new Vec2(1.0D, 0.0D),
             new Vec2(SQRT_HALF, SQRT_HALF),
@@ -121,9 +147,14 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
         // would starve the exploration of the remaining profiles under the shared deadline.
         AnnealOutcome annealed = this.annealLayout(input, topology, best, deadlineNanos);
         int iterations = best.iterations() + annealed.rounds();
-        Map<NodeId, Vec2> winnerPositions = annealed.positions();
-        RouteOutput winnerRoutes = annealed.routeOutput();
-        List<VisualLabel> winnerLabels = annealed.changed()
+        // Axis compaction runs after annealing on the winning profile: shrinks the voids the
+        // embedding's cursor spacing left, rebuilds routing on the compacted positions, and
+        // rolls back when defect counts got worse (see compactAxes).
+        CompactionOutcome compacted = this.compactAxes(topology, best.profile(), annealed.positions(), annealed.routeOutput(), deadlineNanos);
+        iterations += compacted.rounds();
+        Map<NodeId, Vec2> winnerPositions = compacted.positions();
+        RouteOutput winnerRoutes = compacted.routeOutput();
+        List<VisualLabel> winnerLabels = annealed.changed() || compacted.changed()
                 ? this.layoutLabels(topology, winnerPositions, winnerRoutes.edgePaths(), best.profile(), input.labelWidthMeasurer())
                 : best.labels();
         // Only the winning profile pays for the full (quadratic) quality measurement; every other
@@ -164,9 +195,17 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
         // embedding (duplicate separation, alignment fit): kills sub-spacing drift so
         // stations meant to line up share an exact x/y before routing glues edge
         // endpoints to these coordinates, keeping straight segments exactly straight.
+        // The 0.2-spacing tolerance is deliberately generous: axis ties are free under the
+        // order-preservation promise, and every tie is one more exactly horizontal or
+        // vertical line instead of a slightly tilted, jagged one.
         // replaceAll keeps the map identity: positions is captured by the lambda above.
-        Map<NodeId, Vec2> snappedPositions = CoordinateSnapper.mergeNearEqualAxes(positions, profile.stationSpacing() * 0.05D);
+        Map<NodeId, Vec2> snappedPositions = CoordinateSnapper.mergeNearEqualAxes(positions, profile.stationSpacing() * 0.20D);
         positions.replaceAll((id, position) -> snappedPositions.get(id));
+        // Pull coordinates onto the half-spacing grid: the beat-quantized embedding already
+        // lands near grid multiples, and exact grid coordinates make zero-bend octilinear
+        // routes far more likely during routing.
+        Map<NodeId, Vec2> griddedPositions = CoordinateSnapper.snapToGrid(positions, profile.stationSpacing() * 0.5D, profile.stationSpacing() * 0.18D);
+        positions.replaceAll((id, position) -> griddedPositions.get(id));
         Map<String, CorridorHint> corridorHints = this.corridorHints(topology, positions);
         CorridorPlan corridors = this.buildCorridorPlan(topology, positions, profile);
         ConstraintStats constraints = this.measureGlobalConstraints(topology, positions, profile);
@@ -207,6 +246,8 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
                 averageDisplacement,
                 maxDisplacement,
                 routes.bendCount(),
+                // Line turns are only measured in the winner's full quality report.
+                0,
                 routes.fallbackEdges(),
                 routes.corridorViolations(),
                 constraints.edgeNodeConflicts(),
@@ -315,7 +356,11 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
 
     private static double axisGap(double worldDelta, double spacing) {
         double geographicHint = Math.sqrt(Math.max(1.0D, worldDelta)) * 6.5D;
-        return Math.max(spacing, Math.min(spacing * 2.35D, geographicHint));
+        // Quantize to whole spacing beats (1x or 2x) so consecutive stations read as evenly
+        // spaced stops on a rhythmic grid. Exact axis coincidences also become far more
+        // likely, which raises the zero-bend octilinear hit rate during routing.
+        long beats = Math.round(geographicHint / spacing);
+        return spacing * Math.max(1L, Math.min(2L, beats));
     }
 
     private void separateExactDuplicateStations(List<NodeId> stations, MetroTopology topology, Map<NodeId, Vec2> positions, LayoutProfile profile) {
@@ -503,17 +548,18 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
     }
 
     /**
-     * Rip-up-and-reroute crossing elimination. Every pass rips each crossing edge out of the
-     * routing index (tombstone), re-routes it with the crossing penalty tripled, and keeps the
-     * new path only when it crosses strictly fewer paths than the ripped one, so the total
-     * crossing count falls monotonically and at most {@link #MAX_REROUTE_ROUNDS} passes run.
-     * Passes share the solve-wide wall-clock deadline; a pass cut short by the clock keeps the
-     * improvements it already banked and flags the output as timed out.
+     * Rip-up-and-reroute crossing elimination, then bend reduction. Every crossing-elimination
+     * pass rips each crossing edge out of the routing index (tombstone), re-routes it with the
+     * crossing penalty tripled, and keeps the new path only when it crosses strictly fewer
+     * paths than the ripped one, so the total crossing count falls monotonically and at most
+     * {@link #MAX_REROUTE_ROUNDS} passes run. The bend-reduction sweeps afterwards re-route
+     * non-crossing edges that still detour through two or more bends, keeping replacements
+     * only when they straighten the edge without new crossings or node conflicts (corridor
+     * members are skipped so lane separation stays intact). Passes share the solve-wide
+     * wall-clock deadline; a pass cut short by the clock keeps the improvements it already
+     * banked and flags the output as timed out.
      */
     private RerouteResult ripUpAndReroute(MetroTopology topology, Map<NodeId, Vec2> positions, LayoutProfile profile, RouteOutput initial, Map<String, CorridorHint> corridorHints, CorridorPlan corridors, long deadlineNanos) {
-        if (initial.crossingCount() == 0) {
-            return new RerouteResult(initial, 0);
-        }
         Map<String, VisualEdgePath> pathByEdgeId = new HashMap<>();
         for (VisualEdgePath path : initial.edgePaths()) {
             pathByEdgeId.put(path.edgeId(), path);
@@ -579,6 +625,46 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
                 break;
             }
         }
+        // Bend-reduction sweeps: edges that no longer cross anything but still detour through
+        // two or more bends are re-routed once more; a replacement is kept only when it has
+        // strictly fewer bends, crosses nothing, and creates no new node conflicts. Corridor
+        // members are skipped so their lane separation stays intact.
+        for (int round = 0; round < BEND_REROUTE_ROUNDS && !interrupted; round++) {
+            if (System.nanoTime() >= deadlineNanos) {
+                break;
+            }
+            boolean improved = false;
+            int processed = 0;
+            for (int i = 0; i < states.size(); i++) {
+                if (((processed++ & 3) == 3) && System.nanoTime() >= deadlineNanos) {
+                    interrupted = true;
+                    break;
+                }
+                EdgeRouteState state = states.get(i);
+                int bends = Math.max(0, state.points().size() - 2);
+                if (bends < 2 || corridors.groupByEdgeId().containsKey(state.edge().id()) || routing.countCrossings(state.points(), state.edge()) > 0) {
+                    continue;
+                }
+                int oldConflicts = pathNodeConflicts(routing, state.edge(), state.points());
+                routing.setLive(routingIndexOf[i], false);
+                Vec2 from = positions.get(state.edge().from());
+                Vec2 to = positions.get(state.edge().to());
+                CorridorHint hint = corridorHints.getOrDefault(state.edge().id(), CorridorHint.fromEndpoints(from, to));
+                RoutedPath rerouted = this.routeEdge(routing, state.edge(), from, to, hint, corridors, 1.0D);
+                int newBends = Math.max(0, rerouted.points().size() - 2);
+                if (newBends < bends && routing.countCrossings(rerouted.points(), state.edge()) == 0 && pathNodeConflicts(routing, state.edge(), rerouted.points()) <= oldConflicts) {
+                    routingIndexOf[i] = routing.insert(rerouted.points(), state.edge());
+                    states.set(i, new EdgeRouteState(state.edge(), rerouted.points(), rerouted.fallback(), rerouted.loopGlyph()));
+                    improved = true;
+                } else {
+                    routing.setLive(routingIndexOf[i], true);
+                }
+            }
+            rounds++;
+            if (!improved) {
+                break;
+            }
+        }
         RouteOutput output = this.buildRouteOutput(states, corridors, totalCrossings, initial.stationInternalEdges(), initial.unroutedEdges(), interrupted || initial.timedOut());
         return new RerouteResult(output, rounds);
     }
@@ -593,7 +679,9 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
      * weighted conflict counts -- node overlaps, crossings, edge-node conflicts, fallback edges,
      * bends -- plus a small total-path-length term: the discrete counts alone are almost flat
      * between conflict changes, and Metropolis needs the smooth length gradient to drift towards
-     * shorter routes. Label overlaps are excluded because labels are re-laid once after the stage;
+     * shorter routes. A line-turn term ({@link #LINE_TURN_WEIGHT}) rewards route runs that pass
+     * straight through their intermediate stations, the defining look of a transit diagram.
+     * Label overlaps are excluded because labels are re-laid once after the stage;
      * aspect is excluded because spacing/4 nudges cannot change it meaningfully. Computing the
      * exact energy per probe would need the quadratic global recounts, so the probe evaluates the
      * exact delta of the affected terms only, which is equivalent by construction.</p>
@@ -605,13 +693,14 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
      * planned round count fits the remaining budget; the deadline is checked every round. The
      * random stream is seeded from the input graph content, so identical inputs replay identical
      * probe sequences. The best-scoring snapshot is kept, and when the stage ends without
-     * improving the initial energy the pre-annealing state is restored.</p>
+     * improving the initial energy the pre-annealing state is restored. The stage runs even on
+     * defect-free attempts: the aesthetic terms (bends, length, line turns) are otherwise never
+     * optimized at all.</p>
      */
     private AnnealOutcome annealLayout(SchematicInputGraph input, MetroTopology topology, LayoutAttempt attempt, long deadlineNanos) {
         if (System.nanoTime() >= deadlineNanos - ANNEAL_MIN_BUDGET_NANOS
                 || attempt.positions().size() < 2
-                || attempt.routeOutput().timedOut()
-                || isDefectFree(attempt.quality())) {
+                || attempt.routeOutput().timedOut()) {
             return new AnnealOutcome(attempt.positions(), attempt.routeOutput(), 0, false);
         }
         LayoutProfile profile = attempt.profile();
@@ -638,6 +727,18 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
             incidentByNode.computeIfAbsent(states.get(i).edge().from(), ignored -> new ArrayList<>()).add(i);
             incidentByNode.computeIfAbsent(states.get(i).edge().to(), ignored -> new ArrayList<>()).add(i);
         }
+        // Line-straightness joints: route-run interior stations with their two incident edges.
+        // Only joints whose edges both have a live route state participate in the energy.
+        Map<String, Integer> stateIndexByEdgeId = new HashMap<>();
+        for (int i = 0; i < states.size(); i++) {
+            stateIndexByEdgeId.put(states.get(i).edge().id(), i);
+        }
+        Map<NodeId, List<LineJoint>> jointsByNode = new HashMap<>();
+        for (LineJoint joint : lineJoints(topology)) {
+            if (stateIndexByEdgeId.containsKey(joint.incoming().id()) && stateIndexByEdgeId.containsKey(joint.outgoing().id())) {
+                jointsByNode.computeIfAbsent(joint.node(), ignored -> new ArrayList<>()).add(joint);
+            }
+        }
 
         ConstraintStats initialConstraints = this.measureGlobalConstraints(topology, positions, profile);
         int initialBends = 0;
@@ -648,7 +749,16 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
             initialFallbacks += state.fallback() ? 1 : 0;
             initialLength += polylineLength(state.points());
         }
-        double energy = annealEnergy(initialConstraints.nodeOverlaps(), attempt.routeOutput().crossingCount(), initialConstraints.edgeNodeConflicts(), initialFallbacks, initialBends, initialLength);
+        double initialLineTurns = 0.0D;
+        for (List<LineJoint> joints : jointsByNode.values()) {
+            for (LineJoint joint : joints) {
+                initialLineTurns += jointTurnAmount(joint, edgeId -> {
+                    Integer index = stateIndexByEdgeId.get(edgeId);
+                    return index == null ? null : states.get(index).points();
+                });
+            }
+        }
+        double energy = annealEnergy(initialConstraints.nodeOverlaps(), attempt.routeOutput().crossingCount(), initialConstraints.edgeNodeConflicts(), initialFallbacks, initialBends, initialLength, initialLineTurns);
         double initialEnergy = energy;
 
         List<NodeId> movable = positions.keySet().stream().sorted(NodeId::compareTo).toList();
@@ -686,8 +796,12 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
             NodeId moved = movable.get(random.nextInt(movable.size()));
             Vec2 direction = DIRECTIONS.get(random.nextInt(DIRECTIONS.size()));
             Vec2 oldPos = positions.get(moved);
-            Vec2 newPos = new Vec2(oldPos.x() + direction.x() * step, oldPos.y() + direction.y() * step);
-            if (!preservesAxisOrder(topology, positions, moved, newPos)) {
+            // Half-spacing grid snap keeps annealed layouts on the same tidy grid the
+            // embedding starts from; the probe evaluates exactly the position it would place.
+            // The 0.18-spacing tolerance also catches diagonal probes (0.177x off-grid), so
+            // annealed nodes stay grid-aligned instead of accumulating slight tilts.
+            Vec2 newPos = CoordinateSnapper.snapPoint(new Vec2(oldPos.x() + direction.x() * step, oldPos.y() + direction.y() * step), profile.stationSpacing() * 0.5D, profile.stationSpacing() * 0.18D);
+            if (newPos.distanceTo(oldPos) < EPSILON || !preservesAxisOrder(topology, positions, moved, newPos)) {
                 roundsSinceBest++;
                 continue;
             }
@@ -710,6 +824,14 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
                 oldBends += Math.max(0, state.points().size() - 2);
                 oldFallbacks += state.fallback() ? 1 : 0;
                 oldLength += polylineLength(state.points());
+            }
+            List<LineJoint> movedJoints = jointsByNode.getOrDefault(moved, List.of());
+            double oldJointTurns = 0.0D;
+            for (LineJoint joint : movedJoints) {
+                oldJointTurns += jointTurnAmount(joint, edgeId -> {
+                    Integer index = stateIndexByEdgeId.get(edgeId);
+                    return index == null ? null : states.get(index).points();
+                });
             }
 
             positions.put(moved, newPos);
@@ -740,8 +862,23 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
                 newLength += polylineLength(path.points());
             }
             int newMovedConflicts = movedNodeConflicts(routing, moved, newPos, clearance);
-            double delta = annealEnergy(newOverlaps, newCrossings, newPathConflicts + newMovedConflicts, newFallbacks, newBends, newLength)
-                    - annealEnergy(oldOverlaps, oldCrossings, oldPathConflicts + oldMovedConflicts, oldFallbacks, oldBends, oldLength);
+            Map<String, List<Vec2>> reroutedPaths = new HashMap<>();
+            for (int i = 0; i < incident.size(); i++) {
+                reroutedPaths.put(states.get(incident.get(i)).edge().id(), rerouted.get(i).points());
+            }
+            double newJointTurns = 0.0D;
+            for (LineJoint joint : movedJoints) {
+                newJointTurns += jointTurnAmount(joint, edgeId -> {
+                    List<Vec2> replaced = reroutedPaths.get(edgeId);
+                    if (replaced != null) {
+                        return replaced;
+                    }
+                    Integer index = stateIndexByEdgeId.get(edgeId);
+                    return index == null ? null : states.get(index).points();
+                });
+            }
+            double delta = annealEnergy(newOverlaps, newCrossings, newPathConflicts + newMovedConflicts, newFallbacks, newBends, newLength, newJointTurns)
+                    - annealEnergy(oldOverlaps, oldCrossings, oldPathConflicts + oldMovedConflicts, oldFallbacks, oldBends, oldLength, oldJointTurns);
             if (delta <= 0.0D || random.nextDouble() < Math.exp(-delta / temperature)) {
                 for (int i = 0; i < incident.size(); i++) {
                     int index = incident.get(i);
@@ -803,13 +940,233 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
     }
 
     /** Weighted annealing energy; the conflict weights mirror {@link #qualityScore} exactly. */
-    private static double annealEnergy(int nodeOverlaps, int crossings, int edgeNodeConflicts, int fallbackEdges, int bends, double totalLength) {
+    private static double annealEnergy(int nodeOverlaps, int crossings, int edgeNodeConflicts, int fallbackEdges, int bends, double totalLength, double lineTurns) {
         return nodeOverlaps * 25_000.0D
                 + crossings * 11_000.0D
                 + edgeNodeConflicts * 4_000.0D
                 + fallbackEdges * 7_500.0D
                 + bends * 18.0D
-                + totalLength * 0.6D;
+                + totalLength * 0.6D
+                + lineTurns * LINE_TURN_WEIGHT;
+    }
+
+    /**
+     * Route-run line joints: interior stations of every {@link RouteRun} paired with the two
+     * edges the run arrives and leaves on. Runs are stitched per (routeLineId, routeLayoutId),
+     * so a joint is exactly the place where a drawn line can kink at a station. Joints whose
+     * two sequence neighbours are not connected by a single edge (gaps in the stitched
+     * sequence) are skipped.
+     */
+    private static List<LineJoint> lineJoints(MetroTopology topology) {
+        Map<String, SchematicEdge> edgeByPair = new HashMap<>();
+        for (SchematicEdge edge : topology.edges()) {
+            edgeByPair.put(MetroTopology.pairKey(edge.from(), edge.to()), edge);
+        }
+        List<LineJoint> joints = new ArrayList<>();
+        for (RouteRun run : topology.runs()) {
+            List<NodeId> sequence = run.sequence();
+            for (int i = 1; i < sequence.size() - 1; i++) {
+                SchematicEdge incoming = edgeByPair.get(MetroTopology.pairKey(sequence.get(i - 1), sequence.get(i)));
+                SchematicEdge outgoing = edgeByPair.get(MetroTopology.pairKey(sequence.get(i), sequence.get(i + 1)));
+                if (incoming != null && outgoing != null && !incoming.id().equals(outgoing.id())) {
+                    joints.add(new LineJoint(sequence.get(i), incoming, outgoing));
+                }
+            }
+        }
+        return joints;
+    }
+
+    /**
+     * Turn amount of one line joint in [0,1]: 0 when the run passes straight through the
+     * station (the into-node and out-of-node directions align), 1 on a full reversal. Only
+     * the end segments of the two routed paths at the joint station are considered. Edges
+     * without a routed path contribute 0.
+     */
+    private static double jointTurnAmount(LineJoint joint, Function<String, List<Vec2>> pathByEdgeId) {
+        List<Vec2> in = pathByEdgeId.apply(joint.incoming().id());
+        List<Vec2> out = pathByEdgeId.apply(joint.outgoing().id());
+        if (in == null || out == null || in.size() < 2 || out.size() < 2) {
+            return 0.0D;
+        }
+        Vec2 u = directionInto(joint.incoming(), joint.node(), in);
+        Vec2 v = directionOutOf(joint.outgoing(), joint.node(), out);
+        if (u == null || v == null) {
+            return 0.0D;
+        }
+        double dot = u.x() * v.x() + u.y() * v.y();
+        return (1.0D - Math.max(-1.0D, Math.min(1.0D, dot))) * 0.5D;
+    }
+
+    /** Unit travel direction pointing INTO {@code node} along the path's segment at that end. */
+    private static Vec2 directionInto(SchematicEdge edge, NodeId node, List<Vec2> points) {
+        Vec2 head = points.getFirst();
+        Vec2 neck = points.get(1);
+        Vec2 tail = points.get(points.size() - 2);
+        Vec2 tip = points.getLast();
+        if (edge.to().equals(node)) {
+            return normalized(tip.x() - tail.x(), tip.y() - tail.y());
+        }
+        return normalized(head.x() - neck.x(), head.y() - neck.y());
+    }
+
+    /** Unit travel direction pointing AWAY from {@code node} along the path's segment at that end. */
+    private static Vec2 directionOutOf(SchematicEdge edge, NodeId node, List<Vec2> points) {
+        Vec2 head = points.getFirst();
+        Vec2 neck = points.get(1);
+        Vec2 tail = points.get(points.size() - 2);
+        Vec2 tip = points.getLast();
+        if (edge.from().equals(node)) {
+            return normalized(neck.x() - head.x(), neck.y() - head.y());
+        }
+        return normalized(tail.x() - tip.x(), tail.y() - tip.y());
+    }
+
+    private static Vec2 normalized(double x, double y) {
+        double length = Math.hypot(x, y);
+        if (length < EPSILON) {
+            return null;
+        }
+        return new Vec2(x / length, y / length);
+    }
+
+    /**
+     * Axis compaction, executed once for the winning profile after annealing: shrinks the
+     * voids the embedding's accumulate-only cursor spacing left behind, without violating the
+     * class-level axis-order promise (stations keep their relative order, ties allowed, and
+     * every gap stays strictly positive).
+     *
+     * <p>Each axis is swept independently with a longest-path pass over the axis-sorted
+     * stations. Gap targets distinguish two cases: connected pairs keep their embedding beat
+     * (a 2x spacing gap marks a genuinely long leg and propagates compression along the
+     * chain), while non-connected pairs collapse to at most one spacing beat -- unrelated
+     * lines never need more than that between each other, and the even spacing is exactly the
+     * transit-map look. Any gap below the 2D minimum distance projected onto the axis
+     * (plus half a node gap of margin) expands just enough to stay legal.</p>
+     *
+     * <p>Non-station nodes are then re-anchored with the same rules as the initial embedding,
+     * axis coordinates are re-snapped, and the whole routing pipeline (corridor plan, routing,
+     * rip-up-and-reroute) rebuilds on the compacted positions. The compacted result is kept
+     * only when the defect counts (node overlaps + edge-node conflicts + edge crossings) did
+     * not get worse; otherwise the pass rolls back to the annealed state.</p>
+     */
+    private CompactionOutcome compactAxes(MetroTopology topology, LayoutProfile profile, Map<NodeId, Vec2> positions, RouteOutput routes, long deadlineNanos) {
+        if (!FullRouteMapConfig.SCHEMATIC_COMPACTION_ENABLED
+                || positions.size() < 2
+                || routes.timedOut()
+                || System.nanoTime() >= deadlineNanos - COMPACTION_MIN_BUDGET_NANOS) {
+            return new CompactionOutcome(positions, routes, 0, false);
+        }
+        ConstraintStats before = this.measureGlobalConstraints(topology, positions, profile);
+        int defectsBefore = before.nodeOverlaps() + before.edgeNodeConflicts() + routes.crossingCount();
+        Map<NodeId, Vec2> compacted = new LinkedHashMap<>(positions);
+        boolean moved = this.compactAxis(topology, compacted, profile, true);
+        moved |= this.compactAxis(topology, compacted, profile, false);
+        if (!moved) {
+            return new CompactionOutcome(positions, routes, 0, false);
+        }
+        this.replaceDerivedNodes(topology, compacted, profile);
+        // Re-snap after the last positional mutation, mirroring the embedding's pre-routing
+        // snap so stations meant to line up share exact axis coordinates again.
+        Map<NodeId, Vec2> snapped = CoordinateSnapper.mergeNearEqualAxes(compacted, profile.stationSpacing() * 0.20D);
+        compacted.replaceAll((id, position) -> snapped.get(id));
+        Map<NodeId, Vec2> gridded = CoordinateSnapper.snapToGrid(compacted, profile.stationSpacing() * 0.5D, profile.stationSpacing() * 0.18D);
+        compacted.replaceAll((id, position) -> gridded.get(id));
+        Map<String, CorridorHint> hints = this.corridorHints(topology, compacted);
+        CorridorPlan corridors = this.buildCorridorPlan(topology, compacted, profile);
+        RouteOutput compactedRoutes = this.routeEdges(topology, compacted, profile, hints, corridors, deadlineNanos);
+        RerouteResult rerouted = this.ripUpAndReroute(topology, compacted, profile, compactedRoutes, hints, corridors, deadlineNanos);
+        ConstraintStats after = this.measureGlobalConstraints(topology, compacted, profile);
+        int defectsAfter = after.nodeOverlaps() + after.edgeNodeConflicts() + rerouted.output().crossingCount();
+        if (defectsAfter > defectsBefore) {
+            return new CompactionOutcome(positions, routes, rerouted.rounds(), false);
+        }
+        return new CompactionOutcome(compacted, rerouted.output(), rerouted.rounds(), true);
+    }
+
+    /**
+     * Single-axis compaction sweep. Stations are processed in axis order; each station's new
+     * axis value is the previous station's (already compacted) value plus the pair's target
+     * gap, computed from the ORIGINAL gap so connected beats propagate along the chain.
+     * Returns true when at least one station moved.
+     */
+    private boolean compactAxis(MetroTopology topology, Map<NodeId, Vec2> positions, LayoutProfile profile, boolean xAxis) {
+        List<NodeId> stations = positions.keySet().stream()
+                .filter(id -> topology.node(id).kind() == NodeKind.STATION)
+                .sorted(Comparator
+                        .comparingDouble((NodeId id) -> xAxis ? positions.get(id).x() : positions.get(id).y())
+                        .thenComparingDouble(id -> xAxis ? positions.get(id).y() : positions.get(id).x())
+                        .thenComparing(NodeId::compareTo))
+                .toList();
+        Map<NodeId, Double> original = new HashMap<>();
+        for (NodeId station : stations) {
+            Vec2 position = positions.get(station);
+            original.put(station, xAxis ? position.x() : position.y());
+        }
+        boolean moved = false;
+        for (int i = 1; i < stations.size(); i++) {
+            NodeId previousId = stations.get(i - 1);
+            NodeId currentId = stations.get(i);
+            boolean connected = topology.connected(previousId, currentId);
+            Vec2 previous = positions.get(previousId);
+            Vec2 current = positions.get(currentId);
+            double gap = original.get(currentId) - original.get(previousId);
+            double otherSeparation = Math.abs(xAxis ? current.y() - previous.y() : current.x() - previous.x());
+            double minimum = minNodeDistance(topology.node(previousId), topology.node(currentId), profile, connected);
+            // The 2D minimum distance projected onto this axis, given the other axis'
+            // separation, plus half a node gap of margin.
+            double required = Math.sqrt(Math.max(0.0D, minimum * minimum - otherSeparation * otherSeparation)) + profile.nodeGap() * 0.5D;
+            double target = connected
+                    ? Math.max(gap, required)
+                    : Math.max(Math.min(gap, profile.stationSpacing()), required);
+            double updated = (xAxis ? previous.x() : previous.y()) + target;
+            Vec2 replacement = xAxis ? new Vec2(updated, current.y()) : new Vec2(current.x(), updated);
+            if (replacement.distanceTo(current) > EPSILON) {
+                positions.put(currentId, replacement);
+                moved = true;
+            }
+        }
+        return moved;
+    }
+
+    /**
+     * Re-anchors every non-station node after stations moved, with the same rules the initial
+     * embedding uses: portals hang off their station anchor in the world-space direction;
+     * clusters and anchor-less nodes sit on a collision-free ring slot near their placed
+     * neighbours (or the centroid of everything placed when fully isolated).
+     */
+    private void replaceDerivedNodes(MetroTopology topology, Map<NodeId, Vec2> positions, LayoutProfile profile) {
+        for (NodeId nodeId : topology.nodesById().keySet().stream().sorted(NodeId::compareTo).toList()) {
+            SchematicNode node = topology.node(nodeId);
+            if (node.kind() == NodeKind.STATION) {
+                continue;
+            }
+            if (node.kind() == NodeKind.FOLD_ANCHOR) {
+                Optional<NodeId> anchor = topology.neighbors(nodeId).stream()
+                        .filter(id -> topology.node(id).kind() == NodeKind.STATION)
+                        .findFirst();
+                if (anchor.isPresent()) {
+                    SchematicNode anchorNode = topology.node(anchor.get());
+                    Vec2 preferred = nearestDirection(node.worldX() - anchorNode.worldX(), node.worldZ() - anchorNode.worldZ());
+                    positions.put(nodeId, this.bestPortalSlot(topology, nodeId, positions.get(anchor.get()), preferred, positions, profile));
+                    continue;
+                }
+            }
+            Vec2 origin;
+            Vec2 preferred;
+            List<NodeId> placedNeighbors = topology.neighbors(nodeId).stream()
+                    .filter(positions::containsKey)
+                    .toList();
+            if (placedNeighbors.isEmpty()) {
+                origin = positions.isEmpty() ? new Vec2(0.0D, 0.0D) : average(List.copyOf(positions.values()));
+                preferred = hashDirection(nodeId);
+            } else {
+                origin = average(placedNeighbors.stream().map(positions::get).toList());
+                double meanWorldX = placedNeighbors.stream().mapToDouble(id -> topology.node(id).worldX()).average().orElse(node.worldX());
+                double meanWorldZ = placedNeighbors.stream().mapToDouble(id -> topology.node(id).worldZ()).average().orElse(node.worldZ());
+                preferred = nearestDirection(node.worldX() - meanWorldX, node.worldZ() - meanWorldZ);
+            }
+            positions.put(nodeId, this.bestPortalSlot(topology, nodeId, origin, preferred, positions, profile));
+        }
     }
 
     /**
@@ -1528,31 +1885,20 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
         List<NodeId> ordered = positions.keySet().stream()
                 .sorted(Comparator.comparingInt((NodeId id) -> topology.node(id).importance()).reversed().thenComparing(NodeId::compareTo))
                 .toList();
+        Map<NodeId, List<LabelSlot>> linePreferences = linePreferredSlots(topology);
         List<LabelBox> placed = new ArrayList<>();
-        List<VisualLabel> labels = new ArrayList<>();
+        List<LabelWork> works = new ArrayList<>();
         for (NodeId nodeId : ordered) {
             SchematicNode node = topology.node(nodeId);
             Vec2 position = positions.get(nodeId);
             if (node.label().isBlank()) {
                 continue;
             }
+            List<LabelCandidate> candidates = labelCandidates(node, position);
             LabelCandidate best = null;
             double bestScore = Double.POSITIVE_INFINITY;
-            for (LabelCandidate candidate : labelCandidates(node, position)) {
-                double score = candidate.distanceFromNode() * 0.035D;
-                for (LabelBox box : placed) {
-                    if (candidate.box().intersects(box)) {
-                        score += box.priority() > node.importance() ? 520.0D : 120.0D;
-                    }
-                }
-                for (VisualEdgePath edge : edges) {
-                    if (edge.from().equals(nodeId) || edge.to().equals(nodeId)) {
-                        continue;
-                    }
-                    if (candidate.box().intersects(edge.bounds())) {
-                        score += 7.0D;
-                    }
-                }
+            for (LabelCandidate candidate : candidates) {
+                double score = labelPlacementScore(candidate, nodeId, node.importance(), placed, -1, edges, linePreferences);
                 if (score < bestScore) {
                     bestScore = score;
                     best = candidate;
@@ -1561,14 +1907,177 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
             if (best == null) {
                 continue;
             }
+            placed.add(new LabelBox(best.box().minX(), best.box().minY(), best.box().maxX(), best.box().maxY(), node.importance()));
+            works.add(new LabelWork(nodeId, node, candidates, best, labelPenalized(best, bestScore, linePreferences.get(nodeId))));
+        }
+        this.improveLabelPlacements(works, placed, edges, linePreferences);
+        List<VisualLabel> labels = new ArrayList<>();
+        for (LabelWork work : works) {
             // Never skip: the old 520 skip threshold hid low-importance station names entirely.
             // Every label is placed at its best candidate; fallback records that the placement
             // carries conflict penalties, letting the renderer declutter it by zoom and priority
             // instead of the solver deleting it here.
-            placed.add(new LabelBox(best.box().minX(), best.box().minY(), best.box().maxX(), best.box().maxY(), node.importance()));
-            labels.add(new VisualLabel(nodeId, node.label(), best.x(), best.y(), node.importance(), labelScale(node), bestScore > 0.0D));
+            labels.add(new VisualLabel(work.nodeId(), work.node().label(), work.chosen().x(), work.chosen().y(), work.node().importance(), labelScale(work.node()), work.penalized(), work.chosen().slot()));
         }
         return labels;
+    }
+
+    /**
+     * Deterministic local-search sweeps after the greedy pass. The greedy order lets early
+     * high-importance labels push later ones into bad slots; these sweeps revisit every
+     * conflicted label and move it to a better slot whenever the total placement score
+     * improves, so placements no longer depend as heavily on processing order. Sweeps stop
+     * on the first round without an improvement, at {@link #LABEL_IMPROVE_MAX_SWEEPS}, or at
+     * the {@link #LABEL_IMPROVE_BUDGET_NANOS} wall-clock budget, whichever comes first; the
+     * fixed label/candidate order keeps the outcome deterministic.
+     */
+    private void improveLabelPlacements(List<LabelWork> works, List<LabelBox> placed, List<VisualEdgePath> edges, Map<NodeId, List<LabelSlot>> linePreferences) {
+        List<Integer> conflicted = new ArrayList<>();
+        for (int i = 0; i < works.size(); i++) {
+            if (works.get(i).penalized()) {
+                conflicted.add(i);
+            }
+        }
+        if (conflicted.isEmpty()) {
+            return;
+        }
+        long deadline = System.nanoTime() + LABEL_IMPROVE_BUDGET_NANOS;
+        for (int sweep = 0; sweep < LABEL_IMPROVE_MAX_SWEEPS; sweep++) {
+            if (System.nanoTime() >= deadline) {
+                break;
+            }
+            boolean improved = false;
+            for (int index : conflicted) {
+                LabelWork work = works.get(index);
+                double bestScore = labelPlacementScore(work.chosen(), work.nodeId(), work.node().importance(), placed, index, edges, linePreferences);
+                LabelCandidate best = work.chosen();
+                for (LabelCandidate candidate : work.candidates()) {
+                    double score = labelPlacementScore(candidate, work.nodeId(), work.node().importance(), placed, index, edges, linePreferences);
+                    if (score < bestScore - 1.0E-9D) {
+                        bestScore = score;
+                        best = candidate;
+                    }
+                }
+                if (best != work.chosen()) {
+                    work.chosen(best);
+                    placed.set(index, new LabelBox(best.box().minX(), best.box().minY(), best.box().maxX(), best.box().maxY(), work.node().importance()));
+                    work.penalized(labelPenalized(best, bestScore, linePreferences.get(work.nodeId())));
+                    improved = true;
+                }
+            }
+            if (!improved) {
+                break;
+            }
+        }
+    }
+
+    /**
+     * Total placement score of one label candidate: distance from the node, minus the
+     * line-side consistency discount, plus label-label and label-edge conflict penalties
+     * (edges incident to the label's own node are exempt). {@code skipIndex} excludes the
+     * label's own current box when re-scoring an already placed label.
+     */
+    private static double labelPlacementScore(LabelCandidate candidate, NodeId nodeId, int importance, List<LabelBox> placed, int skipIndex, List<VisualEdgePath> edges, Map<NodeId, List<LabelSlot>> linePreferences) {
+        double score = candidate.distanceFromNode() * 0.035D - lineSideDiscount(candidate.slot(), linePreferences.get(nodeId));
+        for (int i = 0; i < placed.size(); i++) {
+            if (i == skipIndex) {
+                continue;
+            }
+            LabelBox box = placed.get(i);
+            if (candidate.box().intersects(box)) {
+                score += box.priority() > importance ? 520.0D : 120.0D;
+            }
+        }
+        for (VisualEdgePath edge : edges) {
+            if (edge.from().equals(nodeId) || edge.to().equals(nodeId)) {
+                continue;
+            }
+            if (candidate.box().intersects(edge.bounds())) {
+                score += 7.0D;
+            }
+        }
+        return score;
+    }
+
+    /** Line-side consistency discount for a candidate slot; 0 when the slot is not preferred. */
+    private static double lineSideDiscount(LabelSlot slot, List<LabelSlot> preferred) {
+        if (preferred == null) {
+            return 0.0D;
+        }
+        if (slot == preferred.getFirst()) {
+            return LABEL_LINE_SIDE_PRIMARY_BONUS;
+        }
+        return preferred.size() > 1 && slot == preferred.get(1) ? LABEL_LINE_SIDE_SECONDARY_BONUS : 0.0D;
+    }
+
+    /**
+     * Whether a placement carries real conflict penalties. The line-side discount can push a
+     * conflict-free score negative, so the flag keys on the penalty terms only: undo the
+     * discount before comparing against the pure distance score.
+     */
+    private static boolean labelPenalized(LabelCandidate candidate, double score, List<LabelSlot> preferred) {
+        return score + lineSideDiscount(candidate.slot(), preferred) > candidate.distanceFromNode() * 0.035D;
+    }
+
+    /**
+     * Metro-map label side consistency: assigns each station its dominant line's preferred
+     * label side. Runs are already sorted by coverage score, so the first run claiming a
+     * station wins. Horizontal lines alternate above/below by station index, vertical lines
+     * alternate right/left, diagonal lines keep the global preference order, and transfer
+     * stations (two or more runs) always prefer right-then-above.
+     */
+    private static Map<NodeId, List<LabelSlot>> linePreferredSlots(MetroTopology topology) {
+        Map<NodeId, Integer> memberships = new HashMap<>();
+        for (RouteRun run : topology.runs()) {
+            for (NodeId station : run.sequence()) {
+                memberships.merge(station, 1, Integer::sum);
+            }
+        }
+        Map<NodeId, List<LabelSlot>> preferences = new LinkedHashMap<>();
+        Set<NodeId> claimed = new HashSet<>();
+        for (RouteRun run : topology.runs()) {
+            List<LabelSlot> pair = dominantSidePair(run, topology);
+            for (int i = 0; i < run.sequence().size(); i++) {
+                NodeId station = run.sequence().get(i);
+                if (memberships.getOrDefault(station, 0) >= 2 || !claimed.add(station)) {
+                    continue;
+                }
+                if (pair != null) {
+                    preferences.put(station, i % 2 == 0 ? pair : List.of(pair.get(1), pair.get(0)));
+                }
+            }
+        }
+        for (Map.Entry<NodeId, Integer> entry : memberships.entrySet()) {
+            if (entry.getValue() >= 2) {
+                preferences.put(entry.getKey(), List.of(LabelSlot.RIGHT_NEAR, LabelSlot.ABOVE_NEAR));
+            }
+        }
+        return preferences;
+    }
+
+    /**
+     * Preferred label side pair for a run, derived from its endpoint world coordinates (the
+     * order-preserving embedding keeps the dominant axis identical in schematic space).
+     * Returns null for diagonal or degenerate runs, which keep the global preference order.
+     */
+    private static List<LabelSlot> dominantSidePair(RouteRun run, MetroTopology topology) {
+        if (run.sequence().size() < 2) {
+            return null;
+        }
+        SchematicNode first = topology.node(run.sequence().getFirst());
+        SchematicNode last = topology.node(run.sequence().getLast());
+        if (first == null || last == null) {
+            return null;
+        }
+        double dx = Math.abs(last.worldX() - first.worldX());
+        double dz = Math.abs(last.worldZ() - first.worldZ());
+        if (dx >= dz * 1.5D) {
+            return List.of(LabelSlot.ABOVE_NEAR, LabelSlot.BELOW_NEAR);
+        }
+        if (dz >= dx * 1.5D) {
+            return List.of(LabelSlot.RIGHT_NEAR, LabelSlot.LEFT_NEAR);
+        }
+        return null;
     }
 
     /**
@@ -1593,6 +2102,18 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
             }
         }
         int labelOverlaps = countLabelOverlaps(labels);
+        int lineTurns = 0;
+        {
+            Map<String, List<Vec2>> pathsByEdgeId = new HashMap<>();
+            for (VisualEdgePath path : routes.edgePaths()) {
+                pathsByEdgeId.put(path.edgeId(), path.points());
+            }
+            for (LineJoint joint : lineJoints(topology)) {
+                if (jointTurnAmount(joint, pathsByEdgeId::get) > 0.5D) {
+                    lineTurns++;
+                }
+            }
+        }
         double averageDisplacement = 0.0D;
         double maxDisplacement = 0.0D;
         for (Map.Entry<NodeId, Vec2> entry : positions.entrySet()) {
@@ -1615,6 +2136,7 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
                 averageDisplacement,
                 maxDisplacement,
                 routes.bendCount(),
+                lineTurns,
                 routes.fallbackEdges(),
                 routes.corridorViolations(),
                 constraints.edgeNodeConflicts(),
@@ -1749,34 +2271,39 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
         // wide as the text the renderer draws. Placement and overlap measurement share the clamp.
         double width = LabelWidthMeasurer.clampWidth(this.labelWidthMeasurer.width(node.label(), labelScale(node)) + 8.0D);
         double height = 10.0D;
-        double near = radius + 10.0D;
+        // Gap tiers derive from the shared label-node gap (FullRouteMapConfig.LABEL_NODE_GAP_PX,
+        // converted to layout blocks) so solver boxes and renderer slot projections agree on
+        // what "next to the node" means.
+        double gapBlocks = FullRouteMapConfig.LABEL_NODE_GAP_PX / FullRouteMapConfig.BASE_SCALE;
+        double near = radius + gapBlocks;
         // Second, tighter tier for the near side above/below, so dense clusters can still squeeze
         // a label between the node and the first ring of obstacles.
-        double close = radius + 4.0D;
+        double close = radius + gapBlocks * 0.4D;
         // Last-resort tier further out on the sides, behind the distance penalty.
         double far = near * 1.5D;
         double diagonal = near * 0.76D;
         List<LabelCandidate> candidates = new ArrayList<>();
         // Deterministic preference order: sides, below/above near, below/above close, diagonals,
-        // sides far. Ties keep the earliest candidate (strict < in the scoring loop).
-        addLabelCandidate(candidates, position, position.x() + near, position.y() - height * 0.5D, width, height);
-        addLabelCandidate(candidates, position, position.x() - near - width, position.y() - height * 0.5D, width, height);
-        addLabelCandidate(candidates, position, position.x() - width * 0.5D, position.y() + near, width, height);
-        addLabelCandidate(candidates, position, position.x() - width * 0.5D, position.y() - near - height, width, height);
-        addLabelCandidate(candidates, position, position.x() - width * 0.5D, position.y() + close, width, height);
-        addLabelCandidate(candidates, position, position.x() - width * 0.5D, position.y() - close - height, width, height);
-        addLabelCandidate(candidates, position, position.x() + diagonal, position.y() + diagonal, width, height);
-        addLabelCandidate(candidates, position, position.x() - diagonal - width, position.y() + diagonal, width, height);
-        addLabelCandidate(candidates, position, position.x() + diagonal, position.y() - diagonal - height, width, height);
-        addLabelCandidate(candidates, position, position.x() - diagonal - width, position.y() - diagonal - height, width, height);
-        addLabelCandidate(candidates, position, position.x() + far, position.y() - height * 0.5D, width, height);
-        addLabelCandidate(candidates, position, position.x() - far - width, position.y() - height * 0.5D, width, height);
+        // sides far. Ties keep the earliest candidate (strict < in the scoring loop). The slot
+        // tags mirror LabelSlot's declaration order and are the renderer's placement contract.
+        addLabelCandidate(candidates, position, position.x() + near, position.y() - height * 0.5D, width, height, LabelSlot.RIGHT_NEAR);
+        addLabelCandidate(candidates, position, position.x() - near - width, position.y() - height * 0.5D, width, height, LabelSlot.LEFT_NEAR);
+        addLabelCandidate(candidates, position, position.x() - width * 0.5D, position.y() + near, width, height, LabelSlot.BELOW_NEAR);
+        addLabelCandidate(candidates, position, position.x() - width * 0.5D, position.y() - near - height, width, height, LabelSlot.ABOVE_NEAR);
+        addLabelCandidate(candidates, position, position.x() - width * 0.5D, position.y() + close, width, height, LabelSlot.BELOW_CLOSE);
+        addLabelCandidate(candidates, position, position.x() - width * 0.5D, position.y() - close - height, width, height, LabelSlot.ABOVE_CLOSE);
+        addLabelCandidate(candidates, position, position.x() + diagonal, position.y() + diagonal, width, height, LabelSlot.DIAGONAL_DOWN_RIGHT);
+        addLabelCandidate(candidates, position, position.x() - diagonal - width, position.y() + diagonal, width, height, LabelSlot.DIAGONAL_DOWN_LEFT);
+        addLabelCandidate(candidates, position, position.x() + diagonal, position.y() - diagonal - height, width, height, LabelSlot.DIAGONAL_UP_RIGHT);
+        addLabelCandidate(candidates, position, position.x() - diagonal - width, position.y() - diagonal - height, width, height, LabelSlot.DIAGONAL_UP_LEFT);
+        addLabelCandidate(candidates, position, position.x() + far, position.y() - height * 0.5D, width, height, LabelSlot.RIGHT_FAR);
+        addLabelCandidate(candidates, position, position.x() - far - width, position.y() - height * 0.5D, width, height, LabelSlot.LEFT_FAR);
         return candidates;
     }
 
-    private static void addLabelCandidate(List<LabelCandidate> candidates, Vec2 node, double x, double y, double width, double height) {
+    private static void addLabelCandidate(List<LabelCandidate> candidates, Vec2 node, double x, double y, double width, double height, LabelSlot slot) {
         Vec2 center = new Vec2(x + width * 0.5D, y + height * 0.5D);
-        candidates.add(new LabelCandidate(x, y, new LabelBox(x, y, x + width, y + height, 0), center.distanceTo(node)));
+        candidates.add(new LabelCandidate(x, y, new LabelBox(x, y, x + width, y + height, 0), center.distanceTo(node), slot));
     }
 
     private static float labelScale(SchematicNode node) {
@@ -2131,6 +2658,8 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
 
     private record AnnealOutcome(Map<NodeId, Vec2> positions, RouteOutput routeOutput, int rounds, boolean changed) {}
 
+    private record CompactionOutcome(Map<NodeId, Vec2> positions, RouteOutput routeOutput, int rounds, boolean changed) {}
+
     /** Assigned lane of one corridor member: normal offset from the corridor centre line. */
     private record CorridorLane(int groupId, double offset, Vec2 axis, double step) {}
 
@@ -2419,7 +2948,54 @@ public final class MetroMapSchematicSolver implements SchematicSolverBackend {
         }
     }
 
-    private record LabelCandidate(double x, double y, LabelBox box, double distanceFromNode) {}
+    private record LabelCandidate(double x, double y, LabelBox box, double distanceFromNode, LabelSlot slot) {}
+
+    private record LineJoint(NodeId node, SchematicEdge incoming, SchematicEdge outgoing) {}
+
+    /** Mutable per-label placement state shared by the greedy pass and the improvement sweeps. */
+    private static final class LabelWork {
+        private final NodeId nodeId;
+        private final SchematicNode node;
+        private final List<LabelCandidate> candidates;
+        private LabelCandidate chosen;
+        private boolean penalized;
+
+        private LabelWork(NodeId nodeId, SchematicNode node, List<LabelCandidate> candidates, LabelCandidate chosen, boolean penalized) {
+            this.nodeId = nodeId;
+            this.node = node;
+            this.candidates = candidates;
+            this.chosen = chosen;
+            this.penalized = penalized;
+        }
+
+        private NodeId nodeId() {
+            return this.nodeId;
+        }
+
+        private SchematicNode node() {
+            return this.node;
+        }
+
+        private List<LabelCandidate> candidates() {
+            return this.candidates;
+        }
+
+        private LabelCandidate chosen() {
+            return this.chosen;
+        }
+
+        private void chosen(LabelCandidate chosen) {
+            this.chosen = chosen;
+        }
+
+        private boolean penalized() {
+            return this.penalized;
+        }
+
+        private void penalized(boolean penalized) {
+            this.penalized = penalized;
+        }
+    }
 
     private record LabelBox(double minX, double minY, double maxX, double maxY, int priority) {
         boolean intersects(LabelBox other) {

@@ -21,7 +21,13 @@ import java.util.UUID;
 public record MapExportOptions(Set<UUID> routeLineIds, List<Double> zoomLevels, double resolutionMultiplier, ExportBackground backgroundMode) {
 
     /** Preset zoom levels offered as toggle chips in the export sheet. */
-    public static final List<Double> PRESET_ZOOM_LEVELS = List.of(0.25D, 0.5D, 1.0D, 2.0D, 4.0D);
+    public static final List<Double> PRESET_ZOOM_LEVELS = List.of(0.5D, 1.0D, 2.0D, 4.0D);
+    /**
+     * Smallest zoom an export may use, custom input included. Below 0.5 the exported image
+     * squeezes too many stations into too few logical pixels to carry any meaning (and below
+     * 0.3 the label pass draws nothing at all), so 0.5 is the practical floor.
+     */
+    public static final double MIN_ZOOM = 0.5D;
     /** Preset resolution multipliers offered as toggle chips in the export sheet. */
     public static final List<Double> DENSITY_PRESETS = List.of(1.0D, 2.0D, 4.0D);
     /** Which background variant(s) the export writes. */
@@ -42,7 +48,7 @@ public record MapExportOptions(Set<UUID> routeLineIds, List<Double> zoomLevels, 
     public MapExportOptions {
         routeLineIds = Set.copyOf(routeLineIds);
         zoomLevels = zoomLevels.stream()
-                .map(zoom -> Math.max(FullRouteMapConfig.ZOOM_MIN, Math.min(FullRouteMapConfig.ZOOM_MAX, zoom)))
+                .map(zoom -> Math.max(MIN_ZOOM, Math.min(FullRouteMapConfig.ZOOM_MAX, zoom)))
                 .distinct()
                 .sorted()
                 .toList();

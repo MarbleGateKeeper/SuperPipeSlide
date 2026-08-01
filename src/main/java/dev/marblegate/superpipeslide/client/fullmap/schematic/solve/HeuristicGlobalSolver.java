@@ -13,6 +13,7 @@ import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicInp
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicNode;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SchematicQualityReport;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SemanticEdgeKind;
+import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.LabelSlot;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualEdgePath;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualHitShape;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualLabel;
@@ -480,7 +481,7 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
             // carries conflict penalties, letting the renderer declutter it by zoom and priority
             // instead of the solver deleting it here.
             placed.add(new LabelBox(best.box.minX, best.box.minZ, best.box.maxX, best.box.maxZ, state.node.importance()));
-            labels.add(new VisualLabel(state.node.id(), state.node.label(), best.x, best.z, state.node.importance(), labelBaseScale(state.node), bestPenalty > 0));
+            labels.add(new VisualLabel(state.node.id(), state.node.label(), best.x, best.z, state.node.importance(), labelBaseScale(state.node), bestPenalty > 0, best.slot()));
         }
         return labels;
     }
@@ -514,6 +515,8 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
                 totalDisplacement / Math.max(1, states.size()),
                 maxDisplacement,
                 routeOutput.bendCount,
+                // Line-turn joints are a metro-backend metric; this backend reports 0.
+                0,
                 routeOutput.fallbackEdges,
                 // Corridor failures are not tracked by any solver stage yet.
                 0,
@@ -831,24 +834,25 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
         double diagonal = near * 0.72D;
         List<LabelCandidate> candidates = new ArrayList<>();
         // Deterministic preference order: sides, below/above near, below/above close, diagonals,
-        // sides far. Ties keep the earliest candidate (strict < in the penalty loop).
-        addLabelCandidate(candidates, state.x + near, state.z - height * 0.5D, width, height);
-        addLabelCandidate(candidates, state.x - near - width, state.z - height * 0.5D, width, height);
-        addLabelCandidate(candidates, state.x - width * 0.5D, state.z + near, width, height);
-        addLabelCandidate(candidates, state.x - width * 0.5D, state.z - near - height, width, height);
-        addLabelCandidate(candidates, state.x - width * 0.5D, state.z + close, width, height);
-        addLabelCandidate(candidates, state.x - width * 0.5D, state.z - close - height, width, height);
-        addLabelCandidate(candidates, state.x + diagonal, state.z + diagonal, width, height);
-        addLabelCandidate(candidates, state.x - diagonal - width, state.z + diagonal, width, height);
-        addLabelCandidate(candidates, state.x + diagonal, state.z - diagonal - height, width, height);
-        addLabelCandidate(candidates, state.x - diagonal - width, state.z - diagonal - height, width, height);
-        addLabelCandidate(candidates, state.x + far, state.z - height * 0.5D, width, height);
-        addLabelCandidate(candidates, state.x - far - width, state.z - height * 0.5D, width, height);
+        // sides far. Ties keep the earliest candidate (strict < in the penalty loop). The slot
+        // tags mirror LabelSlot's declaration order and are the renderer's placement contract.
+        addLabelCandidate(candidates, state.x + near, state.z - height * 0.5D, width, height, LabelSlot.RIGHT_NEAR);
+        addLabelCandidate(candidates, state.x - near - width, state.z - height * 0.5D, width, height, LabelSlot.LEFT_NEAR);
+        addLabelCandidate(candidates, state.x - width * 0.5D, state.z + near, width, height, LabelSlot.BELOW_NEAR);
+        addLabelCandidate(candidates, state.x - width * 0.5D, state.z - near - height, width, height, LabelSlot.ABOVE_NEAR);
+        addLabelCandidate(candidates, state.x - width * 0.5D, state.z + close, width, height, LabelSlot.BELOW_CLOSE);
+        addLabelCandidate(candidates, state.x - width * 0.5D, state.z - close - height, width, height, LabelSlot.ABOVE_CLOSE);
+        addLabelCandidate(candidates, state.x + diagonal, state.z + diagonal, width, height, LabelSlot.DIAGONAL_DOWN_RIGHT);
+        addLabelCandidate(candidates, state.x - diagonal - width, state.z + diagonal, width, height, LabelSlot.DIAGONAL_DOWN_LEFT);
+        addLabelCandidate(candidates, state.x + diagonal, state.z - diagonal - height, width, height, LabelSlot.DIAGONAL_UP_RIGHT);
+        addLabelCandidate(candidates, state.x - diagonal - width, state.z - diagonal - height, width, height, LabelSlot.DIAGONAL_UP_LEFT);
+        addLabelCandidate(candidates, state.x + far, state.z - height * 0.5D, width, height, LabelSlot.RIGHT_FAR);
+        addLabelCandidate(candidates, state.x - far - width, state.z - height * 0.5D, width, height, LabelSlot.LEFT_FAR);
         return candidates;
     }
 
-    private static void addLabelCandidate(List<LabelCandidate> candidates, double x, double z, double width, double height) {
-        candidates.add(new LabelCandidate(x, z, new LabelBox(x, z, x + width, z + height, 0)));
+    private static void addLabelCandidate(List<LabelCandidate> candidates, double x, double z, double width, double height, LabelSlot slot) {
+        candidates.add(new LabelCandidate(x, z, new LabelBox(x, z, x + width, z + height, 0), slot));
     }
 
     private static double labelBaseScale(SchematicNode node) {
@@ -1027,7 +1031,7 @@ public final class HeuristicGlobalSolver implements SchematicSolverBackend {
 
     private record RouteOutput(List<VisualEdgePath> edgePaths, int fallbackEdges, int stationInternalEdges, int bendCount, int loopGlyphCount) {}
 
-    private record LabelCandidate(double x, double z, LabelBox box) {}
+    private record LabelCandidate(double x, double z, LabelBox box, LabelSlot slot) {}
 
     private record LabelBox(double minX, double minZ, double maxX, double maxZ, int priority) {
         boolean intersects(LabelBox other) {

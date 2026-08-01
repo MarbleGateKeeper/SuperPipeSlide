@@ -24,6 +24,7 @@ import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SemanticEdge
 import dev.marblegate.superpipeslide.client.fullmap.schematic.solve.HeuristicGlobalSolver;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.solve.SchematicSolverBackend;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.solve.VisualRouteMapGraphSnapshot;
+import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.LabelSlot;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualEdgePath;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualHitShape;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualLabel;
@@ -491,7 +492,7 @@ public final class FullRouteMapCache {
         Map<String, VisualEdgePath> edgesById = edgePaths.stream()
                 .collect(Collectors.toMap(VisualEdgePath::edgeId, edge -> edge, (a, b) -> a, LinkedHashMap::new));
         List<VisualLabel> labels = nodes.stream()
-                .map(node -> new VisualLabel(node.id(), node.label(), node.x() + 18.0D, node.z() - 6.0D, node.importance(), 0.68D, true))
+                .map(node -> new VisualLabel(node.id(), node.label(), node.x() + 18.0D, node.z() - 6.0D, node.importance(), 0.68D, true, LabelSlot.RIGHT_NEAR))
                 .toList();
         return new VisualRouteMapGraph(
                 graph.levelKey(),

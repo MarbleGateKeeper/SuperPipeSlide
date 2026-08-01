@@ -25,6 +25,7 @@ import dev.marblegate.superpipeslide.client.fullmap.physical.PhysicalNodeKind;
 import dev.marblegate.superpipeslide.client.fullmap.physical.PhysicalRouteMapGraph;
 import dev.marblegate.superpipeslide.client.fullmap.physical.PhysicalStationFrame;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.model.SemanticEdgeKind;
+import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.LabelSlot;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualEdgePath;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualLabel;
 import dev.marblegate.superpipeslide.client.fullmap.schematic.visual.VisualLane;
@@ -1487,14 +1488,10 @@ public final class FullRouteMapRenderer {
             float secondaryScale = Math.max(0.48F, scale * 0.78F);
             int width = Math.max(1, FullMapUi.nameStackWidth(font, text, scale, secondaryScale));
             int height = Math.max(7, FullMapUi.nameStackHeight(text, scale, secondaryScale, 0));
-            Vec2 screen = worldToScreen(label.x(), label.z(), viewport, rect);
-            // The solver's node-to-label offset is a layout-space constant, so the
-            // on-screen gap would otherwise grow linearly with zoom while the font size
-            // stays capped. Clamp the screen-space distance to the node, keeping the
-            // solver's chosen side/direction; the clamped anchor then flows through the
-            // regular bounds/collision solving unchanged.
-            screen = clampLabelAnchorToNode(screen, nodeScreen, nodeCollisionRadius(node, elementZoom) + 20.0D);
-            SPSGui.Rect bounds = new SPSGui.Rect((int) Math.round(screen.x()), (int) Math.round(screen.y()), width, height);
+            // Same slot contract as the pure schematic path: the solver's chosen side is
+            // projected against the node's icon, which keeps the on-screen gap stable
+            // across zoom instead of growing linearly from a layout-space anchor.
+            SPSGui.Rect bounds = labelSlotBounds(label.slot(), nodeScreen, nodeCollisionRadius(node, elementZoom), width, height, elementZoom);
             SPSGui.Rect selected = null;
             if (rectsOverlap(bounds, rect) && !labelBlockedByPlaced(bounds, placed) && !labelBlockedByIcons(label.nodeId(), bounds, iconBlockers) && !labelBlockedByEdges(bounds, edgeBlockers)) {
                 selected = bounds;
@@ -1650,18 +1647,15 @@ public final class FullRouteMapRenderer {
             float secondaryScale = Math.max(0.48F, scale * 0.78F);
             int width = Math.max(1, FullMapUi.nameStackWidth(font, text, scale, secondaryScale));
             int height = Math.max(7, FullMapUi.nameStackHeight(text, scale, secondaryScale, 0));
-            Vec2 screen = worldToScreen(label.x(), label.z(), viewport, rect);
             Vec2 nodeScreen = worldToScreen(visualNode.x(), visualNode.z(), viewport, rect);
-            // Same zoom-drift guard as the visual path: the solver's node-to-label
-            // offset is a layout-space constant, so the screen-space distance to the
-            // node is clamped (keeping the solver's chosen side) before bounds solving.
-            screen = clampLabelAnchorToNode(screen, nodeScreen, visualNodeCollisionRadius(visualNode, graph, viewport.zoom()) + 20.0D);
-            SPSGui.Rect bounds = new SPSGui.Rect((int) Math.round(screen.x()), (int) Math.round(screen.y()), width, height);
+            // The solver's placement contract is the label slot: project it deterministically
+            // against the node's icon. Unlike the old raw-anchor projection this cannot drift
+            // with zoom, and left-side slots hug the node with their right text edge.
+            SPSGui.Rect bounds = labelSlotBounds(label.slot(), nodeScreen, visualNodeCollisionRadius(visualNode, graph, viewport.zoom()), width, height, viewport.zoom());
             SPSGui.Rect selected = null;
-            // The solver's layout-space anchor is NOT guaranteed to clear the node's own icon
-            // (clampLabelAnchorToNode only caps the far distance), so the first-choice test here
-            // counts every icon — including the label's own node — and the painted edge lanes;
-            // the fallback candidates below re-solve with proper icon gaps when it fails.
+            // The slot projection is not obstacle-aware, so the first-choice test here counts
+            // every icon — including the label's own node — and the painted edge lanes; the
+            // fallback candidates below re-solve with proper icon gaps when it fails.
             if (rectsOverlap(bounds, rect) && !labelBlockedByPlaced(bounds, placed) && !labelBlockedByAnyIcon(bounds, iconBlockers)
                     && !labelBlockedByEdges(bounds, edgeBlockers)) {
                 selected = bounds;
@@ -1952,17 +1946,36 @@ public final class FullRouteMapRenderer {
         return SPSGui.withAlpha(color, (int) Math.round((color >>> 24) * fade));
     }
 
-    // Pulls a solver-placed label anchor back towards its node when the screen-space
-    // distance exceeds cap, preserving the direction (side) the solver picked.
-    private static Vec2 clampLabelAnchorToNode(Vec2 labelScreen, Vec2 nodeScreen, double cap) {
-        double dx = labelScreen.x() - nodeScreen.x();
-        double dy = labelScreen.y() - nodeScreen.y();
-        double distance = Math.hypot(dx, dy);
-        if (distance <= cap) {
-            return labelScreen;
-        }
-        double factor = cap / distance;
-        return new Vec2(nodeScreen.x() + dx * factor, nodeScreen.y() + dy * factor);
+    /**
+     * Deterministic projection of the solver-chosen {@link LabelSlot} into a screen rect
+     * anchored on the node's icon. The gap base is {@link FullRouteMapConfig#LABEL_NODE_GAP_PX},
+     * the screen-space counterpart of the solver's candidate tiers, so solver boxes and this
+     * projection agree on what "next to the node" means. Left-side slots hug the node with
+     * their right edge, so text never shows the solver box's padding slack. The projection is
+     * deliberately not obstacle-aware: callers run the result through the blocker tests and
+     * fall back to the candidate re-solve when it collides.
+     */
+    private static SPSGui.Rect labelSlotBounds(LabelSlot slot, Vec2 nodeScreen, double collisionRadius, int width, int height, double zoom) {
+        double gap = FullRouteMapConfig.LABEL_NODE_GAP_PX + Math.max(0.0D, iconScale(zoom) * 2.0D);
+        double near = collisionRadius + gap;
+        double close = collisionRadius + gap * 0.4D;
+        double far = near * 1.5D;
+        double diagonal = near * 0.76D;
+        Vec2 corner = switch (slot) {
+            case RIGHT_NEAR -> new Vec2(nodeScreen.x() + near, nodeScreen.y() - height * 0.5D);
+            case LEFT_NEAR -> new Vec2(nodeScreen.x() - near - width, nodeScreen.y() - height * 0.5D);
+            case BELOW_NEAR -> new Vec2(nodeScreen.x() - width * 0.5D, nodeScreen.y() + near);
+            case ABOVE_NEAR -> new Vec2(nodeScreen.x() - width * 0.5D, nodeScreen.y() - near - height);
+            case BELOW_CLOSE -> new Vec2(nodeScreen.x() - width * 0.5D, nodeScreen.y() + close);
+            case ABOVE_CLOSE -> new Vec2(nodeScreen.x() - width * 0.5D, nodeScreen.y() - close - height);
+            case DIAGONAL_DOWN_RIGHT -> new Vec2(nodeScreen.x() + diagonal, nodeScreen.y() + diagonal);
+            case DIAGONAL_DOWN_LEFT -> new Vec2(nodeScreen.x() - diagonal - width, nodeScreen.y() + diagonal);
+            case DIAGONAL_UP_RIGHT -> new Vec2(nodeScreen.x() + diagonal, nodeScreen.y() - diagonal - height);
+            case DIAGONAL_UP_LEFT -> new Vec2(nodeScreen.x() - diagonal - width, nodeScreen.y() - diagonal - height);
+            case RIGHT_FAR -> new Vec2(nodeScreen.x() + far, nodeScreen.y() - height * 0.5D);
+            case LEFT_FAR -> new Vec2(nodeScreen.x() - far - width, nodeScreen.y() - height * 0.5D);
+        };
+        return new SPSGui.Rect((int) Math.round(corner.x()), (int) Math.round(corner.y()), width, height);
     }
 
     private static float labelScale(MapNode node, double zoom) {

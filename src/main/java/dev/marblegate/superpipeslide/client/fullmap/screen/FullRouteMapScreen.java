@@ -380,7 +380,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
         }
         try {
             double zoom = Double.parseDouble(value.trim());
-            return zoom >= FullRouteMapConfig.ZOOM_MIN && zoom <= FullRouteMapConfig.ZOOM_MAX ? zoom : null;
+            return zoom >= MapExportOptions.MIN_ZOOM && zoom <= FullRouteMapConfig.ZOOM_MAX ? zoom : null;
         } catch (NumberFormatException exception) {
             return null;
         }
@@ -2391,6 +2391,7 @@ public class FullRouteMapScreen extends SPSScreen implements RouteDataAwareScree
                 + " · overlaps " + quality.nodeOverlapCount()
                 + " · crossings " + quality.edgeCrossingCount()
                 + " · labels " + quality.labelOverlapCount()
+                + " · lineTurns " + quality.lineTurnCount()
                 + " · profile " + quality.profileName()
                 + (quality.timeout() ? " · timeout" : "");
         SPSGui.smallText(graphics, this.font, Component.literal(summary).getString(), this.layoutModeStripBounds.x(), this.layoutModeStripBounds.y() - 11, FullMapTheme.TEXT_MUTED, FullMapTheme.TYPE_META);

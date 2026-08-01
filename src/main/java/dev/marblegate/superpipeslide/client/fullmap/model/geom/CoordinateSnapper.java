@@ -40,6 +40,42 @@ public final class CoordinateSnapper {
     }
 
     /**
+     * Snaps every axis coordinate to the nearest multiple of {@code gridStep} when it lies
+     * within {@code tolerance} of that multiple. Unlike {@link #mergeNearEqualAxes}, which
+     * merges coordinates onto each other, this pulls coordinates onto one fixed regular
+     * grid, raising the number of exact axis coincidences (and therefore exactly octilinear
+     * routes) across the whole layout. The input iteration order is preserved. Returns the
+     * input unchanged when it is null, {@code gridStep} is not positive, or
+     * {@code tolerance} is negative.
+     */
+    public static <K> Map<K, Vec2> snapToGrid(Map<K, Vec2> positions, double gridStep, double tolerance) {
+        if (positions == null || gridStep <= 0.0D || tolerance < 0.0D) {
+            return positions;
+        }
+        Map<K, Vec2> snapped = new LinkedHashMap<>();
+        for (Map.Entry<K, Vec2> entry : positions.entrySet()) {
+            snapped.put(entry.getKey(), snapPoint(entry.getValue(), gridStep, tolerance));
+        }
+        return snapped;
+    }
+
+    /**
+     * Single-point variant of {@link #snapToGrid}: snaps each coordinate of {@code point}
+     * to the nearest grid multiple within {@code tolerance}.
+     */
+    public static Vec2 snapPoint(Vec2 point, double gridStep, double tolerance) {
+        if (gridStep <= 0.0D || tolerance < 0.0D) {
+            return point;
+        }
+        return new Vec2(snapValue(point.x(), gridStep, tolerance), snapValue(point.y(), gridStep, tolerance));
+    }
+
+    private static double snapValue(double value, double gridStep, double tolerance) {
+        double nearest = Math.round(value / gridStep) * gridStep;
+        return Math.abs(nearest - value) <= tolerance ? nearest : value;
+    }
+
+    /**
      * Sorts the given axis values, groups them into clusters of width below
      * {@code epsilon}, and maps every value onto the mean of its cluster.
      */

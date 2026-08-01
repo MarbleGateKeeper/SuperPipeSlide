@@ -9,12 +9,6 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 
 public final class FullMapUi {
-    /**
-     * Default halo color for name text: the map background, so the halo reads as a clean
-     * cutout over lines and grids.
-     */
-    public static final int NAME_TEXT_HALO = FullMapTheme.palette().mapBackground();
-
     private FullMapUi() {}
 
     public static void cardFrame(GuiGraphicsExtractor graphics, SPSGui.Rect bounds, boolean active) {
@@ -84,46 +78,33 @@ public final class FullMapUi {
     }
 
     public static void drawNameStack(GuiGraphicsExtractor graphics, Font font, DisplayNameStack name, int x, int y, int maxWidth, int primaryColor, int secondaryColor, float primaryScale, float secondaryScale, int gap) {
-        drawNameStack(graphics, font, name, x, y, maxWidth, primaryColor, secondaryColor, primaryScale, secondaryScale, gap, 0);
-    }
-
-    /**
-     * Halo variant: pass {@link #NAME_TEXT_HALO} (or any opaque background color) to stamp a
-     * halo under both lines; alpha 0 disables the halo.
-     */
-    public static void drawNameStack(GuiGraphicsExtractor graphics, Font font, DisplayNameStack name, int x, int y, int maxWidth, int primaryColor, int secondaryColor, float primaryScale, float secondaryScale, int gap, int haloColor) {
         if (name == null) {
             return;
         }
-        drawNamePrimary(graphics, font, name, x, y, maxWidth, primaryColor, primaryScale, haloColor);
+        drawNamePrimary(graphics, font, name, x, y, maxWidth, primaryColor, primaryScale);
         if (name.hasSecondary()) {
             int secondaryY = y + Math.max(7, Math.round(9.0F * primaryScale)) + gap;
-            drawNameSecondary(graphics, font, name, x, secondaryY, maxWidth, secondaryColor, secondaryScale, haloColor);
+            drawNameSecondary(graphics, font, name, x, secondaryY, maxWidth, secondaryColor, secondaryScale);
         }
     }
 
     public static void drawNamePrimary(GuiGraphicsExtractor graphics, Font font, DisplayNameStack name, int x, int y, int maxWidth, int color, float scale) {
-        drawNamePrimary(graphics, font, name, x, y, maxWidth, color, scale, 0);
-    }
-
-    public static void drawNamePrimary(GuiGraphicsExtractor graphics, Font font, DisplayNameStack name, int x, int y, int maxWidth, int color, float scale, int haloColor) {
-        String text = SPSGui.ellipsize(font, name.primary(), Math.max(1, Math.round(maxWidth / scale)));
+        // Ceil, not round: a label box is usually the measured text width itself, and
+        // round(maxWidth / scale) can land a pixel below the true width and ellipsize text
+        // that actually fits (visible at specific zoom-dependent scales).
+        String text = SPSGui.ellipsize(font, name.primary(), Math.max(1, (int) Math.ceil(maxWidth / scale)));
         if (scale >= 0.995F) {
-            SPSGui.text(graphics, font, text, x, y, color, haloColor);
+            SPSGui.text(graphics, font, text, x, y, color);
         } else {
-            SPSGui.smallText(graphics, font, text, x, y, color, scale, haloColor);
+            SPSGui.smallText(graphics, font, text, x, y, color, scale);
         }
     }
 
     public static void drawNameSecondary(GuiGraphicsExtractor graphics, Font font, DisplayNameStack name, int x, int y, int maxWidth, int color, float scale) {
-        drawNameSecondary(graphics, font, name, x, y, maxWidth, color, scale, 0);
-    }
-
-    public static void drawNameSecondary(GuiGraphicsExtractor graphics, Font font, DisplayNameStack name, int x, int y, int maxWidth, int color, float scale, int haloColor) {
         if (!name.hasSecondary()) {
             return;
         }
-        SPSGui.smallText(graphics, font, SPSGui.ellipsize(font, name.secondary(), Math.max(1, Math.round(maxWidth / scale))), x, y, color, scale, haloColor);
+        SPSGui.smallText(graphics, font, SPSGui.ellipsize(font, name.secondary(), Math.max(1, (int) Math.ceil(maxWidth / scale))), x, y, color, scale);
     }
 
     /**
